@@ -308,7 +308,11 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 speech_text = event.data["speechResult"]["speech"]
                 _logger.info(f"Recognition completed ({call.id}): {speech_text}")
 
-                await handle_media(client, "acknowledge.wav")
+                await handle_media(
+                    call=call,
+                    client=client,
+                    file="acknowledge.wav",
+                )
 
                 if speech_text is not None and len(speech_text) > 0:
                     call.messages.append(
@@ -422,9 +426,12 @@ async def handle_play(
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
     call.messages.append(CallMessageModel(content=text, persona=CallPersona.HUMAN))
-    client.play_media_to_all(
-        play_source=audio_from_text(text), operation_context=context
-    )
+    try:
+        client.play_media_to_all(
+            play_source=audio_from_text(text), operation_context=context
+        )
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before playing ({call.id})")
 
 
 async def gpt_completion(system: str, call: CallModel) -> str:
@@ -658,24 +665,32 @@ async def handle_recognize(
     text: str,
     context: Optional[str] = None,
 ) -> None:
-    client.start_recognizing_media(
-        end_silence_timeout=3,  # Sometimes user includes breaks in their speech
-        input_type=RecognizeInputType.SPEECH,
-        operation_context=context,
-        play_prompt=audio_from_text(text),
-        speech_language=CONFIG.workflow.conversation_lang,
-        target_participant=to,
-    )
+    try:
+        client.start_recognizing_media(
+            end_silence_timeout=3,  # Sometimes user includes breaks in their speech
+            input_type=RecognizeInputType.SPEECH,
+            operation_context=context,
+            play_prompt=audio_from_text(text),
+            speech_language=CONFIG.workflow.conversation_lang,
+            target_participant=to,
+        )
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before recognizing ({call.id})")
 
 
 async def handle_media(
     client: CallConnectionClient,
+    call: CallModel,
     file: str,
     context: Optional[str] = None,
 ) -> None:
-    client.play_media_to_all(
-        play_source=FileSource(f"{CONFIG.resources.public_url}/{file}"), operation_context=context
-    )
+    try:
+        client.play_media_to_all(
+            play_source=FileSource(f"{CONFIG.resources.public_url}/{file}"),
+            operation_context=context,
+        )
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before playing ({call.id})")
 
 
 async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
