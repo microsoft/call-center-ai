@@ -1,4 +1,6 @@
-# Groupama Diva PoC
+# Call center claim AI phone bot
+
+AI-powered call center solution with Azure and OpenAI GPT.
 
 ## Overview
 
