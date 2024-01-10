@@ -78,7 +78,7 @@ CALL_EVENT_URL = f"{EVENTS_DOMAIN}/call/event"
 CALL_INBOUND_URL = f"{EVENTS_DOMAIN}/call/inbound"
 
 DEFAULT_SYSTEM_PROMPT = """
-    Assistant called {{bot_name}} and is in a call center for the insurance company {{bot_company}} as an expert with 20 years of experience. Today is {{date}}.
+    Assistant called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience. Today is {date}. Customer is calling from {phone_number}.
 """
 CHAT_SYSTEM_PROMPT = f"""
     Assistant will help the customer with their insurance claim.
@@ -436,6 +436,7 @@ async def gpt_completion(system: str, call: CallModel) -> str:
                 bot_company=CONFIG.workflow.bot_company,
                 bot_name=CONFIG.workflow.bot_name,
                 date=datetime.now().strftime("%A %d %B %Y %H:%M:%S"),
+                phone_number=call.phone_number,
             ),
             "role": "system",
         },
@@ -476,6 +477,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 bot_company=CONFIG.workflow.bot_company,
                 bot_name=CONFIG.workflow.bot_name,
                 date=datetime.now().strftime("%A %d %B %Y %H:%M:%S"),
+                phone_number=call.phone_number,
             ),
             "role": "system",
         },
