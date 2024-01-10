@@ -91,7 +91,6 @@ CHAT_SYSTEM_PROMPT = f"""
     Assistant will help the customer with their insurance claim.
 
     Assistant:
-    - Answer in no more than few short sentences
     - Answers in {CONFIG.workflow.conversation_lang}, even if the customer speaks in English
     - Ask the customer to repeat or rephrase their question if it is not clear
     - Cannot talk about any topic other than insurance claims
@@ -307,7 +306,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
         _logger.debug(f"Call event received {event_type} for call {call}")
         _logger.debug(event.data)
 
-        if event_type == "Microsoft.Communication.CallConnected":
+        if event_type == "Microsoft.Communication.CallConnected":  # Call answered
             _logger.info(f"Call connected ({call.id})")
             call.recognition_retry = 0  # Reset recognition retry counter
 
@@ -341,11 +340,11 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 )
                 await intelligence(call, client, target_caller)
 
-        elif event_type == "Microsoft.Communication.CallDisconnected":
+        elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
             _logger.info(f"Call disconnected ({call.id})")
             await handle_hangup(call=call, client=client)
 
-        elif event_type == "Microsoft.Communication.RecognizeCompleted":
+        elif event_type == "Microsoft.Communication.RecognizeCompleted":  # Speech recognized
             if event.data["recognitionType"] == "speech":
                 speech_text = event.data["speechResult"]["speech"]
                 _logger.info(f"Recognition completed ({call.id}): {speech_text}")
@@ -362,7 +361,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     )
                     await intelligence(call, client, target_caller)
 
-        elif event_type == "Microsoft.Communication.RecognizeFailed":
+        elif event_type == "Microsoft.Communication.RecognizeFailed":  # Speech recognition failed
             result_information = event.data["resultInformation"]
             error_code = result_information["subCode"]
 
@@ -372,7 +371,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 file="acknowledge.wav",
             )
 
-            if error_code == 8510 and call.recognition_retry < 10:
+            if error_code == 8510 and call.recognition_retry < 10:  # Timeout retry
                 call.messages.append(
                     CallMessageModel(content=TIMEOUT_SILENCE_PROMPT, persona=CallPersona.ASSISTANT)
                 )
@@ -384,7 +383,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 )
                 call.recognition_retry += 1
 
-            else:
+            else:  # Timeout reached or other error
                 await handle_play(
                     call=call,
                     client=client,
@@ -392,26 +391,26 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     text=GOODBYE_PROMPT,
                 )
 
-        elif event_type == "Microsoft.Communication.PlayCompleted":
+        elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
             _logger.debug(f"Play completed ({call.id})")
 
             if (
                 operation_context == Context.TRANSFER_FAILED.value
                 or operation_context == Context.GOODBYE.value
-            ):
+            ):  # Call ended
                 _logger.info(f"Ending call ({call.id})")
                 await handle_hangup(call=call, client=client)
 
-            elif operation_context == Context.CONNECT_AGENT.value:
+            elif operation_context == Context.CONNECT_AGENT.value:  # Call transfer
                 _logger.info(f"Initiating transfer call initiated ({call.id})")
                 agent_caller = PhoneNumberIdentifier(CONFIG.workflow.agent_phone_number)
                 client.transfer_call_to_participant(target_participant=agent_caller)
 
-        elif event_type == "Microsoft.Communication.CallTransferAccepted":
+        elif event_type == "Microsoft.Communication.CallTransferAccepted":  # Call transfer accepted
             _logger.info(f"Call transfer accepted event ({call.id})")
             # TODO: Is there anything to do here?
 
-        elif event_type == "Microsoft.Communication.CallTransferFailed":
+        elif event_type == "Microsoft.Communication.CallTransferFailed":  # Call transfer failed
             _logger.debig(f"Call transfer failed event ({call.id})")
             result_information = event.data["resultInformation"]
             sub_code = result_information["subCode"]
