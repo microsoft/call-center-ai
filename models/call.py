@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from models.claim import ClaimModel
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 from uuid import UUID, uuid4
 
 
