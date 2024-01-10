@@ -296,6 +296,9 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
         if event_type == "Microsoft.Communication.CallConnected":
             _logger.info(f"Call connected ({call.id})")
+            call.messages.append(
+                CallMessageModel(content=HELLO_PROMPT, persona=CallPersona.ASSISTANT)
+            )
             await handle_recognize(
                 call=call,
                 client=client,
@@ -335,6 +338,9 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             )
 
             if error_code == 8510 and call.recognition_retry < 10:
+                call.messages.append(
+                    CallMessageModel(content=TIMEOUT_SILENCE_PROMPT, persona=CallPersona.ASSISTANT)
+                )
                 await handle_recognize(
                     call=call,
                     client=client,
