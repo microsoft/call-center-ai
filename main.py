@@ -201,7 +201,9 @@ async def eventgrid_register() -> None:
 
 
 def eventgrid_unregister() -> None:
-    _logger.info(f"Deleting Event Grid subscription {eventgrid_subscription_name} (do not wait for completion)")
+    _logger.info(
+        f"Deleting Event Grid subscription {eventgrid_subscription_name} (do not wait for completion)"
+    )
     eventgrid_mgmt_client.system_topic_event_subscriptions.begin_delete(
         event_subscription_name=eventgrid_subscription_name,
         resource_group_name=CONFIG.eventgrid.resource_group,
@@ -266,7 +268,9 @@ async def call_inbound_post(request: Request):
                 cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
                 incoming_call_context=call_context,
             )
-            _logger.info(f"Answered call with {phone_number} ({answer_call_result.call_connection_id})")
+            _logger.info(
+                f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
+            )
 
 
 @api.post(
