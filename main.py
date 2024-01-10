@@ -441,7 +441,7 @@ async def handle_play(
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
-    call.messages.append(CallMessageModel(content=text, persona=CallPersona.HUMAN))
+    call.messages.append(CallMessageModel(content=text, persona=CallPersona.ASSISTANT))
     try:
         client.play_media_to_all(
             play_source=audio_from_text(text), operation_context=context
