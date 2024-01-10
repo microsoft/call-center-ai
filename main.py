@@ -328,6 +328,12 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             result_information = event.data["resultInformation"]
             error_code = result_information["subCode"]
 
+            await handle_media(
+                call=call,
+                client=client,
+                file="acknowledge.wav",
+            )
+
             if error_code == 8510 and call.recognition_retry < 10:
                 await handle_recognize(
                     call=call,
