@@ -647,7 +647,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
     try:
         # TODO: Manage to catch timeouts to limit waiting time for end users
         res = await oai_gpt.chat.completions.create(
-            max_tokens=200,  # Communication Services limit is 400 characters for TTS
+            max_tokens=150,  # Communication Services limit is 400 characters for TTS
             messages=messages,
             model=CONFIG.openai.gpt_model,
             temperature=0,  # Most focused and deterministic
