@@ -396,7 +396,7 @@ async def intelligence(
     call: CallModel, client: CallConnectionClient, target_caller: PhoneNumberIdentifier
 ) -> None:
     chat_res = await gpt_chat(call)
-    _logger.info(f"GPT response ({call.id}): {chat_res}")
+    _logger.info(f"Chat ({call.id}): {chat_res}")
 
     if chat_res.intent == IndentAction.TALK_TO_HUMAN:
         await handle_play(
