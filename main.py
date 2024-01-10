@@ -103,7 +103,9 @@ SMS_SUMMARY_SYSTEM_PROMPT = f"""
     - Can include personal details about the customer
     - Cannot talk about any topic other than insurance claims
     - Do not prefix the answer with any text, like "The answer is" or "Summary of the call"
+    - Include salutations at the end of the SMS
     - Is polite, helpful, and professional
+    - Refer to the customer by their name, if known
     - Use simple and short sentences
 
     Conversation history:
