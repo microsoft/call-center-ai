@@ -133,10 +133,10 @@ ERROR_PROMPT = (
     "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
 )
 GOODBYE_PROMPT = f"Merci de votre appel, j'espère avoir pu vous aider. N'hésitez pas à rappeler, j'ai tout mémorisé. {CONFIG.workflow.bot_company} vous souhaite une excellente journée !"
-HELLO_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je suis en train de travailler. Comment puis-je vous aider ?"
+HELLO_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je travaille. Comment puis-je vous aider ?"
 TIMEOUT_SILENCE_PROMPT = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
 UPDATED_CLAIM_PROMPT = "Je mets à jour votre dossier..."
-WELCOME_BACK_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Lorsque vous entendrez un bip, c'est que je suis en train de travailler. Laissez-moi quelques secondes pour récupérer votre dossier..."
+WELCOME_BACK_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Lorsque vous entendrez un bip, c'est que je travaille. Laissez-moi quelques secondes pour récupérer votre dossier..."
 
 
 class Context(str, Enum):
