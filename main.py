@@ -720,7 +720,11 @@ def audio_from_text(text: str) -> TextSource:
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
-    return TextSource(text=text, voice_name="fr-FR-DeniseNeural", source_locale=CONFIG.workflow.conversation_lang)
+    return TextSource(
+        source_locale=CONFIG.workflow.conversation_lang,
+        text=text,
+        voice_name=CONFIG.communication_service.voice_name,
+    )
 
 
 def callback_url(caller_id: str) -> str:

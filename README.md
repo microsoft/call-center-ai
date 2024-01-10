@@ -102,6 +102,7 @@ communication_service:
   access_key: xxx
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
+  voice_name: fr-FR-DeniseNeural
 
 cognitive_service:
   # Must be of type "Azure AI services multi-service account"
