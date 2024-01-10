@@ -95,6 +95,7 @@ CHAT_SYSTEM_PROMPT = f"""
     - Answers in {CONFIG.workflow.conversation_lang}, even if the customer speaks in English
     - Ask the customer to repeat or rephrase their question if it is not clear
     - Cannot talk about any topic other than insurance claims
+    - If user called multiple times, continue the discussion from the previous call
     - Is polite, helpful, and professional
     - Refer customers to emergency services or the police if necessary, but cannot give advice under any circumstances
     - Rephrase the customer's questions as statements and answer them
@@ -129,10 +130,11 @@ END_CALL_TO_CONNECT_AGENT_PROMPT = (
 ERROR_PROMPT = (
     "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
 )
-GOODBYE_PROMPT = f"Merci de votre appel ! J'espère avoir pu vous aider. {CONFIG.workflow.bot_company} vous souhaite une excellente journée !"
-HELLO_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je suis en train de travailler. Comment puis-je vous aider aujourd'hui ?"
+GOODBYE_PROMPT = f"Merci de votre appel, j'espère avoir pu vous aider. N'hésitez pas à rappeler, j'ai tout mémorisé. {CONFIG.workflow.bot_company} vous souhaite une excellente journée !"
+HELLO_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je suis en train de travailler. Comment puis-je vous aider ?"
 TIMEOUT_SILENCE_PROMPT = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
 UPDATED_CLAIM_PROMPT = "Je mets à jour votre dossier..."
+WELCOME_BACK_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Lorsque vous entendrez un bip, c'est que je suis en train de travailler. Laissez-moi quelques secondes pour récupérer votre dossier..."
 
 
 class Context(str, Enum):
@@ -295,7 +297,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
         client = call_automation_client.get_call_connection(
             call_connection_id=connection_id
         )
-        call = get_call(call_id)
+        call = get_call_by_id(call_id)
         target_caller = PhoneNumberIdentifier(call.phone_number)
         event_type = event.type
 
@@ -304,15 +306,37 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
         if event_type == "Microsoft.Communication.CallConnected":
             _logger.info(f"Call connected ({call.id})")
-            call.messages.append(
-                CallMessageModel(content=HELLO_PROMPT, persona=CallPersona.ASSISTANT)
-            )
-            await handle_recognize(
-                call=call,
-                client=client,
-                text=HELLO_PROMPT,
-                to=target_caller,
-            )
+            call.recognition_retry = 0  # Reset recognition retry counter
+
+            if not call.messages:  # First call
+                call.messages.append(
+                    CallMessageModel(content=HELLO_PROMPT, persona=CallPersona.ASSISTANT)
+                )
+                await handle_recognize(
+                    call=call,
+                    client=client,
+                    text=HELLO_PROMPT,
+                    to=target_caller,
+                )
+
+            else: # Returning call
+                call.messages.append(
+                    CallMessageModel(content="Customer called again.", persona=CallPersona.HUMAN)
+                )
+                call.messages.append(
+                    CallMessageModel(content=WELCOME_BACK_PROMPT, persona=CallPersona.ASSISTANT)
+                )
+                await handle_play(
+                    call=call,
+                    client=client,
+                    text=WELCOME_BACK_PROMPT,
+                )
+                await handle_media(
+                    call=call,
+                    client=client,
+                    file="acknowledge.wav",
+                )
+                await intelligence(call, client, target_caller)
 
         elif event_type == "Microsoft.Communication.CallDisconnected":
             _logger.info(f"Call disconnected ({call.id})")
@@ -758,25 +782,49 @@ def audio_from_text(text: str) -> TextSource:
 
 
 def callback_url(caller_id: str) -> str:
-    call = CallModel(phone_number=caller_id)
-    save_call(call)
+    """
+    Generate the callback URL for a call.
+
+    If the caller has already called, use the same call ID, to keep the conversation history. Otherwise, create a new call ID.
+    """
+    call = get_last_call_by_phone_number(caller_id)
+    if not call:
+        call = CallModel(phone_number=caller_id)
+        save_call(call)
     return f"{CALL_EVENT_URL}/{call.id}"
 
 
 def init_db():
-    db.execute("CREATE TABLE IF NOT EXISTS calls (id TEXT PRIMARY KEY, data TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS calls (id TEXT PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)")
     db.commit()
 
 
 def save_call(call: CallModel):
     db.execute(
-        "INSERT OR REPLACE INTO calls VALUES (?, ?)",
-        (str(call.id), call.model_dump_json()),
+        "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
+        (
+            str(call.id),  # id
+            call.phone_number,  # phone_number
+            call.model_dump_json(),  # data
+            call.created_at.isoformat(),  # created_at
+        ),
     )
     db.commit()
 
 
-def get_call(call_id: UUID) -> CallModel:
-    cursor = db.execute("SELECT data FROM calls WHERE id = ?", (str(call_id),))
+def get_call_by_id(call_id: UUID) -> CallModel:
+    cursor = db.execute(
+        "SELECT data FROM calls WHERE id = ?",
+        (str(call_id),),
+    )
     row = cursor.fetchone()
-    return CallModel.model_validate_json(row[0])
+    return CallModel.model_validate_json(row[0]) if row else None
+
+
+def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
+    cursor = db.execute(
+        f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY created_at DESC LIMIT 1",
+        (phone_number,),
+    )
+    row = cursor.fetchone()
+    return CallModel.model_validate_json(row[0]) if row else None

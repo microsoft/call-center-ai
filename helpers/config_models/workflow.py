@@ -6,3 +6,4 @@ class WorkflowModel(BaseModel):
     bot_company: str
     bot_name: str
     conversation_lang: str
+    conversation_timeout_hour: int

@@ -13,6 +13,7 @@ AI-powered call center solution with Azure and OpenAI GPT.
 - [x] Follow a specific data schema for the claim
 - [x] Help the user to find the information needed to complete the claim
 - [x] Send a SMS report after the call
+- [x] Take back a conversation after a disengagement
 - [ ] Access the claim on a public website
 - [ ] Call back the user when needed
 - [ ] Simulate a IVR workflow
@@ -97,6 +98,7 @@ workflow:
   bot_company: Contoso
   bot_name: Robert
   conversation_lang: fr-FR
+  conversation_timeout_hour: 72
 
 communication_service:
   access_key: xxx

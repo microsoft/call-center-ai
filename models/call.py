@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from models.claim import ClaimModel
 from pydantic import BaseModel, Field
@@ -20,12 +21,14 @@ class ToolModel(BaseModel):
 
 class MessageModel(BaseModel):
     content: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     persona: Persona
     tool_calls: List[ToolModel] = []
 
 
 class CallModel(BaseModel):
     claim: ClaimModel = Field(default_factory=ClaimModel)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     id: UUID = Field(default_factory=uuid4)
     messages: List[MessageModel] = []
     phone_number: str
