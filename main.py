@@ -272,9 +272,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 call.messages.append(
                     CallMessageModel(content="Customer called again.", persona=CallPersona.HUMAN)
                 )
-                call.messages.append(
-                    CallMessageModel(content=WELCOME_BACK_PROMPT, persona=CallPersona.ASSISTANT)
-                )
                 await handle_play(
                     call=call,
                     client=client,
