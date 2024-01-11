@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from models.claim import ClaimModel
+from models.reminder import ReminderModel
 from pydantic import BaseModel, Field
 from typing import List
 from uuid import UUID, uuid4
@@ -33,3 +34,4 @@ class CallModel(BaseModel):
     messages: List[MessageModel] = []
     phone_number: str
     recognition_retry: int = Field(default=0)
+    reminders: List[ReminderModel] = []

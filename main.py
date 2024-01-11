@@ -27,7 +27,7 @@ from helpers.logging import build_logger
 from helpers.version import VERSION
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt
 from models.action import ActionModel, Indent as IndentAction
-from twilio.rest import Client
+from models.reminder import ReminderModel
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 from models.call import (
@@ -431,6 +431,14 @@ async def intelligence(
         )
         await intelligence(call, client, target_caller)
 
+    elif chat_res.intent == IndentAction.NEW_REMINDER:
+        await handle_play(
+            call=call,
+            client=client,
+            text=TTSPrompt.NEW_REMINDER,
+        )
+        await intelligence(call, client, target_caller)
+
     else:
         await handle_recognize(
             call=call,
@@ -475,8 +483,9 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
         },
         {
             "content": system.format(
-                conversation=json.dumps(call.messages, default=pydantic_encoder),
                 claim=call.claim.model_dump_json(),
+                conversation=json.dumps(call.messages, default=pydantic_encoder),
+                reminders=json.dumps(call.reminders, default=pydantic_encoder),
             ),
             "role": "system",
         },
@@ -512,6 +521,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "content": LLMPrompt.CHAT_SYSTEM.format(
                 claim=call.claim.model_dump_json(),
+                reminders=json.dumps(call.reminders, default=pydantic_encoder),
             ),
             "role": "system",
         },
@@ -624,6 +634,35 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
+                "name": IndentAction.NEW_REMINDER,
+                "parameters": {
+                    "properties": {
+                        "description": {
+                            "description": "Contextual description of the reminder. Should be detailed enough to be understood by anyone. Example: 'Watch model is Rolex Submariner 116610LN', 'User said the witnesses car was red but the police report says it was blue. Double check with the involved parties'.",
+                            "type": "string",
+                        },
+                        "due_date_time": {
+                            "description": "Datetime when the reminder should be triggered. Should be in the future, in the ISO format.",
+                            "type": "string",
+                        },
+                        "title": {
+                            "description": "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
+                            "type": "string",
+                        },
+                    },
+                    "required": [
+                        "description",
+                        "due_date_time",
+                        "title",
+                    ],
+                    "type": "object",
+                },
+            },
+        },
     ]
     _logger.debug(f"Tools: {tools}")
 
@@ -672,6 +711,15 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     intent = IndentAction.NEW_CLAIM
                     call.claim = ClaimModel()
                     model.content = "New claim created."
+                elif name == IndentAction.NEW_REMINDER:
+                    intent = IndentAction.NEW_REMINDER
+                    parameters = json.loads(arguments)
+                    call.reminders.append(ReminderModel(
+                        description=parameters["description"],
+                        due_date_time=parameters["due_date_time"],
+                        title=parameters["title"],
+                    ))
+                    model.content = f"New reminder created for \"{parameters['due_date_time']}\" with title \"{parameters['title']}\" and description \"{parameters['description']}\"."
 
                 models.append(model)
 
