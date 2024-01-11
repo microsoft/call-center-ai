@@ -5,6 +5,8 @@ azure-identity==1.15.0
 azure-mgmt-eventgrid==10.2.0
 fastapi==0.108.0
 openai==1.7.0
+phonenumbers==8.13.27
+pydantic-extra-types==2.4.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
 twilio==8.11.0
