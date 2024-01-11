@@ -2,6 +2,10 @@
 
 AI-powered call center solution with Azure and OpenAI GPT.
 
+<!-- github.com badges -->
+[![Last release date](https://img.shields.io/github/release-date/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/releases)
+[![Project license](https://img.shields.io/github/license/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/blob/main/LICENSE)
+
 ## Overview
 
 ### Features
