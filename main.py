@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse, Response
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from helpers.version import VERSION
+from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt
 from models.action import ActionModel, Indent as IndentAction
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
@@ -83,60 +84,6 @@ EVENTS_DOMAIN = environ.get("EVENTS_DOMAIN").strip("/")
 assert EVENTS_DOMAIN, "EVENTS_DOMAIN environment variable is not set"
 CALL_EVENT_URL = f"{EVENTS_DOMAIN}/call/event"
 CALL_INBOUND_URL = f"{EVENTS_DOMAIN}/call/inbound"
-
-DEFAULT_SYSTEM_PROMPT = f"""
-    Assistant called {CONFIG.workflow.bot_name} and is in a call center for the insurance company {CONFIG.workflow.bot_company} as an expert with 20 years of experience. Today is {{date}}. Customer is calling from {{phone_number}}. Call center number is {CONFIG.communication_service.phone_number}.
-"""
-CHAT_SYSTEM_PROMPT = f"""
-    Assistant will help the customer with their insurance claim.
-
-    Assistant:
-    - Answers in {CONFIG.workflow.conversation_lang}, even if the customer speaks in English
-    - Ask the customer to repeat or rephrase their question if it is not clear
-    - Cannot talk about any topic other than insurance claims
-    - Do not ask the customer more than 2 questions in a row
-    - Explain the tools (called actions for the customer) you used
-    - If user called multiple times, continue the discussion from the previous call
-    - Is polite, helpful, and professional
-    - Keep the sentences short and simple
-    - Refer customers to emergency services or the police if necessary, but cannot give advice under any circumstances
-    - Rephrase the customer's questions as statements and answer them
-
-    Assistant requires data from the customer to fill the claim. Latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
-"""
-SMS_SUMMARY_SYSTEM_PROMPT = f"""
-    Assistant will summarize the call with the customer in a single SMS. The customer cannot reply to this SMS.
-
-    Assistant:
-    - Answers in {CONFIG.workflow.conversation_lang}, even if the customer speaks in English
-    - Briefly summarize the call with the customer
-    - Can include personal details about the customer
-    - Cannot talk about any topic other than insurance claims
-    - Do not prefix the answer with any text, like "The answer is" or "Summary of the call"
-    - Include salutations at the end of the SMS
-    - Incude details stored in the claim, to make the customer confident that the situation is understood
-    - Is polite, helpful, and professional
-    - Refer to the customer by their name, if known
-    - Use simple and short sentences
-
-    Conversation history:
-    {{conversation}}
-"""
-
-AGENT_PHONE_NUMBER_EMPTY_PROMPT = "Je suis désolé, mais nous enregistrons actuellement un nombre élevé d'appels et tous nos agents sont actuellement occupés. Notre prochain agent disponible vous rappellera dès que possible."
-CALLTRANSFER_FAILURE_PROMPT = "Il semble que je ne puisse pas vous mettre en relation avec un agent pour l'instant, mais le prochain agent disponible vous rappellera dès que possible."
-CONNECT_AGENT_PROMPT = "Je suis désolé, je n'ai pas été en mesure de répondre à votre demande. Permettez-moi de vous transférer à un agent qui pourra vous aider davantage. Veuillez rester en ligne et je vous recontacterai sous peu."
-END_CALL_TO_CONNECT_AGENT_PROMPT = (
-    "Bien sûr, restez en ligne. Je vais vous transférer à un agent."
-)
-ERROR_PROMPT = (
-    "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
-)
-GOODBYE_PROMPT = f"Merci de votre appel, j'espère avoir pu vous aider. N'hésitez pas à rappeler, j'ai tout mémorisé. {CONFIG.workflow.bot_company} vous souhaite une excellente journée !"
-HELLO_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je travaille. Comment puis-je vous aider ?"
-TIMEOUT_SILENCE_PROMPT = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
-UPDATED_CLAIM_PROMPT = "Je mets à jour votre dossier..."
-WELCOME_BACK_PROMPT = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Lorsque vous entendrez un bip, c'est que je travaille. Laissez-moi quelques secondes pour récupérer votre dossier..."
 
 
 class Context(str, Enum):
@@ -312,12 +259,12 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
             if not call.messages:  # First call
                 call.messages.append(
-                    CallMessageModel(content=HELLO_PROMPT, persona=CallPersona.ASSISTANT)
+                    CallMessageModel(content=TTSPrompt.HELLO, persona=CallPersona.ASSISTANT)
                 )
                 await handle_recognize(
                     call=call,
                     client=client,
-                    text=HELLO_PROMPT,
+                    text=TTSPrompt.HELLO,
                     to=target_caller,
                 )
 
@@ -331,7 +278,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 await handle_play(
                     call=call,
                     client=client,
-                    text=WELCOME_BACK_PROMPT,
+                    text=TTSPrompt.WELCOME_BACK,
                 )
                 await handle_media(
                     call=call,
@@ -373,12 +320,12 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
             if error_code == 8510 and call.recognition_retry < 10:  # Timeout retry
                 call.messages.append(
-                    CallMessageModel(content=TIMEOUT_SILENCE_PROMPT, persona=CallPersona.ASSISTANT)
+                    CallMessageModel(content=TTSPrompt.TIMEOUT_SILENCE, persona=CallPersona.ASSISTANT)
                 )
                 await handle_recognize(
                     call=call,
                     client=client,
-                    text=TIMEOUT_SILENCE_PROMPT,
+                    text=TTSPrompt.TIMEOUT_SILENCE,
                     to=target_caller,
                 )
                 call.recognition_retry += 1
@@ -388,7 +335,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     call=call,
                     client=client,
                     context=Context.GOODBYE.value,
-                    text=GOODBYE_PROMPT,
+                    text=TTSPrompt.GOODBYE,
                 )
 
         elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
@@ -419,7 +366,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 call=call,
                 client=client,
                 context=Context.TRANSFER_FAILED.value,
-                text=CALLTRANSFER_FAILURE_PROMPT,
+                text=TTSPrompt.CALLTRANSFER_FAILURE,
             )
 
         save_call(call)
@@ -436,7 +383,7 @@ async def intelligence(
             call=call,
             client=client,
             context=Context.CONNECT_AGENT.value,
-            text=END_CALL_TO_CONNECT_AGENT_PROMPT,
+            text=TTSPrompt.END_CALL_TO_CONNECT_AGENT,
         )
 
     elif chat_res.intent == IndentAction.END_CALL:
@@ -444,14 +391,14 @@ async def intelligence(
             call=call,
             client=client,
             context=Context.GOODBYE.value,
-            text=GOODBYE_PROMPT,
+            text=TTSPrompt.GOODBYE,
         )
 
     elif chat_res.intent == IndentAction.UPDATE_CLAIM:
         await handle_play(
             call=call,
             client=client,
-            text=UPDATED_CLAIM_PROMPT,
+            text=TTSPrompt.UPDATED_CLAIM,
         )
         await intelligence(call, client, target_caller)
 
@@ -484,12 +431,12 @@ async def handle_play(
         _logger.debug(f"Call hung up before playing ({call.id})")
 
 
-async def gpt_completion(system: str, call: CallModel) -> str:
+async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
     _logger.debug(f"Running GPT completion ({call.id})")
 
     messages = [
         {
-            "content": DEFAULT_SYSTEM_PROMPT.format(
+            "content": LLMPrompt.DEFAULT_SYSTEM.format(
                 date=datetime.now().strftime("%A %d %B %Y %H:%M:%S"),
                 phone_number=call.phone_number,
             ),
@@ -498,12 +445,9 @@ async def gpt_completion(system: str, call: CallModel) -> str:
         {
             "content": system.format(
                 conversation=str(call.messages),
+                claim=call.claim.model_dump_json(),
             ),
             "role": "system",
-        },
-        {
-            "content": f"Claim status is: {call.claim.model_dump_json()}",
-            "role": "assistant",
         },
     ]
     _logger.debug(f"Messages: {messages}")
@@ -528,14 +472,16 @@ async def gpt_chat(call: CallModel) -> ActionModel:
 
     messages = [
         {
-            "content": DEFAULT_SYSTEM_PROMPT.format(
+            "content": LLMPrompt.DEFAULT_SYSTEM.format(
                 date=datetime.now().strftime("%A %d %B %Y %H:%M:%S"),
                 phone_number=call.phone_number,
             ),
             "role": "system",
         },
         {
-            "content": CHAT_SYSTEM_PROMPT,
+            "content": LLMPrompt.CHAT_SYSTEM.format(
+                claim=call.claim.model_dump_json(),
+            ),
             "role": "system",
         },
     ]
@@ -581,12 +527,6 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "tool_call_id": tool_call.id,
                         }
                     )
-    messages.append(
-        {
-            "content": f"Claim status is: {call.claim.model_dump_json()}",
-            "role": "assistant",
-        }
-    )
     _logger.debug(f"Messages: {messages}")
 
     tools = [
@@ -701,7 +641,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
-    return ActionModel(content=ERROR_PROMPT, intent=IndentAction.CONTINUE)
+    return ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
 
 
 async def handle_recognize(
@@ -746,7 +686,7 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
     except ResourceNotFoundError:
         _logger.debug(f"Call already hung up ({call.id})")
 
-    content = await gpt_completion(SMS_SUMMARY_SYSTEM_PROMPT, call)
+    content = await gpt_completion(LLMPrompt.SMS_SUMMARY_SYSTEM, call)
     _logger.info(f"SMS report ({call.id}): {content}")
 
     try:
