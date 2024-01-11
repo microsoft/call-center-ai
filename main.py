@@ -8,6 +8,7 @@ from azure.communication.callautomation import (
     TextSource,
 )
 from azure.communication.sms import SmsClient
+from pydantic.json import pydantic_encoder
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
@@ -444,7 +445,7 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
         },
         {
             "content": system.format(
-                conversation=str(call.messages),
+                conversation=json.dumps(call.messages, default=pydantic_encoder),
                 claim=call.claim.model_dump_json(),
             ),
             "role": "system",
