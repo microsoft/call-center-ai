@@ -706,7 +706,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     intent = IndentAction.UPDATE_CLAIM
                     parameters = json.loads(arguments)
                     setattr(call.claim, parameters["field"], parameters["value"])
-                    model.content = f"Udated claim field {parameters['field']} with value {parameters['value']}"
+                    model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
                 elif name == IndentAction.NEW_CLAIM:
                     intent = IndentAction.NEW_CLAIM
                     call.claim = ClaimModel()
