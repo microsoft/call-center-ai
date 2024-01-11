@@ -128,6 +128,14 @@ twilio:
   phone_number: "+19291234567"
 ```
 
+If you want to use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
+
+```dotenv
+AZURE_CLIENT_ID=xxx
+AZURE_CLIENT_SECRET=xxx
+AZURE_TENANT_ID=xxx
+```
+
 Then run:
 
 ```bash
