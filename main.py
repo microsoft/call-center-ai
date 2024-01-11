@@ -8,7 +8,6 @@ from azure.communication.callautomation import (
     TextSource,
 )
 from azure.communication.sms import SmsClient
-from pydantic.json import pydantic_encoder
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
@@ -24,10 +23,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from helpers.version import VERSION
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt
+from helpers.version import VERSION
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
+from pydantic.json import pydantic_encoder
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 from models.call import (
