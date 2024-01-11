@@ -635,7 +635,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         f"{customer_response_prop}": {
                             "description": "The text to be read to the customer to confirm the update. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                             "type": "string",
-                        }
+                        },
                     },
                     "required": [
                         customer_response_prop,
@@ -668,7 +668,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         f"{customer_response_prop}": {
                             "description": "The text to be read to the customer to confirm the reminder. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
                             "type": "string",
-                        }
+                        },
                     },
                     "required": [
                         customer_response_prop,
@@ -746,7 +746,9 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         if reminder.title == parameters["title"]:
                             reminder.description = parameters["description"]
                             reminder.due_date_time = parameters["due_date_time"]
-                            model.content = f"Reminder \"{parameters['title']}\" updated."
+                            model.content = (
+                                f"Reminder \"{parameters['title']}\" updated."
+                            )
                             updated = True
                             break
 
