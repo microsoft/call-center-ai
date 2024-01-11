@@ -423,6 +423,14 @@ async def intelligence(
         )
         await intelligence(call, client, target_caller)
 
+    elif chat_res.intent == IndentAction.NEW_CLAIM:
+        await handle_play(
+            call=call,
+            client=client,
+            text=TTSPrompt.NEW_CLAIM,
+        )
+        await intelligence(call, client, target_caller)
+
     else:
         await handle_recognize(
             call=call,
@@ -580,7 +588,19 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to update a claim field with a new value.",
+                "description": "Use this if the user wants to create a new claim. This will reset the claim data. Old is stored but not accessible anymore. Double check with the user before using this.",
+                "name": IndentAction.NEW_CLAIM,
+                "parameters": {
+                    "properties": {},
+                    "required": [],
+                    "type": "object",
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update policyholder contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                 "name": IndentAction.UPDATE_CLAIM,
                 "parameters": {
                     "properties": {
@@ -648,6 +668,10 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     parameters = json.loads(arguments)
                     setattr(call.claim, parameters["field"], parameters["value"])
                     model.content = f"Udated claim field {parameters['field']} with value {parameters['value']}"
+                elif name == IndentAction.NEW_CLAIM:
+                    intent = IndentAction.NEW_CLAIM
+                    call.claim = ClaimModel()
+                    model.content = "New claim created."
 
                 models.append(model)
 
