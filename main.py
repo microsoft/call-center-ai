@@ -260,11 +260,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             call.recognition_retry = 0  # Reset recognition retry counter
 
             if not call.messages:  # First call
-                call.messages.append(
-                    CallMessageModel(
-                        content=TTSPrompt.HELLO, persona=CallPersona.ASSISTANT
-                    )
-                )
                 await handle_recognize(
                     call=call,
                     client=client,
@@ -333,11 +328,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             if (
                 error_code in (8510, 8532, 8512) and call.recognition_retry < 10
             ):  # Timeout retry
-                call.messages.append(
-                    CallMessageModel(
-                        content=TTSPrompt.TIMEOUT_SILENCE, persona=CallPersona.ASSISTANT
-                    )
-                )
                 await handle_recognize(
                     call=call,
                     client=client,
@@ -439,6 +429,7 @@ async def intelligence(
         await handle_recognize(
             call=call,
             client=client,
+            store=False,
             text=chat_res.content,
             to=target_caller,
         )
@@ -454,12 +445,15 @@ async def handle_play(
     """
     Play a text to a call participant.
 
+    If store is True, the text will be stored in the call messages.
+
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
     if store:
         call.messages.append(
             CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
         )
+
     try:
         client.play_media_to_all(
             play_source=audio_from_text(text), operation_context=context
@@ -789,7 +783,18 @@ async def handle_recognize(
     to: PhoneNumberIdentifier,
     text: str,
     context: Optional[str] = None,
+    store: bool = True,
 ) -> None:
+    """
+    Play a text to a call participant and start recognizing the response.
+
+    If store is True, the text will be stored in the call messages.
+    """
+    if store:
+        call.messages.append(
+            CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
+        )
+
     # Split text in chunks of max 400 characters, separated by a comma
     chunks = []
     chunk = ""
