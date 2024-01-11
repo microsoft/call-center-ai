@@ -56,7 +56,6 @@ class LLM(str, Enum):
 
 
 class TTS(str, Enum):
-    AGENT_PHONE_NUMBER_EMPTY = "Je suis désolé, mais nous enregistrons actuellement un nombre élevé d'appels et tous nos agents sont actuellement occupés. Notre prochain agent disponible vous rappellera dès que possible."
     CALLTRANSFER_FAILURE = "Il semble que je ne puisse pas vous mettre en relation avec un agent pour l'instant, mais le prochain agent disponible vous rappellera dès que possible."
     CONNECT_AGENT = "Je suis désolé, je n'ai pas été en mesure de répondre à votre demande. Permettez-moi de vous transférer à un agent qui pourra vous aider davantage. Veuillez rester en ligne et je vous recontacterai sous peu."
     END_CALL_TO_CONNECT_AGENT = "Bien sûr, restez en ligne. Je vais vous transférer à un agent."
