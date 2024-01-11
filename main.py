@@ -596,6 +596,9 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         content = res.choices[0].message.content
         tool_calls = res.choices[0].message.tool_calls
 
+        _logger.debug(f"Chat response: {content}")
+        _logger.debug(f"Tool calls: {tool_calls}")
+
         intent = IndentAction.CONTINUE
         models = []
         if tool_calls:
