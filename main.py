@@ -413,13 +413,15 @@ async def handle_play(
     call: CallModel,
     text: str,
     context: Optional[str] = None,
+    store: bool = True,
 ) -> None:
     """
     Play a text to a call participant.
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
-    call.messages.append(CallMessageModel(content=text, persona=CallPersona.ASSISTANT))
+    if store:
+        call.messages.append(CallMessageModel(content=text, persona=CallPersona.ASSISTANT))
     try:
         client.play_media_to_all(
             play_source=audio_from_text(text), operation_context=context
@@ -584,7 +586,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
     try:
         # TODO: Manage to catch timeouts to limit waiting time for end users
         res = await oai_gpt.chat.completions.create(
-            max_tokens=150,  # Communication Services limit is 400 characters for TTS
+            max_tokens=400,  # Communication Services limit is 400 characters for TTS, 400 tokens ~= 300 words
             messages=messages,
             model=CONFIG.openai.gpt_model,
             temperature=0,  # Most focused and deterministic
@@ -648,12 +650,37 @@ async def handle_recognize(
     text: str,
     context: Optional[str] = None,
 ) -> None:
+    # Split text in chunks of max 400 characters, separated by a comma
+    chunks = []
+    chunk = ""
+    for word in text.split("."):  # Split by sentence
+        to_add = f"{word}."
+        if len(chunk) + len(to_add) >= 400:
+            chunks.append(chunk)
+            chunk = ""
+        chunk += to_add
+    if chunk:
+        chunks.append(chunk)
+    last_chunk = chunks.pop()
+
     try:
+        # Play all chunks except the last one
+        for chunk in chunks:
+            _logger.debug(f"Playing chunk ({call.id}): {chunk}")
+            await handle_play(
+                call=call,
+                client=client,
+                text=chunk,
+                store=False,
+            )
+
+        _logger.debug(f"Recognizing last chunk ({call.id}): {last_chunk}")
+        # Play last chunk and start recognizing
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
             operation_context=context,
-            play_prompt=audio_from_text(text),
+            play_prompt=audio_from_text(last_chunk),
             speech_language=CONFIG.workflow.conversation_lang,
             target_participant=to,
         )
