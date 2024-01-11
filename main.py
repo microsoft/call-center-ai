@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -42,7 +42,6 @@ from os import environ
 from uuid import UUID, uuid4
 import asyncio
 import json
-import re
 import sqlite3
 
 
