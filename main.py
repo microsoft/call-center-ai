@@ -760,7 +760,7 @@ def callback_url(caller_id: str) -> str:
 
 
 def init_db():
-    db.execute("CREATE TABLE IF NOT EXISTS calls (id TEXT PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)")
     db.commit()
 
 
@@ -768,7 +768,7 @@ def save_call(call: CallModel):
     db.execute(
         "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
         (
-            str(call.id),  # id
+            call.id.hex,  # id
             call.phone_number,  # phone_number
             call.model_dump_json(),  # data
             call.created_at.isoformat(),  # created_at
@@ -780,7 +780,7 @@ def save_call(call: CallModel):
 def get_call_by_id(call_id: UUID) -> CallModel:
     cursor = db.execute(
         "SELECT data FROM calls WHERE id = ?",
-        (str(call_id),),
+        (call_id.hex,),
     )
     row = cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
