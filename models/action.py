@@ -7,9 +7,9 @@ class Indent(str, Enum):
     CONTINUE = "continue"
     END_CALL = "end_call"
     NEW_CLAIM = "new_claim"
-    NEW_REMINDER = "new_reminder"
+    NEW_OR_UPDATED_REMINDER = "new_or_updated_reminder"
     TALK_TO_HUMAN = "talk_to_human"
-    UPDATE_CLAIM = "update_claim"
+    UPDATED_CLAIM = "updated_claim"
 
 
 class ActionModel(BaseModel):

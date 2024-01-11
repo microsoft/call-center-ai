@@ -66,8 +66,5 @@ class TTS(str, Enum):
     )
     GOODBYE = f"Merci de votre appel, j'espère avoir pu vous aider. N'hésitez pas à rappeler, j'ai tout mémorisé. {CONFIG.workflow.bot_company} vous souhaite une excellente journée !"
     HELLO = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je travaille. Mais d'abord, quel est l'objet de votre appel ?"
-    NEW_CLAIM = "Je vais créer un nouveau dossier pour vous..."
-    NEW_REMINDER = "Je crée un rappel dans votre dossier..."
     TIMEOUT_SILENCE = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
-    UPDATED_CLAIM = "Je mets à jour votre dossier..."
     WELCOME_BACK = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Lorsque vous entendrez un bip, c'est que je travaille. Laissez-moi quelques secondes pour récupérer votre dossier..."

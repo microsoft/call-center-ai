@@ -432,30 +432,9 @@ async def intelligence(
             text=TTSPrompt.GOODBYE,
         )
 
-    elif chat_res.intent == IndentAction.UPDATE_CLAIM:
-        await handle_play(
-            call=call,
-            client=client,
-            text=TTSPrompt.UPDATED_CLAIM,
-        )
-        await intelligence(call, client, target_caller)
-
-    elif chat_res.intent == IndentAction.NEW_CLAIM:
-        await handle_play(
-            call=call,
-            client=client,
-            text=TTSPrompt.NEW_CLAIM,
-        )
-        await intelligence(call, client, target_caller)
-
-    elif chat_res.intent == IndentAction.NEW_REMINDER:
-        await handle_play(
-            call=call,
-            client=client,
-            text=TTSPrompt.NEW_REMINDER,
-        )
-        await intelligence(call, client, target_caller)
-
+    # elif chat_res.intent == IndentAction.NEW_CLAIM:
+    # elif chat_res.intent == IndentAction.UPDATED_CLAIM:
+    # elif chat_res.intent == IndentAction.NEW_REMINDER:
     else:
         await handle_recognize(
             call=call,
@@ -590,6 +569,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     )
     _logger.debug(f"Messages: {messages}")
 
+    customer_response_prop = "customer_response"
     tools = [
         {
             "type": "function",
@@ -618,11 +598,18 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to create a new claim. This will reset the claim data. Old is stored but not accessible anymore. Double check with the user before using this.",
+                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Double check with the user before using this.",
                 "name": IndentAction.NEW_CLAIM,
                 "parameters": {
-                    "properties": {},
-                    "required": [],
+                    "properties": {
+                        f"{customer_response_prop}": {
+                            "description": "The text to be read to the customer to confirm the update. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "type": "string",
+                        }
+                    },
+                    "required": [
+                        customer_response_prop,
+                    ],
                     "type": "object",
                 },
             },
@@ -631,7 +618,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update policyholder contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
-                "name": IndentAction.UPDATE_CLAIM,
+                "name": IndentAction.UPDATED_CLAIM,
                 "parameters": {
                     "properties": {
                         "field": {
@@ -645,8 +632,13 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "description": "The claim field value to update.",
                             "type": "string",
                         },
+                        f"{customer_response_prop}": {
+                            "description": "The text to be read to the customer to confirm the update. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "type": "string",
+                        }
                     },
                     "required": [
+                        customer_response_prop,
                         "field",
                         "value",
                     ],
@@ -657,8 +649,8 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "type": "function",
             "function": {
-                "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
-                "name": IndentAction.NEW_REMINDER,
+                "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
+                "name": IndentAction.NEW_OR_UPDATED_REMINDER,
                 "parameters": {
                     "properties": {
                         "description": {
@@ -670,11 +662,16 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "type": "string",
                         },
                         "title": {
-                            "description": "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
+                            "description": "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Title is unique and allows the reminder to be updated. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
                             "type": "string",
                         },
+                        f"{customer_response_prop}": {
+                            "description": "The text to be read to the customer to confirm the reminder. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
+                            "type": "string",
+                        }
                     },
                     "required": [
+                        customer_response_prop,
                         "description",
                         "due_date_time",
                         "title",
@@ -696,7 +693,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             tools=tools,
         )
 
-        content = res.choices[0].message.content
+        content = res.choices[0].message.content or ""
         tool_calls = res.choices[0].message.tool_calls
 
         _logger.debug(f"Chat response: {content}")
@@ -720,41 +717,61 @@ async def gpt_chat(call: CallModel) -> ActionModel:
 
                 if name == IndentAction.TALK_TO_HUMAN:
                     intent = IndentAction.TALK_TO_HUMAN
+
                 elif name == IndentAction.END_CALL:
                     intent = IndentAction.END_CALL
-                elif name == IndentAction.UPDATE_CLAIM:
-                    intent = IndentAction.UPDATE_CLAIM
+
+                elif name == IndentAction.UPDATED_CLAIM:
+                    intent = IndentAction.UPDATED_CLAIM
                     parameters = json.loads(arguments)
+                    content += parameters[customer_response_prop] + " "
                     setattr(call.claim, parameters["field"], parameters["value"])
                     model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
+
                 elif name == IndentAction.NEW_CLAIM:
                     intent = IndentAction.NEW_CLAIM
-                    call.claim = ClaimModel()
-                    model.content = "New claim created."
-                elif name == IndentAction.NEW_REMINDER:
-                    intent = IndentAction.NEW_REMINDER
                     parameters = json.loads(arguments)
-                    call.reminders.append(
-                        ReminderModel(
-                            description=parameters["description"],
-                            due_date_time=parameters["due_date_time"],
-                            title=parameters["title"],
+                    content += parameters[customer_response_prop] + " "
+                    call.claim = ClaimModel()
+                    call.reminders = []
+                    model.content = "Claim and reminders created reset."
+
+                elif name == IndentAction.NEW_OR_UPDATED_REMINDER:
+                    intent = IndentAction.NEW_OR_UPDATED_REMINDER
+                    parameters = json.loads(arguments)
+                    content += parameters[customer_response_prop] + " "
+
+                    updated = False
+                    for reminder in call.reminders:
+                        if reminder.title == parameters["title"]:
+                            reminder.description = parameters["description"]
+                            reminder.due_date_time = parameters["due_date_time"]
+                            model.content = f"Reminder \"{parameters['title']}\" updated."
+                            updated = True
+                            break
+
+                    if not updated:
+                        call.reminders.append(
+                            ReminderModel(
+                                description=parameters["description"],
+                                due_date_time=parameters["due_date_time"],
+                                title=parameters["title"],
+                            )
                         )
-                    )
-                    model.content = f"New reminder created for \"{parameters['due_date_time']}\" with title \"{parameters['title']}\" and description \"{parameters['description']}\"."
+                        model.content = f"Reminder \"{parameters['title']}\" created."
 
                 models.append(model)
 
         call.messages.append(
             CallMessageModel(
-                content=content or "",
+                content=content,
                 persona=CallPersona.ASSISTANT,
                 tool_calls=models,
             )
         )
 
         return ActionModel(
-            content=content or "",
+            content=content,
             intent=intent,
         )
 
