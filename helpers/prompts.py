@@ -58,8 +58,12 @@ class LLM(str, Enum):
 class TTS(str, Enum):
     CALLTRANSFER_FAILURE = "Il semble que je ne puisse pas vous mettre en relation avec un agent pour l'instant, mais le prochain agent disponible vous rappellera dès que possible."
     CONNECT_AGENT = "Je suis désolé, je n'ai pas été en mesure de répondre à votre demande. Permettez-moi de vous transférer à un agent qui pourra vous aider davantage. Veuillez rester en ligne et je vous recontacterai sous peu."
-    END_CALL_TO_CONNECT_AGENT = "Bien sûr, restez en ligne. Je vais vous transférer à un agent."
-    ERROR = "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
+    END_CALL_TO_CONNECT_AGENT = (
+        "Bien sûr, restez en ligne. Je vais vous transférer à un agent."
+    )
+    ERROR = (
+        "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
+    )
     GOODBYE = f"Merci de votre appel, j'espère avoir pu vous aider. N'hésitez pas à rappeler, j'ai tout mémorisé. {CONFIG.workflow.bot_company} vous souhaite une excellente journée !"
     HELLO = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je travaille. Mais d'abord, quel est l'objet de votre appel ?"
     NEW_CLAIM = "Je vais créer un nouveau dossier pour vous..."

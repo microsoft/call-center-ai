@@ -261,7 +261,9 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
             if not call.messages:  # First call
                 call.messages.append(
-                    CallMessageModel(content=TTSPrompt.HELLO, persona=CallPersona.ASSISTANT)
+                    CallMessageModel(
+                        content=TTSPrompt.HELLO, persona=CallPersona.ASSISTANT
+                    )
                 )
                 await handle_recognize(
                     call=call,
@@ -270,9 +272,11 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     to=target_caller,
                 )
 
-            else: # Returning call
+            else:  # Returning call
                 call.messages.append(
-                    CallMessageModel(content="Customer called again.", persona=CallPersona.HUMAN)
+                    CallMessageModel(
+                        content="Customer called again.", persona=CallPersona.HUMAN
+                    )
                 )
                 await handle_play(
                     call=call,
@@ -290,7 +294,9 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             _logger.info(f"Call disconnected ({call.id})")
             await handle_hangup(call=call, client=client)
 
-        elif event_type == "Microsoft.Communication.RecognizeCompleted":  # Speech recognized
+        elif (
+            event_type == "Microsoft.Communication.RecognizeCompleted"
+        ):  # Speech recognized
             if event.data["recognitionType"] == "speech":
                 speech_text = event.data["speechResult"]["speech"]
                 _logger.info(f"Recognition completed ({call.id}): {speech_text}")
@@ -307,7 +313,9 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     )
                     await intelligence(call, client, target_caller)
 
-        elif event_type == "Microsoft.Communication.RecognizeFailed":  # Speech recognition failed
+        elif (
+            event_type == "Microsoft.Communication.RecognizeFailed"
+        ):  # Speech recognition failed
             result_information = event.data["resultInformation"]
             error_code = result_information["subCode"]
 
@@ -322,9 +330,13 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             # 8532 = Action failed, inter-digit silence timeout reached
             # 8512 = Unknown internal server error
             # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
-            if error_code in (8510, 8532, 8512) and call.recognition_retry < 10:  # Timeout retry
+            if (
+                error_code in (8510, 8532, 8512) and call.recognition_retry < 10
+            ):  # Timeout retry
                 call.messages.append(
-                    CallMessageModel(content=TTSPrompt.TIMEOUT_SILENCE, persona=CallPersona.ASSISTANT)
+                    CallMessageModel(
+                        content=TTSPrompt.TIMEOUT_SILENCE, persona=CallPersona.ASSISTANT
+                    )
                 )
                 await handle_recognize(
                     call=call,
@@ -371,14 +383,19 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             elif error_code == 9999:  # Unknown internal server error
                 _logger.warn("Error during media play, unknown internal server error")
             else:
-                _logger.warn(f"Error during media play, unknown error code {error_code}")
+                _logger.warn(
+                    f"Error during media play, unknown error code {error_code}"
+                )
 
-
-        elif event_type == "Microsoft.Communication.CallTransferAccepted":  # Call transfer accepted
+        elif (
+            event_type == "Microsoft.Communication.CallTransferAccepted"
+        ):  # Call transfer accepted
             _logger.info(f"Call transfer accepted event ({call.id})")
             # TODO: Is there anything to do here?
 
-        elif event_type == "Microsoft.Communication.CallTransferFailed":  # Call transfer failed
+        elif (
+            event_type == "Microsoft.Communication.CallTransferFailed"
+        ):  # Call transfer failed
             _logger.debig(f"Call transfer failed event ({call.id})")
             result_information = event.data["resultInformation"]
             sub_code = result_information["subCode"]
@@ -461,7 +478,9 @@ async def handle_play(
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
     if store:
-        call.messages.append(CallMessageModel(content=text, persona=CallPersona.ASSISTANT))
+        call.messages.append(
+            CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
+        )
     try:
         client.play_media_to_all(
             play_source=audio_from_text(text), operation_context=context
@@ -715,11 +734,13 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 elif name == IndentAction.NEW_REMINDER:
                     intent = IndentAction.NEW_REMINDER
                     parameters = json.loads(arguments)
-                    call.reminders.append(ReminderModel(
-                        description=parameters["description"],
-                        due_date_time=parameters["due_date_time"],
-                        title=parameters["title"],
-                    ))
+                    call.reminders.append(
+                        ReminderModel(
+                            description=parameters["description"],
+                            due_date_time=parameters["due_date_time"],
+                            title=parameters["title"],
+                        )
+                    )
                     model.content = f"New reminder created for \"{parameters['due_date_time']}\" with title \"{parameters['title']}\" and description \"{parameters['description']}\"."
 
                 models.append(model)
@@ -858,7 +879,9 @@ def callback_url(caller_id: str) -> str:
 
 
 def init_db():
-    db.execute("CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)")
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
+    )
     db.commit()
 
 
