@@ -8,7 +8,42 @@ AI-powered call center solution with Azure and OpenAI GPT.
 
 ## Overview
 
+A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
+
+[![French demo](https://img.youtube.com/vi/gnnin34V7Zg/maxresdefault.jpg)](https://www.youtube.com/watch?v=gnnin34V7Zg)
+
+Main interactions shown in the demo:
+
+1. User calls the call center
+2. The bot answers and the conversation starts
+3. The bot stores conversation, claim and todo list in the database
+
+Extract of the data stored during the call:
+
+```json
+{
+  "claim": {
+    "incident_date_time": "2024-01-11T19:33:41",
+    "incident_description": "The vehicle began to travel with a burning smell and the driver pulled over to the side of the freeway.",
+    "policy_number": "B01371946",
+    "policyholder_contact_info": "[number masked for the demo]",
+    "policyholder_name": "Clémence Lesne",
+    "vehicle_info": "Ford Fiesta 2003"
+  },
+  "reminders": [
+    {
+      "description": "Check that all the information in Clémence Lesne's file is correct and complete.",
+      "due_date_time": "2024-01-18T16:00:00",
+      "title": "Check Clémence file"
+    }
+  ]
+}
+```
+
 ### Features
+
+> [!NOTE]
+> This project is a proof of concept. It is not intended to be used in production. This demonstrates how can be combined Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
 
 - [x] Access to customer conversation history
 - [x] Bot can be called from a phone number
