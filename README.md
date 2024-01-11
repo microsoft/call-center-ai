@@ -118,6 +118,11 @@ eventgrid:
   resource_group: claim-ai-poc
   subscription_id: xxx
   system_topic: claim-ai-poc
+
+twilio:
+  account_sid: xxx
+  auth_token: xxx
+  phone_number: "+19291234567"
 ```
 
 Then run:
