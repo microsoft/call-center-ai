@@ -237,6 +237,8 @@ async def call_inbound_post(request: Request):
     description="Handle callbacks from Azure Communication Services.",
     status_code=status.HTTP_204_NO_CONTENT,
 )
+# TODO: Secure this endpoint with a secret
+# See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(request: Request, call_id: UUID) -> None:
     for event_dict in await request.json():
         event = CloudEvent.from_dict(event_dict)
@@ -315,7 +317,9 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 file="acknowledge.wav",
             )
 
-            if error_code == 8510 and call.recognition_retry < 10:  # Timeout retry
+            # Error codes:
+            # 8510 = Action failed, initial silence timeout reached
+            # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
                 call.messages.append(
                     CallMessageModel(content=TTSPrompt.TIMEOUT_SILENCE, persona=CallPersona.ASSISTANT)
                 )
@@ -679,6 +683,7 @@ async def handle_recognize(
 
         _logger.debug(f"Recognizing last chunk ({call.id}): {last_chunk}")
         # Play last chunk and start recognizing
+        # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
