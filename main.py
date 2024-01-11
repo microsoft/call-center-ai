@@ -603,7 +603,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 "parameters": {
                     "properties": {
                         f"{customer_response_prop}": {
-                            "description": "The text to be read to the customer to confirm the update. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                             "type": "string",
                         }
                     },
@@ -633,7 +633,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
-                            "description": "The text to be read to the customer to confirm the update. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                             "type": "string",
                         },
                     },
@@ -666,7 +666,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
-                            "description": "The text to be read to the customer to confirm the reminder. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
+                            "description": "The text to be read to the customer to confirm the reminder. Only speak about this action. Use an imperative sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
                             "type": "string",
                         },
                     },
