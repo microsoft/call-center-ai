@@ -492,6 +492,7 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
     ]
     _logger.debug(f"Messages: {messages}")
 
+    content = None
     try:
         res = await oai_gpt.chat.completions.create(
             max_tokens=1000,  # Arbitrary limit
