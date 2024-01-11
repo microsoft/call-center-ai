@@ -422,9 +422,15 @@ async def intelligence(
             text=TTSPrompt.GOODBYE,
         )
 
-    # elif chat_res.intent == IndentAction.NEW_CLAIM:
-    # elif chat_res.intent == IndentAction.UPDATED_CLAIM:
-    # elif chat_res.intent == IndentAction.NEW_REMINDER:
+    elif chat_res.intent in (IndentAction.NEW_CLAIM, IndentAction.UPDATED_CLAIM, IndentAction.NEW_OR_UPDATED_REMINDER):
+        await handle_play(
+            call=call,
+            client=client,
+            store=False,
+            text=chat_res.content,
+        )
+        await intelligence(call, client, target_caller)
+
     else:
         await handle_recognize(
             call=call,
