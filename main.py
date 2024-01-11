@@ -331,7 +331,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 await handle_play(
                     call=call,
                     client=client,
-                    context=Context.GOODBYE.value,
+                    context=Context.GOODBYE,
                     text=TTSPrompt.GOODBYE,
                 )
 
@@ -339,13 +339,13 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             _logger.debug(f"Play completed ({call.id})")
 
             if (
-                operation_context == Context.TRANSFER_FAILED.value
-                or operation_context == Context.GOODBYE.value
+                operation_context == Context.TRANSFER_FAILED
+                or operation_context == Context.GOODBYE
             ):  # Call ended
                 _logger.info(f"Ending call ({call.id})")
                 await handle_hangup(call=call, client=client)
 
-            elif operation_context == Context.CONNECT_AGENT.value:  # Call transfer
+            elif operation_context == Context.CONNECT_AGENT:  # Call transfer
                 _logger.info(f"Initiating transfer call initiated ({call.id})")
                 agent_caller = PhoneNumberIdentifier(CONFIG.workflow.agent_phone_number)
                 client.transfer_call_to_participant(target_participant=agent_caller)
@@ -362,7 +362,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             await handle_play(
                 call=call,
                 client=client,
-                context=Context.TRANSFER_FAILED.value,
+                context=Context.TRANSFER_FAILED,
                 text=TTSPrompt.CALLTRANSFER_FAILURE,
             )
 
@@ -379,7 +379,7 @@ async def intelligence(
         await handle_play(
             call=call,
             client=client,
-            context=Context.CONNECT_AGENT.value,
+            context=Context.CONNECT_AGENT,
             text=TTSPrompt.END_CALL_TO_CONNECT_AGENT,
         )
 
@@ -387,7 +387,7 @@ async def intelligence(
         await handle_play(
             call=call,
             client=client,
-            context=Context.GOODBYE.value,
+            context=Context.GOODBYE,
             text=TTSPrompt.GOODBYE,
         )
 
@@ -531,7 +531,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to talk to an agent and Assistant is unable to help, this will transfer the customer to an human agent.",
-                "name": IndentAction.TALK_TO_HUMAN.value,
+                "name": IndentAction.TALK_TO_HUMAN,
                 "parameters": {
                     "properties": {},
                     "required": [],
@@ -543,7 +543,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to end the call, or if the user is satisfied with the answer and confirmed the end of the call.",
-                "name": IndentAction.END_CALL.value,
+                "name": IndentAction.END_CALL,
                 "parameters": {
                     "properties": {},
                     "required": [],
@@ -555,7 +555,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to update a claim field with a new value.",
-                "name": IndentAction.UPDATE_CLAIM.value,
+                "name": IndentAction.UPDATE_CLAIM,
                 "parameters": {
                     "properties": {
                         "field": {
@@ -610,11 +610,11 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     id=tool_call.id,
                 )
 
-                if name == IndentAction.TALK_TO_HUMAN.value:
+                if name == IndentAction.TALK_TO_HUMAN:
                     intent = IndentAction.TALK_TO_HUMAN
-                elif name == IndentAction.END_CALL.value:
+                elif name == IndentAction.END_CALL:
                     intent = IndentAction.END_CALL
-                elif name == IndentAction.UPDATE_CLAIM.value:
+                elif name == IndentAction.UPDATE_CLAIM:
                     intent = IndentAction.UPDATE_CLAIM
                     parameters = json.loads(arguments)
                     setattr(call.claim, parameters["field"], parameters["value"])
