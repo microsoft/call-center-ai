@@ -319,7 +319,10 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
             # Error codes:
             # 8510 = Action failed, initial silence timeout reached
+            # 8532 = Action failed, inter-digit silence timeout reached
+            # 8512 = Unknown internal server error
             # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
+            if error_code in (8510, 8532, 8512) and call.recognition_retry < 10:  # Timeout retry
                 call.messages.append(
                     CallMessageModel(content=TTSPrompt.TIMEOUT_SILENCE, persona=CallPersona.ASSISTANT)
                 )
@@ -353,6 +356,23 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 _logger.info(f"Initiating transfer call initiated ({call.id})")
                 agent_caller = PhoneNumberIdentifier(CONFIG.workflow.agent_phone_number)
                 client.transfer_call_to_participant(target_participant=agent_caller)
+
+        elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
+            _logger.debug(f"Play failed ({call.id})")
+
+            result_information = event.data["resultInformation"]
+            error_code = result_information["subCode"]
+
+            # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
+            if error_code == 8535:  # Action failed, file format is invalid
+                _logger.warn("Error during media play, file format is invalid")
+            elif error_code == 8536:  # Action failed, file could not be downloaded
+                _logger.warn("Error during media play, file could not be downloaded")
+            elif error_code == 9999:  # Unknown internal server error
+                _logger.warn("Error during media play, unknown internal server error")
+            else:
+                _logger.warn(f"Error during media play, unknown error code {error_code}")
+
 
         elif event_type == "Microsoft.Communication.CallTransferAccepted":  # Call transfer accepted
             _logger.info(f"Call transfer accepted event ({call.id})")
