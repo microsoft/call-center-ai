@@ -50,3 +50,11 @@ start:
 		--port 8080 \
 		--proxy-headers \
 		--reload
+
+
+build:
+	$(docker) build \
+		--build-arg VERSION=$(version_full) \
+		--tag $(container_name):$(version_small) \
+		--tag $(container_name):latest \
+		.
