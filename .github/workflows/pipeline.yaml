@@ -117,13 +117,6 @@ jobs:
             org.opencontainers.image.documentation=https://github.com/${{ env.CONTAINER_NAME }}
             org.opencontainers.image.vendor=${{ github.actor }}
 
-      - name: Store tag
-        id: tag
-        run: |
-          branch=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
-          tag=$(echo "${{ steps.meta.outputs.tags }}" | grep -m1 $branch)
-          echo "tag=$tag" >> $GITHUB_OUTPUT
-
       - name: Build/push container
         uses: docker/build-push-action@v5.1.0
         with:
