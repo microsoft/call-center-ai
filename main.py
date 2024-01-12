@@ -451,7 +451,8 @@ async def handle_play(
 
     try:
         client.play_media_to_all(
-            play_source=audio_from_text(text), operation_context=context
+            operation_context=context,
+            play_source=audio_from_text(text),
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.id})")
