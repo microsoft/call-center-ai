@@ -176,12 +176,11 @@ async def health_liveness_get() -> None:
 @api.get("/call/initiate", description="Initiate an outbound call to a phone number.")
 def call_initiate_get(phone_number: str) -> None:
     _logger.info(f"Initiating outbound call to {phone_number}")
-    target_caller = PhoneNumberIdentifier(phone_number)
     call_connection_properties = call_automation_client.create_call(
         callback_url=callback_url(phone_number),
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=source_caller,
-        target_participant=target_caller,
+        target_participant=PhoneNumberIdentifier(phone_number),
     )
     _logger.info(
         f"Created call with connection id: {call_connection_properties.call_connection_id}"
@@ -243,7 +242,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             call_connection_id=connection_id
         )
         call = get_call_by_id(call_id)
-        target_caller = PhoneNumberIdentifier(call.phone_number)
         event_type = event.type
 
         _logger.debug(f"Call event received {event_type} for call {call}")
@@ -254,11 +252,10 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             call.recognition_retry = 0  # Reset recognition retry counter
 
             if not call.messages:  # First call
-                await handle_recognize(
+                await handle_recognize_text(
                     call=call,
                     client=client,
                     text=TTSPrompt.HELLO,
-                    to=target_caller,
                 )
 
             else:  # Returning call
@@ -277,7 +274,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     client=client,
                     file="acknowledge.mp3",
                 )
-                await intelligence(call, client, target_caller)
+                await intelligence(call, client)
 
         elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
             _logger.info(f"Call disconnected ({call.id})")
@@ -300,7 +297,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     call.messages.append(
                         CallMessageModel(content=speech_text, persona=CallPersona.HUMAN)
                     )
-                    await intelligence(call, client, target_caller)
+                    await intelligence(call, client)
 
         elif (
             event_type == "Microsoft.Communication.RecognizeFailed"
@@ -322,11 +319,10 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             if (
                 error_code in (8510, 8532, 8512) and call.recognition_retry < 10
             ):  # Timeout retry
-                await handle_recognize(
+                await handle_recognize_text(
                     call=call,
                     client=client,
                     text=TTSPrompt.TIMEOUT_SILENCE,
-                    to=target_caller,
                 )
                 call.recognition_retry += 1
 
@@ -395,7 +391,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
 
 async def intelligence(
-    call: CallModel, client: CallConnectionClient, target_caller: PhoneNumberIdentifier
+    call: CallModel, client: CallConnectionClient
 ) -> None:
     chat_res = await gpt_chat(call)
     _logger.info(f"Chat ({call.id}): {chat_res}")
@@ -423,15 +419,14 @@ async def intelligence(
             store=False,
             text=chat_res.content,
         )
-        await intelligence(call, client, target_caller)
+        await intelligence(call, client)
 
     else:
-        await handle_recognize(
+        await handle_recognize_text(
             call=call,
             client=client,
             store=False,
             text=chat_res.content,
-            to=target_caller,
         )
 
 
@@ -777,10 +772,9 @@ async def gpt_chat(call: CallModel) -> ActionModel:
     return ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
 
 
-async def handle_recognize(
+async def handle_recognize_text(
     client: CallConnectionClient,
     call: CallModel,
-    to: PhoneNumberIdentifier,
     text: str,
     context: Optional[str] = None,
     store: bool = True,
@@ -828,7 +822,7 @@ async def handle_recognize(
             operation_context=context,
             play_prompt=audio_from_text(last_chunk),
             speech_language=CONFIG.workflow.conversation_lang,
-            target_participant=to,
+            target_participant=PhoneNumberIdentifier(call.phone_number),
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing ({call.id})")
@@ -842,8 +836,8 @@ async def handle_media(
 ) -> None:
     try:
         client.play_media_to_all(
-            play_source=FileSource(f"{CONFIG.resources.public_url}/{file}"),
             operation_context=context,
+            play_source=FileSource(f"{CONFIG.resources.public_url}/{file}"),
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.id})")
