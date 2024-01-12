@@ -178,7 +178,7 @@ jobs:
         uses: actions/github-script@v7.0.1
         with:
           script: |
-            const isMain = context.ref == `refs/heads/${context.payload.repository.default_branch}`;
+            const isMain = context.ref == `refs/heads/main`;
             const repoName = context.repo.repo;
 
             console.log(isMain ? 'Creating release for default branch' : 'Creating release for non-default branch');
@@ -205,7 +205,7 @@ jobs:
       - create-release
       - init
     # Only publish on non-scheduled default branch
-    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/${context.payload.repository.default_branch}')
+    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
     steps:
       - name: publish release
         id: publish-release
