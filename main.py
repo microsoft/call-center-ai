@@ -899,7 +899,7 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
             )
 
     except Exception:
-        _logger.warn(f"SMS error ({call.id})", exc_info=True)
+        _logger.warn(f"Failed SMS to {call.phone_number} ({call.id})", exc_info=True)
 
 
 def audio_from_text(text: str) -> TextSource:
