@@ -275,7 +275,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 await handle_media(
                     call=call,
                     client=client,
-                    file="acknowledge.wav",
+                    file="acknowledge.mp3",
                 )
                 await intelligence(call, client, target_caller)
 
@@ -293,7 +293,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 await handle_media(
                     call=call,
                     client=client,
-                    file="acknowledge.wav",
+                    file="acknowledge.mp3",
                 )
 
                 if speech_text is not None and len(speech_text) > 0:
@@ -311,7 +311,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
             await handle_media(
                 call=call,
                 client=client,
-                file="acknowledge.wav",
+                file="acknowledge.mp3",
             )
 
             # Error codes:
