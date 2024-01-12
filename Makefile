@@ -49,6 +49,7 @@ start:
 		--no-server-header \
 		--port 8080 \
 		--proxy-headers \
+		--timeout-keep-alive 60 \
 		--reload
 
 
@@ -58,3 +59,14 @@ build:
 		--tag $(container_name):$(version_small) \
 		--tag $(container_name):latest \
 		.
+
+run:
+	$(docker) run \
+		--env EVENTS_DOMAIN=$(tunnel_url) \
+		--env VERSION=$(version_full) \
+		--mount type=bind,source="$(CURDIR)/.env",target="/app/.env" \
+		--mount type=bind,source="$(CURDIR)/config.yaml",target="/app/config.yaml" \
+		--name claim-ai-phone-bot \
+		--publish 8080:8080 \
+		--rm \
+		$(container_name):$(version_small)

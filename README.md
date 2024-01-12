@@ -113,7 +113,7 @@ graph
   user -- Call --> communication_service_call
 ```
 
-## Installation
+## Local installation
 
 ### Prerequisites
 
@@ -193,3 +193,10 @@ make tunnel
 # Start the local API server
 make start
 ```
+
+## Remote deployment
+
+Container is available on GitHub Actions, at:
+
+- Latest version from a branch: `ghcr.io/clemlesne/claim-ai-phone-bot:main`
+- Specific tag: `ghcr.io/clemlesne/claim-ai-phone-bot:0.1.0` (recommended)
