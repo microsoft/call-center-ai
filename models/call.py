@@ -3,7 +3,7 @@ from enum import Enum
 from models.claim import ClaimModel
 from models.reminder import ReminderModel
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from uuid import UUID, uuid4
 
 
@@ -31,6 +31,7 @@ class CallModel(BaseModel):
     claim: ClaimModel = Field(default_factory=ClaimModel)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     id: UUID = Field(default_factory=uuid4)
+    last_connection_id: Optional[str] = None
     messages: List[MessageModel] = []
     phone_number: str
     recognition_retry: int = Field(default=0)
