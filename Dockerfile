@@ -1,5 +1,5 @@
 # Base container
-FROM docker.io/library/python:3.11-slim-bullseye@sha256:9f35f3a6420693c209c11bba63dcf103d88e47ebe0b205336b5168c122967edf AS base
+FROM docker.io/library/python:3.12-slim-bullseye@sha256:3f77bd1eb491a5ee43602171d6c1495a5c81da814f0228dd23629a0164777f02 AS base
 
 # Build container
 FROM base AS build
