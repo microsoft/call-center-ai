@@ -178,7 +178,7 @@ make install
 
 Also, a public file server is needed to host the audio files.
 
-For this, you can use Azure Blob Storage. In that case, content of the project folder `$web` requires to be uploaded to the public container of the storage account.
+For this, you can use Azure Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account.
 
 ### Run
 
