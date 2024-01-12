@@ -20,7 +20,7 @@ from datetime import datetime
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt
@@ -71,7 +71,9 @@ call_automation_client = CallAutomationClient(
         CONFIG.communication_service.access_key.get_secret_value()
     ),
 )
-sms_client = SmsClient(credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint)
+sms_client = SmsClient(
+    credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint
+)
 db = sqlite3.connect(".local.sqlite", check_same_thread=False)
 
 EVENTS_DOMAIN = environ.get("EVENTS_DOMAIN").strip("/")
@@ -170,10 +172,14 @@ def eventgrid_unregister() -> None:
     description="Liveness healthckeck, always returns 204, used to check if the API is up.",
 )
 async def health_liveness_get() -> None:
-    return None
+    pass
 
 
-@api.get("/call/initiate", description="Initiate an outbound call to a phone number.")
+@api.get(
+    "/call/initiate",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="Initiate an outbound call to a phone number.",
+)
 def call_initiate_get(phone_number: str) -> None:
     _logger.info(f"Initiating outbound call to {phone_number}")
     call_connection_properties = call_automation_client.create_call(
@@ -185,7 +191,6 @@ def call_initiate_get(phone_number: str) -> None:
     _logger.info(
         f"Created call with connection id: {call_connection_properties.call_connection_id}"
     )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @api.post(
@@ -204,7 +209,7 @@ async def call_inbound_post(request: Request):
             _logger.info(f"Validating Event Grid subscription ({validation_code})")
             return JSONResponse(
                 content={"validationResponse": event.data["validationCode"]},
-                status_code=200,
+                status_code=status.HTTP_200_OK,
             )
 
         elif event_type == SystemEventNames.AcsIncomingCallEventName:
@@ -381,7 +386,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
         elif (
             event_type == "Microsoft.Communication.CallTransferFailed"
         ):  # Call transfer failed
-            _logger.debig(f"Call transfer failed event ({call.id})")
+            _logger.debug(f"Call transfer failed event ({call.id})")
             result_information = event.data["resultInformation"]
             sub_code = result_information["subCode"]
             _logger.info(f"Error during call transfer, subCode {sub_code} ({call.id})")
@@ -395,9 +400,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
         save_call(call)
 
 
-async def intelligence(
-    call: CallModel, client: CallConnectionClient
-) -> None:
+async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
     chat_res = await gpt_chat(call)
     _logger.info(f"Chat ({call.id}): {chat_res}")
 
@@ -417,7 +420,11 @@ async def intelligence(
             text=TTSPrompt.GOODBYE,
         )
 
-    elif chat_res.intent in (IndentAction.NEW_CLAIM, IndentAction.UPDATED_CLAIM, IndentAction.NEW_OR_UPDATED_REMINDER):
+    elif chat_res.intent in (
+        IndentAction.NEW_CLAIM,
+        IndentAction.UPDATED_CLAIM,
+        IndentAction.NEW_OR_UPDATED_REMINDER,
+    ):
         await handle_play(
             call=call,
             client=client,
@@ -882,10 +889,14 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         )
         response = responses[0]
 
-        if (response.successful):
-            _logger.info(f"SMS report sent {response.message_id} to {response.to} ({call.id})")
+        if response.successful:
+            _logger.info(
+                f"SMS report sent {response.message_id} to {response.to} ({call.id})"
+            )
         else:
-            _logger.warn(f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.id})")
+            _logger.warn(
+                f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.id})"
+            )
 
     except Exception:
         _logger.warn(f"SMS error ({call.id})", exc_info=True)
@@ -937,7 +948,7 @@ def save_call(call: CallModel):
     db.commit()
 
 
-def get_call_by_id(call_id: UUID) -> CallModel:
+def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
     cursor = db.execute(
         "SELECT data FROM calls WHERE id = ?",
         (call_id.hex,),
