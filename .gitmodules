@@ -1,0 +1,4 @@
+[submodule "cicd/version"]
+	path = cicd/version
+	url = https://github.com/clemlesne/gitops-version
+	branch = master
