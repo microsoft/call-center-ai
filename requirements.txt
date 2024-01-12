@@ -9,5 +9,4 @@ phonenumbers==8.13.27
 pydantic-extra-types==2.4.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
-twilio==8.11.0
 uvicorn==0.25.0

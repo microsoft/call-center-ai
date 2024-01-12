@@ -69,9 +69,7 @@ graph
   agent(["Agent"])
 
   api["Claim AI"]
-  twilio["Twilio\n(external)"]
 
-  api -- Send SMS report --> twilio
   api -- Transfer to --> agent
   api -. Send voice .-> user
   user -- Call --> api
@@ -87,10 +85,10 @@ graph
   user(["User"])
   agent(["Agent"])
 
-  twilio["Twilio\n(external)"]
 
   subgraph "Claim AI"
-    communication_service["Call gateway\n(Azure Communication Services)"]
+    communication_service_call["Call gateway\n(Azure Communication Services)"]
+    communication_service_sms["SMS gateway\n(Azure Communication Services)"]
     event_grid[("Broker\n(Azure Event Grid)")]
     api["API"]
     db_conversation[("Conversations")]
@@ -98,20 +96,21 @@ graph
     gpt["GPT-4 Turbo\n(Azure OpenAI)"]
   end
 
-  api -- Answer with text --> communication_service
+  api -- Answer with text --> communication_service_call
   api -- Generate completion --> gpt
   api -- Save claim --> db_claim
   api -- Save conversation --> db_conversation
-  api -- Send SMS report --> twilio
-  api -- Transfer to agent --> communication_service
+  api -- Send SMS report --> communication_service_sms
+  api -- Transfer to agent --> communication_service_call
   api -. Watch .-> event_grid
 
-  communication_service -- Notifies --> event_grid
-  communication_service -- Transfer to --> agent
+  communication_service_call -- Notifies --> event_grid
+  communication_service_call -- Transfer to --> agent
+  communication_service_call -. Send voice .-> user
 
-  communication_service -. Send voice .-> user
+  communication_service_sms -- Send SMS --> user
 
-  user -- Call --> communication_service
+  user -- Call --> communication_service_call
 ```
 
 ## Installation
@@ -140,7 +139,7 @@ workflow:
   conversation_lang: fr-FR
   conversation_timeout_hour: 72
 
-communication_service:
+communication_service_call:
   access_key: xxx
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
@@ -160,11 +159,6 @@ eventgrid:
   resource_group: claim-ai-poc
   subscription_id: xxx
   system_topic: claim-ai-poc
-
-twilio:
-  account_sid: xxx
-  auth_token: xxx
-  phone_number: "+19291234567"
 ```
 
 If you want to use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:

@@ -28,8 +28,6 @@ from helpers.version import VERSION
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
 from pydantic.json import pydantic_encoder
-from twilio.base.exceptions import TwilioRestException
-from twilio.rest import Client
 from models.call import (
     CallModel,
     MessageModel as CallMessageModel,
@@ -73,11 +71,7 @@ call_automation_client = CallAutomationClient(
         CONFIG.communication_service.access_key.get_secret_value()
     ),
 )
-# TODO: Wait for the legal approval to send SMS with Azure Communication Services
-# sms_client = SmsClient(credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint)
-twilio_client = Client(
-    CONFIG.twilio.account_sid, CONFIG.twilio.auth_token.get_secret_value()
-)
+sms_client = SmsClient(credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint)
 db = sqlite3.connect(".local.sqlite", check_same_thread=False)
 
 EVENTS_DOMAIN = environ.get("EVENTS_DOMAIN").strip("/")
@@ -866,20 +860,20 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
     _logger.info(f"SMS report ({call.id}): {content}")
 
     try:
-        # TODO: Wait for the legal approval to send SMS with Azure Communication Services
-        # sms_client.send(
-        #     from_=CONFIG.communication_service.phone_number,
-        #     message=content,
-        #     to=call.phone_number,
-        # )
-        twilio_client.messages.create(
-            body=content,
-            from_=CONFIG.twilio.phone_number,
+        responses = sms_client.send(
+            from_=CONFIG.communication_service.phone_number,
+            message=content,
             to=call.phone_number,
         )
-        _logger.info(f"SMS report sent ({call.id})")
-    except TwilioRestException:
-        _logger.warn(f"Twilio SMS error ({call.id})", exc_info=True)
+        response = responses[0]
+
+        if (response.successful):
+            _logger.info(f"SMS report sent {response.message_id} to {response.to} ({call.id})")
+        else:
+            _logger.warn(f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.id})")
+
+    except Exception:
+        _logger.warn(f"SMS error ({call.id})", exc_info=True)
 
 
 def audio_from_text(text: str) -> TextSource:
