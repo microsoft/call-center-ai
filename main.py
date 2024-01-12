@@ -18,7 +18,7 @@ from azure.mgmt.eventgrid import EventGridManagementClient
 from contextlib import asynccontextmanager
 from datetime import datetime
 from enum import Enum
-from fastapi import FastAPI, status, Request
+from fastapi import FastAPI, status, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from helpers.config import CONFIG
@@ -234,14 +234,19 @@ async def call_inbound_post(request: Request):
 # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(request: Request, call_id: UUID) -> None:
     for event_dict in await request.json():
-        event = CloudEvent.from_dict(event_dict)
+        call = get_call_by_id(call_id)
+        if not call:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Call {call_id} not found",
+            )
 
+        event = CloudEvent.from_dict(event_dict)
         connection_id = event.data["callConnectionId"]
         operation_context = event.data.get("operationContext", None)
         client = call_automation_client.get_call_connection(
             call_connection_id=connection_id
         )
-        call = get_call_by_id(call_id)
         event_type = event.type
 
         _logger.debug(f"Call event received {event_type} for call {call}")
