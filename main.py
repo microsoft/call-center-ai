@@ -132,6 +132,10 @@ async def eventgrid_register() -> None:
         event_subscription_info={
             "properties": {
                 "eventDeliverySchema": "EventGridSchema",
+                "retryPolicy": {
+                    "maxDeliveryAttempts": 8,
+                    "eventTimeToLiveInMinutes": 3,  # Call are real time, no need to wait
+                },
                 "destination": {
                     "endpointType": "WebHook",
                     "properties": {
