@@ -3,7 +3,7 @@ from pydantic import BaseModel, SecretStr
 
 
 class LoggingLevel(str, Enum):
-    # Copied from https://docs.python.org/3.11/library/logging.html#logging-levels
+    # Copied from https://docs.python.org/3.12/library/logging.html#logging-levels
     CRITICAL = "CRITICAL"
     DEBUG = "DEBUG"
     ERROR = "ERROR"
