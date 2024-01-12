@@ -878,6 +878,10 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
     except ResourceNotFoundError:
         _logger.debug(f"Call already hung up ({call.id})")
 
+    call.messages.append(
+        CallMessageModel(content="Customer ended the call.", persona=CallPersona.HUMAN)
+    )
+
     content = await gpt_completion(LLMPrompt.SMS_SUMMARY_SYSTEM, call)
     _logger.info(f"SMS report ({call.id}): {content}")
 
@@ -893,9 +897,21 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
             _logger.info(
                 f"SMS report sent {response.message_id} to {response.to} ({call.id})"
             )
+            call.messages.append(
+                CallMessageModel(
+                    content=f"SMS report sent to {response.to}: {content}",
+                    persona=CallPersona.ASSISTANT,
+                )
+            )
         else:
             _logger.warn(
                 f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.id})"
+            )
+            call.messages.append(
+                CallMessageModel(
+                    content=f"Failed to send SMS report to {response.to}: {response.error_message}",
+                    persona=CallPersona.ASSISTANT,
+                )
             )
 
     except Exception:
