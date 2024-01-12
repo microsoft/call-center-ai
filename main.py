@@ -801,7 +801,6 @@ async def handle_recognize_text(
         chunk += to_add
     if chunk:
         chunks.append(chunk)
-    last_chunk = chunks.pop()
 
     try:
         # Play all chunks except the last one
@@ -814,14 +813,30 @@ async def handle_recognize_text(
                 store=False,
             )
 
-        _logger.debug(f"Recognizing last chunk ({call.id}): {last_chunk}")
-        # Play last chunk and start recognizing
+        _logger.debug(f"Recognizing ({call.id})")
+        # Play tone and start recognizing
         # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
+        await handle_recognize_media(
+            call=call,
+            client=client,
+            file="ready.mp3",
+        )
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before recognizing ({call.id})")
+
+
+async def handle_recognize_media(
+    client: CallConnectionClient,
+    call: CallModel,
+    file: str,
+    context: Optional[str] = None,
+) -> None:
+    try:
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
             operation_context=context,
-            play_prompt=audio_from_text(last_chunk),
+            play_prompt=FileSource(f"{CONFIG.resources.public_url}/{file}"),
             speech_language=CONFIG.workflow.conversation_lang,
             target_participant=PhoneNumberIdentifier(call.phone_number),
         )
