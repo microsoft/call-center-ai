@@ -456,7 +456,7 @@ async def handle_play(
     """
     Play a text to a call participant.
 
-    If store is True, the text will be stored in the call messages.
+    If store is True, the text will be stored in the call messages. Compatible with text larger than 400 characters, in that case the text will be split in chunks and played sequentially.
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
@@ -465,11 +465,25 @@ async def handle_play(
             CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
         )
 
+    # Split text in chunks of max 400 characters, separated by a comma
+    chunks = []
+    chunk = ""
+    for word in text.split("."):  # Split by sentence
+        to_add = f"{word}."
+        if len(chunk) + len(to_add) >= 400:
+            chunks.append(chunk)
+            chunk = ""
+        chunk += to_add
+    if chunk:
+        chunks.append(chunk)
+
     try:
-        client.play_media_to_all(
-            operation_context=context,
-            play_source=audio_from_text(text),
-        )
+        for chunk in chunks:
+            _logger.debug(f"Playing chunk ({call.id}): {chunk}")
+            client.play_media_to_all(
+                operation_context=context,
+                play_source=audio_from_text(chunk),
+            )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.id})")
 
@@ -793,65 +807,42 @@ async def handle_recognize_text(
     client: CallConnectionClient,
     call: CallModel,
     text: str,
-    context: Optional[str] = None,
     store: bool = True,
 ) -> None:
     """
     Play a text to a call participant and start recognizing the response.
 
-    If store is True, the text will be stored in the call messages.
+    If store is True, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    if store:
-        call.messages.append(
-            CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
-        )
+    await handle_play(
+        call=call,
+        client=client,
+        store=store,
+        text=text,
+    )
 
-    # Split text in chunks of max 400 characters, separated by a comma
-    chunks = []
-    chunk = ""
-    for word in text.split("."):  # Split by sentence
-        to_add = f"{word}."
-        if len(chunk) + len(to_add) >= 400:
-            chunks.append(chunk)
-            chunk = ""
-        chunk += to_add
-    if chunk:
-        chunks.append(chunk)
-
-    try:
-        # Play all chunks except the last one
-        for chunk in chunks:
-            _logger.debug(f"Playing chunk ({call.id}): {chunk}")
-            await handle_play(
-                call=call,
-                client=client,
-                text=chunk,
-                store=False,
-            )
-
-        _logger.debug(f"Recognizing ({call.id})")
-        # Play tone and start recognizing
-        # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
-        await handle_recognize_media(
-            call=call,
-            client=client,
-            file="ready.mp3",
-        )
-    except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before recognizing ({call.id})")
+    _logger.debug(f"Recognizing ({call.id})")
+    await handle_recognize_media(
+        call=call,
+        client=client,
+        file="ready.mp3",
+    )
 
 
 async def handle_recognize_media(
     client: CallConnectionClient,
     call: CallModel,
     file: str,
-    context: Optional[str] = None,
 ) -> None:
+    """
+    Play a media to a call participant and start recognizing the response.
+
+    TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
+    """
     try:
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
-            operation_context=context,
             play_prompt=FileSource(f"{CONFIG.resources.public_url}/{file}"),
             speech_language=CONFIG.workflow.conversation_lang,
             target_participant=PhoneNumberIdentifier(call.phone_number),
