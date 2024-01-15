@@ -1,3 +1,4 @@
+aiosqlite==0.19.0
 azure-communication-callautomation==1.1.0
 azure-communication-sms==1.0.1
 azure-eventgrid==4.16.0

@@ -36,7 +36,7 @@ from models.claim import ClaimModel
 from openai import AsyncAzureOpenAI
 from uuid import UUID, uuid4
 import json
-import sqlite3
+import aiosqlite
 
 
 _logger = build_logger(__name__)
@@ -79,7 +79,7 @@ class Context(str, Enum):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_db()
+    await init_db()
     yield
 
 
@@ -128,10 +128,10 @@ async def call_get(phone_number: str) -> List[CallModel]:
     status_code=status.HTTP_204_NO_CONTENT,
     description="Initiate an outbound call to a phone number.",
 )
-def call_initiate_get(phone_number: str) -> None:
+async def call_initiate_get(phone_number: str) -> None:
     _logger.info(f"Initiating outbound call to {phone_number}")
     call_connection_properties = call_automation_client.create_call(
-        callback_url=callback_url(phone_number),
+        callback_url=await callback_url(phone_number),
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=source_caller,
         target_participant=PhoneNumberIdentifier(phone_number),
@@ -169,7 +169,7 @@ async def call_inbound_post(request: Request):
             _logger.debug(f"Incoming call handler caller ID: {phone_number}")
             call_context = event.data["incomingCallContext"]
             answer_call_result = call_automation_client.answer_call(
-                callback_url=callback_url(phone_number),
+                callback_url=await callback_url(phone_number),
                 cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
                 incoming_call_context=call_context,
             )
@@ -187,7 +187,7 @@ async def call_inbound_post(request: Request):
 # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(request: Request, call_id: UUID) -> None:
     for event_dict in await request.json():
-        call = get_call_by_id(call_id)
+        call = await get_call_by_id(call_id)
         if not call:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -328,7 +328,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 text=TTSPrompt.CALLTRANSFER_FAILURE,
             )
 
-        save_call(call)
+        await save_call(call)
 
 
 async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
@@ -937,30 +937,30 @@ def audio_from_text(text: str) -> SsmlSource:
     return SsmlSource(ssml_text=ssml)
 
 
-def callback_url(caller_id: str) -> str:
+async def callback_url(caller_id: str) -> str:
     """
     Generate the callback URL for a call.
 
     If the caller has already called, use the same call ID, to keep the conversation history. Otherwise, create a new call ID.
     """
-    call = get_last_call_by_phone_number(caller_id)
+    call = await get_last_call_by_phone_number(caller_id)
     if not call:
         call = CallModel(phone_number=caller_id)
-        save_call(call)
+        await save_call(call)
     return f"{CALL_EVENT_URL}/{call.id}"
 
 
-def init_db():
-    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
-        db.execute(
+async def init_db():
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        await db.execute(
             "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
         )
         await db.commit()
 
 
-def save_call(call: CallModel):
-    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
-        db.execute(
+async def save_call(call: CallModel):
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        await db.execute(
             "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
             (
                 call.id.hex,  # id
@@ -972,23 +972,23 @@ def save_call(call: CallModel):
         await db.commit()
 
 
-def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
-    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
-        cursor = db.execute(
+async def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        cursor = await db.execute(
             "SELECT data FROM calls WHERE id = ?",
             (call_id.hex,),
         )
-        row = cursor.fetchone()
+        row = await cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
 
 
-def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
-    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
-        cursor = db.execute(
+async def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        cursor = await db.execute(
             f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY created_at DESC LIMIT 1",
             (phone_number,),
         )
-        row = cursor.fetchone()
+        row = await cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
 
 
