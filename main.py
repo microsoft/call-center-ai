@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt
+from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
 from helpers.version import VERSION
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
@@ -392,7 +392,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
     await handle_media_loop(
         call=call,
         client=client,
-        file="loading.wav",
+        sound=SoundPrompt.LOADING,
     )
 
     chat_res = await gpt_chat(call)
@@ -821,14 +821,14 @@ async def handle_recognize_text(
     await handle_recognize_media(
         call=call,
         client=client,
-        file="ready.wav",
+        sound=SoundPrompt.READY,
     )
 
 
 async def handle_recognize_media(
     client: CallConnectionClient,
     call: CallModel,
-    file: str,
+    sound: SoundPrompt,
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
@@ -839,7 +839,7 @@ async def handle_recognize_media(
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
-            play_prompt=FileSource(f"{CONFIG.resources.public_url}/{file}"),
+            play_prompt=FileSource(url=sound),
             speech_language=CONFIG.workflow.conversation_lang,
             target_participant=PhoneNumberIdentifier(call.phone_number),
         )
@@ -850,14 +850,14 @@ async def handle_recognize_media(
 async def handle_media_loop(
     client: CallConnectionClient,
     call: CallModel,
-    file: str,
+    sound: SoundPrompt,
     context: Optional[str] = None,
 ) -> None:
     try:
         client.play_media_to_all(
             loop=True,
             operation_context=context,
-            play_source=FileSource(f"{CONFIG.resources.public_url}/{file}"),
+            play_source=FileSource(url=sound),
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.id})")

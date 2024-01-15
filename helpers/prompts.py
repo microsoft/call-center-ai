@@ -2,6 +2,11 @@ from enum import Enum
 from helpers.config import CONFIG
 
 
+class Sounds(str, Enum):
+    LOADING = f"{CONFIG.resources.public_url}/loading.wav"
+    READY = f"{CONFIG.resources.public_url}/ready.wav"
+
+
 class LLM(str, Enum):
     DEFAULT_SYSTEM = f"""
         Assistant called {CONFIG.workflow.bot_name} and is in a call center for the insurance company {CONFIG.workflow.bot_company} as an expert with 20 years of experience. Today is {{date}}. Customer is calling from {{phone_number}}. Call center number is {CONFIG.communication_service.phone_number}.
