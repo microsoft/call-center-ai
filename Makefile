@@ -60,7 +60,7 @@ build:
 		--tag $(container_name):latest \
 		.
 
-run:
+start:
 	@echo "🛠️ Deploying to localhost..."
 	$(docker) run \
 		--detach \
