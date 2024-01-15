@@ -75,10 +75,8 @@ sms_client = SmsClient(
 )
 db = sqlite3.connect(".local.sqlite", check_same_thread=False)
 
-EVENTS_DOMAIN = environ.get("EVENTS_DOMAIN").strip("/")
-assert EVENTS_DOMAIN, "EVENTS_DOMAIN environment variable is not set"
-CALL_EVENT_URL = f"{EVENTS_DOMAIN}/call/event"
-CALL_INBOUND_URL = f"{EVENTS_DOMAIN}/call/inbound"
+CALL_EVENT_URL = f"{CONFIG.api.events_domain}/call/event"
+CALL_INBOUND_URL = f"{CONFIG.api.events_domain}/call/inbound"
 
 
 class Context(str, Enum):
