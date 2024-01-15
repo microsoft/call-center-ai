@@ -5,7 +5,7 @@ from azure.communication.callautomation import (
     FileSource,
     PhoneNumberIdentifier,
     RecognizeInputType,
-    TextSource,
+    SsmlSource,
 )
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
@@ -910,17 +910,20 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         _logger.warn(f"Failed SMS to {call.phone_number} ({call.id})", exc_info=True)
 
 
-def audio_from_text(text: str) -> TextSource:
+def audio_from_text(text: str) -> SsmlSource:
+    """
+    Generate an audio source that can be read by Azure Communication Services SDK.
+
+    Text requires to be SVG escaped, and SSML tags are used to control the voice. Plus, text is slowed down by 5% to make it more understandable for elderly people. Text is also truncated to 400 characters, as this is the limit of Azure Communication Services TTS, but a warning is logged.
+    """
+    # Azure Speech Service TTS limit is 400 characters
     if len(text) > 400:
         _logger.warning(
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
-    return TextSource(
-        source_locale=CONFIG.workflow.conversation_lang,
-        text=text,
-        voice_name=CONFIG.communication_service.voice_name,
-    )
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><prosody rate="0.95">{text}</prosody></voice></speak>'
+    return SsmlSource(ssml_text=ssml)
 
 
 def callback_url(caller_id: str) -> str:
