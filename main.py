@@ -24,7 +24,6 @@ from fastapi.responses import JSONResponse
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
-from helpers.version import VERSION
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
 from pydantic.json import pydantic_encoder
@@ -109,7 +108,7 @@ api = FastAPI(
     lifespan=lifespan,
     root_path=ROOT_PATH,
     title="claim-ai-phone-bot",
-    version=VERSION,
+    version=CONFIG.api.version,
 )
 
 api.add_middleware(
