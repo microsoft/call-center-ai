@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lexicon version="1.0" xmlns="http://www.w3.org/2005/01/pronunciation-lexicon" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.w3.org/2005/01/pronunciation-lexicon http://www.w3.org/TR/2007/CR-pronunciation-lexicon-20071212/pls.xsd" alphabet="ipa" xml:lang="fr-FR">
+    <!-- Exemples de contrats d'assurance auto -->
+    <lexeme>
+        <grapheme>contrat mini</grapheme>
+        <alias>assurance voiture au tiers, qui dispose du minimum légal</alias>
+    </lexeme>
+    <lexeme>
+        <grapheme>contrat eco</grapheme>
+        <alias>assurance voiture au tiers, qui inclut en plus les garanties vol, incendie et bris de glace</alias>
+    </lexeme>
+    <lexeme>
+        <grapheme>contrat confort</grapheme>
+        <alias>assurance voiture tous risques, qui inclut la couverture tous accidents (responsables ou subis)</alias>
+    </lexeme>
+    <lexeme>
+        <grapheme>contrat mobilité</grapheme>
+        <alias>assurance voiture tous risques, qui inclut les pannes mécaniques, l'assistance 0km et le véhicule de remplacement tous accident/panne/vol</alias>
+    </lexeme>
+</lexicon>
