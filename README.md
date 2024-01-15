@@ -47,6 +47,7 @@ Extract of the data stored during the call:
 
 - [x] Access to customer conversation history
 - [x] Bot can be called from a phone number
+- [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
 - [x] Create by itself a todo list of tasks to complete the claim
 - [x] Disengaging from a human agent when needed
 - [x] Fine understanding of the customer request with GPT-4 Turbo
@@ -178,7 +179,10 @@ make install
 
 Also, a public file server is needed to host the audio files.
 
-For this, you can use Azure Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account.
+For this, you can use Azure Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account. This folder contains:
+
+- Audio files (`xxx.wav`) to be played during the call
+- [Lexicon file (`lexicon.xml`)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon) to be used by the bot to understand the company products (note: any change [makes up to 15 minutes](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon-file) to be taken into account)
 
 ### Run
 
