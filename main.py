@@ -283,11 +283,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     client=client,
                     text=TTSPrompt.WELCOME_BACK,
                 )
-                await handle_media(
-                    call=call,
-                    client=client,
-                    file="acknowledge.mp3",
-                )
                 await intelligence(call, client)
 
         elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
@@ -301,12 +296,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 speech_text = event.data["speechResult"]["speech"]
                 _logger.info(f"Recognition completed ({call.id}): {speech_text}")
 
-                await handle_media(
-                    call=call,
-                    client=client,
-                    file="acknowledge.mp3",
-                )
-
                 if speech_text is not None and len(speech_text) > 0:
                     call.messages.append(
                         CallMessageModel(content=speech_text, persona=CallPersona.HUMAN)
@@ -318,12 +307,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
         ):  # Speech recognition failed
             result_information = event.data["resultInformation"]
             error_code = result_information["subCode"]
-
-            await handle_media(
-                call=call,
-                client=client,
-                file="acknowledge.mp3",
-            )
 
             # Error codes:
             # 8510 = Action failed, initial silence timeout reached
@@ -405,8 +388,21 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
 
 async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
+    # Start loading sound
+    await handle_media_loop(
+        call=call,
+        client=client,
+        file="loading.wav",
+    )
+
     chat_res = await gpt_chat(call)
     _logger.info(f"Chat ({call.id}): {chat_res}")
+
+    try:
+        # Cancel loading sound
+        client.cancel_all_media_operations()
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before playing ({call.id})")
 
     if chat_res.intent == IndentAction.TALK_TO_HUMAN:
         await handle_play(
@@ -825,7 +821,7 @@ async def handle_recognize_text(
     await handle_recognize_media(
         call=call,
         client=client,
-        file="ready.mp3",
+        file="ready.wav",
     )
 
 
@@ -851,7 +847,7 @@ async def handle_recognize_media(
         _logger.debug(f"Call hung up before recognizing ({call.id})")
 
 
-async def handle_media(
+async def handle_media_loop(
     client: CallConnectionClient,
     call: CallModel,
     file: str,
@@ -859,6 +855,7 @@ async def handle_media(
 ) -> None:
     try:
         client.play_media_to_all(
+            loop=True,
             operation_context=context,
             play_source=FileSource(f"{CONFIG.resources.public_url}/{file}"),
         )
