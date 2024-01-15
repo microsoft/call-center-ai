@@ -5,7 +5,7 @@ from azure.communication.callautomation import (
     FileSource,
     PhoneNumberIdentifier,
     RecognizeInputType,
-    TextSource,
+    SsmlSource,
 )
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt
+from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
 from helpers.version import VERSION
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
@@ -132,6 +132,10 @@ async def eventgrid_register() -> None:
         event_subscription_info={
             "properties": {
                 "eventDeliverySchema": "EventGridSchema",
+                "retryPolicy": {
+                    "maxDeliveryAttempts": 8,
+                    "eventTimeToLiveInMinutes": 3,  # Call are real time, no need to wait
+                },
                 "destination": {
                     "endpointType": "WebHook",
                     "properties": {
@@ -279,11 +283,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     client=client,
                     text=TTSPrompt.WELCOME_BACK,
                 )
-                await handle_media(
-                    call=call,
-                    client=client,
-                    file="acknowledge.mp3",
-                )
                 await intelligence(call, client)
 
         elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
@@ -297,12 +296,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 speech_text = event.data["speechResult"]["speech"]
                 _logger.info(f"Recognition completed ({call.id}): {speech_text}")
 
-                await handle_media(
-                    call=call,
-                    client=client,
-                    file="acknowledge.mp3",
-                )
-
                 if speech_text is not None and len(speech_text) > 0:
                     call.messages.append(
                         CallMessageModel(content=speech_text, persona=CallPersona.HUMAN)
@@ -314,12 +307,6 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
         ):  # Speech recognition failed
             result_information = event.data["resultInformation"]
             error_code = result_information["subCode"]
-
-            await handle_media(
-                call=call,
-                client=client,
-                file="acknowledge.mp3",
-            )
 
             # Error codes:
             # 8510 = Action failed, initial silence timeout reached
@@ -401,8 +388,21 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
 
 async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
+    # Start loading sound
+    await handle_media_loop(
+        call=call,
+        client=client,
+        sound=SoundPrompt.LOADING,
+    )
+
     chat_res = await gpt_chat(call)
     _logger.info(f"Chat ({call.id}): {chat_res}")
+
+    try:
+        # Cancel loading sound
+        client.cancel_all_media_operations()
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before playing ({call.id})")
 
     if chat_res.intent == IndentAction.TALK_TO_HUMAN:
         await handle_play(
@@ -452,7 +452,7 @@ async def handle_play(
     """
     Play a text to a call participant.
 
-    If store is True, the text will be stored in the call messages.
+    If store is True, the text will be stored in the call messages. Compatible with text larger than 400 characters, in that case the text will be split in chunks and played sequentially.
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
@@ -461,11 +461,25 @@ async def handle_play(
             CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
         )
 
+    # Split text in chunks of max 400 characters, separated by a comma
+    chunks = []
+    chunk = ""
+    for word in text.split("."):  # Split by sentence
+        to_add = f"{word}."
+        if len(chunk) + len(to_add) >= 400:
+            chunks.append(chunk)
+            chunk = ""
+        chunk += to_add
+    if chunk:
+        chunks.append(chunk)
+
     try:
-        client.play_media_to_all(
-            operation_context=context,
-            play_source=audio_from_text(text),
-        )
+        for chunk in chunks:
+            _logger.debug(f"Playing chunk ({call.id}): {chunk}")
+            client.play_media_to_all(
+                operation_context=context,
+                play_source=audio_from_text(chunk),
+            )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.id})")
 
@@ -789,66 +803,43 @@ async def handle_recognize_text(
     client: CallConnectionClient,
     call: CallModel,
     text: str,
-    context: Optional[str] = None,
     store: bool = True,
 ) -> None:
     """
     Play a text to a call participant and start recognizing the response.
 
-    If store is True, the text will be stored in the call messages.
+    If store is True, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    if store:
-        call.messages.append(
-            CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
-        )
+    await handle_play(
+        call=call,
+        client=client,
+        store=store,
+        text=text,
+    )
 
-    # Split text in chunks of max 400 characters, separated by a comma
-    chunks = []
-    chunk = ""
-    for word in text.split("."):  # Split by sentence
-        to_add = f"{word}."
-        if len(chunk) + len(to_add) >= 400:
-            chunks.append(chunk)
-            chunk = ""
-        chunk += to_add
-    if chunk:
-        chunks.append(chunk)
-
-    try:
-        # Play all chunks except the last one
-        for chunk in chunks:
-            _logger.debug(f"Playing chunk ({call.id}): {chunk}")
-            await handle_play(
-                call=call,
-                client=client,
-                text=chunk,
-                store=False,
-            )
-
-        _logger.debug(f"Recognizing ({call.id})")
-        # Play tone and start recognizing
-        # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
-        await handle_recognize_media(
-            call=call,
-            client=client,
-            file="ready.mp3",
-        )
-    except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before recognizing ({call.id})")
+    _logger.debug(f"Recognizing ({call.id})")
+    await handle_recognize_media(
+        call=call,
+        client=client,
+        sound=SoundPrompt.READY,
+    )
 
 
 async def handle_recognize_media(
     client: CallConnectionClient,
     call: CallModel,
-    file: str,
-    context: Optional[str] = None,
+    sound: SoundPrompt,
 ) -> None:
+    """
+    Play a media to a call participant and start recognizing the response.
+
+    TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
+    """
     try:
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
-            operation_context=context,
-            play_prompt=FileSource(f"{CONFIG.resources.public_url}/{file}"),
+            play_prompt=FileSource(url=sound),
             speech_language=CONFIG.workflow.conversation_lang,
             target_participant=PhoneNumberIdentifier(call.phone_number),
         )
@@ -856,16 +847,17 @@ async def handle_recognize_media(
         _logger.debug(f"Call hung up before recognizing ({call.id})")
 
 
-async def handle_media(
+async def handle_media_loop(
     client: CallConnectionClient,
     call: CallModel,
-    file: str,
+    sound: SoundPrompt,
     context: Optional[str] = None,
 ) -> None:
     try:
         client.play_media_to_all(
+            loop=True,
             operation_context=context,
-            play_source=FileSource(f"{CONFIG.resources.public_url}/{file}"),
+            play_source=FileSource(url=sound),
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.id})")
@@ -877,6 +869,10 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
         _logger.debug(f"Call already hung up ({call.id})")
+
+    call.messages.append(
+        CallMessageModel(content="Customer ended the call.", persona=CallPersona.HUMAN)
+    )
 
     content = await gpt_completion(LLMPrompt.SMS_SUMMARY_SYSTEM, call)
     _logger.info(f"SMS report ({call.id}): {content}")
@@ -893,26 +889,41 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
             _logger.info(
                 f"SMS report sent {response.message_id} to {response.to} ({call.id})"
             )
+            call.messages.append(
+                CallMessageModel(
+                    content=f"SMS report sent to {response.to}: {content}",
+                    persona=CallPersona.ASSISTANT,
+                )
+            )
         else:
             _logger.warn(
                 f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.id})"
             )
+            call.messages.append(
+                CallMessageModel(
+                    content=f"Failed to send SMS report to {response.to}: {response.error_message}",
+                    persona=CallPersona.ASSISTANT,
+                )
+            )
 
     except Exception:
-        _logger.warn(f"SMS error ({call.id})", exc_info=True)
+        _logger.warn(f"Failed SMS to {call.phone_number} ({call.id})", exc_info=True)
 
 
-def audio_from_text(text: str) -> TextSource:
+def audio_from_text(text: str) -> SsmlSource:
+    """
+    Generate an audio source that can be read by Azure Communication Services SDK.
+
+    Text requires to be SVG escaped, and SSML tags are used to control the voice. Plus, text is slowed down by 5% to make it more understandable for elderly people. Text is also truncated to 400 characters, as this is the limit of Azure Communication Services TTS, but a warning is logged.
+    """
+    # Azure Speech Service TTS limit is 400 characters
     if len(text) > 400:
         _logger.warning(
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
-    return TextSource(
-        source_locale=CONFIG.workflow.conversation_lang,
-        text=text,
-        voice_name=CONFIG.communication_service.voice_name,
-    )
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><prosody rate="0.95">{text}</prosody></voice></speak>'
+    return SsmlSource(ssml_text=ssml)
 
 
 def callback_url(caller_id: str) -> str:

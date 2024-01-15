@@ -2,6 +2,11 @@ from enum import Enum
 from helpers.config import CONFIG
 
 
+class Sounds(str, Enum):
+    LOADING = f"{CONFIG.resources.public_url}/loading.wav"
+    READY = f"{CONFIG.resources.public_url}/ready.wav"
+
+
 class LLM(str, Enum):
     DEFAULT_SYSTEM = f"""
         Assistant called {CONFIG.workflow.bot_name} and is in a call center for the insurance company {CONFIG.workflow.bot_company} as an expert with 20 years of experience. Today is {{date}}. Customer is calling from {{phone_number}}. Call center number is {CONFIG.communication_service.phone_number}.
@@ -39,7 +44,7 @@ class LLM(str, Enum):
         - Cannot talk about any topic other than insurance claims
         - Do not prefix the answer with any text, like "The answer is" or "Summary of the call"
         - Include salutations at the end of the SMS
-        - Incude details stored in the claim, to make the customer confident that the situation is understood
+        - Include details stored in the claim, to make the customer confident that the situation is understood
         - Is polite, helpful, and professional
         - Refer to the customer by their name, if known
         - Use simple and short sentences
@@ -65,6 +70,6 @@ class TTS(str, Enum):
         "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
     )
     GOODBYE = f"Merci de votre appel, j'espère avoir pu vous aider. N'hésitez pas à rappeler, j'ai tout mémorisé. {CONFIG.workflow.bot_company} vous souhaite une excellente journée !"
-    HELLO = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Lorsque vous entendrez un bip, c'est que je travaille. Mais d'abord, quel est l'objet de votre appel ?"
+    HELLO = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Je ne peux pas travailler et écouter en même temps. Voici comment je fonctionne  : lorsque je travaillerai, vous entendrez une petite musique ; après, au bip, ce sera à votre tour de parler. Vous pouvez me parler comme à un humain, je comprendrai la conversation. Je suis là pour vous aider. Quel est l'objet de votre appel ?"
     TIMEOUT_SILENCE = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
-    WELCOME_BACK = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Lorsque vous entendrez un bip, c'est que je travaille. Laissez-moi quelques secondes pour récupérer votre dossier..."
+    WELCOME_BACK = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Laissez-moi quelques secondes pour récupérer votre dossier..."
