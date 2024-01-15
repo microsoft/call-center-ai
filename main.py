@@ -25,7 +25,8 @@ from helpers.config import CONFIG
 from helpers.logging import build_logger
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
 from helpers.version import VERSION
-from models.action import ActionModel, Indent as IndentAction
+from models.action import ActionModel, Indent as IndentAction, Style as StyleAction
+from models.llm_content import LlmContentModel
 from models.reminder import ReminderModel
 from pydantic.json import pydantic_encoder
 from models.call import (
@@ -270,6 +271,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     call=call,
                     client=client,
                     text=TTSPrompt.HELLO,
+                    style=StyleAction.CHEERFUL,
                 )
 
             else:  # Returning call
@@ -281,6 +283,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 await handle_play(
                     call=call,
                     client=client,
+                    style=StyleAction.CHEERFUL,
                     text=TTSPrompt.WELCOME_BACK,
                 )
                 await intelligence(call, client)
@@ -320,6 +323,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     call=call,
                     client=client,
                     text=TTSPrompt.TIMEOUT_SILENCE,
+                    style=StyleAction.CHEERFUL,
                 )
                 call.recognition_retry += 1
 
@@ -328,6 +332,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                     call=call,
                     client=client,
                     context=Context.GOODBYE,
+                    style=StyleAction.CHEERFUL,
                     text=TTSPrompt.GOODBYE,
                 )
 
@@ -381,6 +386,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 call=call,
                 client=client,
                 context=Context.TRANSFER_FAILED,
+                style=StyleAction.CHEERFUL,
                 text=TTSPrompt.CALLTRANSFER_FAILURE,
             )
 
@@ -409,6 +415,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             call=call,
             client=client,
             context=Context.CONNECT_AGENT,
+            style=StyleAction.CHEERFUL,
             text=TTSPrompt.END_CALL_TO_CONNECT_AGENT,
         )
 
@@ -417,6 +424,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             call=call,
             client=client,
             context=Context.GOODBYE,
+            style=StyleAction.HOPEFUL,
             text=TTSPrompt.GOODBYE,
         )
 
@@ -429,6 +437,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             call=call,
             client=client,
             store=False,
+            style=chat_res.style,
             text=chat_res.content,
         )
         await intelligence(call, client)
@@ -438,6 +447,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             call=call,
             client=client,
             store=False,
+            style=chat_res.style,
             text=chat_res.content,
         )
 
@@ -446,6 +456,7 @@ async def handle_play(
     client: CallConnectionClient,
     call: CallModel,
     text: str,
+    style: StyleAction,
     context: Optional[str] = None,
     store: bool = True,
 ) -> None:
@@ -478,7 +489,7 @@ async def handle_play(
             _logger.debug(f"Playing chunk ({call.id}): {chunk}")
             client.play_media_to_all(
                 operation_context=context,
-                play_source=audio_from_text(chunk),
+                play_source=audio_from_text(chunk, style),
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.id})")
@@ -705,11 +716,17 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             max_tokens=400,  # Communication Services limit is 400 characters for TTS, 400 tokens ~= 300 words
             messages=messages,
             model=CONFIG.openai.gpt_model,
+            response_format="json_object",
             temperature=0,  # Most focused and deterministic
             tools=tools,
         )
 
-        content = res.choices[0].message.content or ""
+        content_raw = res.choices[0].message.content
+        content = (
+            LlmContentModel.model_validate_json(content_raw)
+            if content_raw
+            else LlmContentModel(text="")
+        )
         tool_calls = res.choices[0].message.tool_calls
 
         _logger.debug(f"Chat response: {content}")
@@ -740,14 +757,14 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 elif name == IndentAction.UPDATED_CLAIM:
                     intent = IndentAction.UPDATED_CLAIM
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+                    content.text += parameters[customer_response_prop] + " "
                     setattr(call.claim, parameters["field"], parameters["value"])
                     model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
 
                 elif name == IndentAction.NEW_CLAIM:
                     intent = IndentAction.NEW_CLAIM
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+                    content.text += parameters[customer_response_prop] + " "
                     call.claim = ClaimModel()
                     call.reminders = []
                     model.content = "Claim and reminders created reset."
@@ -755,7 +772,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 elif name == IndentAction.NEW_OR_UPDATED_REMINDER:
                     intent = IndentAction.NEW_OR_UPDATED_REMINDER
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+                    content.text += parameters[customer_response_prop] + " "
 
                     updated = False
                     for reminder in call.reminders:
@@ -778,31 +795,43 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         )
                         model.content = f"Reminder \"{parameters['title']}\" created."
 
+                elif name == IndentAction.ANSWER_WITH_STYLE:
+                    parameters = json.loads(arguments)
+                    content.text += parameters[customer_response_prop] + " "
+                    model.content = parameters[customer_response_prop]
+                    model.style = parameters["style"]
+
                 models.append(model)
 
         call.messages.append(
             CallMessageModel(
-                content=content,
+                content=content.text,
                 persona=CallPersona.ASSISTANT,
                 tool_calls=models,
             )
         )
 
         return ActionModel(
-            content=content,
+            content=content.text,
             intent=intent,
+            style=content.style,
         )
 
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
-    return ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
+    return ActionModel(
+        content=TTSPrompt.ERROR,
+        intent=IndentAction.CONTINUE,
+        style=StyleAction.CHEERFUL,
+    )
 
 
 async def handle_recognize_text(
     client: CallConnectionClient,
     call: CallModel,
     text: str,
+    style: StyleAction,
     store: bool = True,
 ) -> None:
     """
@@ -814,6 +843,7 @@ async def handle_recognize_text(
         call=call,
         client=client,
         store=store,
+        style=style,
         text=text,
     )
 
@@ -910,7 +940,7 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         _logger.warn(f"Failed SMS to {call.phone_number} ({call.id})", exc_info=True)
 
 
-def audio_from_text(text: str) -> SsmlSource:
+def audio_from_text(text: str, syle: StyleAction) -> SsmlSource:
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
@@ -922,7 +952,7 @@ def audio_from_text(text: str) -> SsmlSource:
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
-    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><prosody rate="0.95">{text}</prosody></voice></speak>'
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><mstts:express-as style="{syle}"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><prosody rate="0.95">{text}</prosody></mstts:express-as></voice></speak>'
     return SsmlSource(ssml_text=ssml)
 
 

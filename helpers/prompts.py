@@ -1,5 +1,6 @@
 from enum import Enum
 from helpers.config import CONFIG
+from models.action import Style as StyleAction
 
 
 class Sounds(str, Enum):
@@ -27,6 +28,16 @@ class LLM(str, Enum):
         - Rephrase the customer's questions as statements and answer them
 
         Assistant requires data from the customer to fill the claim. Latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
+
+        Assistant will answer with a JSON object containing the following fields:
+        - text: string, mandatory, the text to be read to the customer
+        - style: string, mandatory, the speaking style to use, one of [{", ".join(StyleAction.__members__.keys())}]
+
+        Returned JSON object example:
+        {{
+            "text": "Hello, I am the assistant. How can I help you?",
+            "style": "assistant"
+        }}
 
         Claim status:
         {{claim}}
