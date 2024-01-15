@@ -732,14 +732,28 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 elif name == IndentAction.UPDATED_CLAIM:
                     intent = IndentAction.UPDATED_CLAIM
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+
+                    if not customer_response_prop in parameters:
+                        _logger.warn(
+                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                        )
+                    else:
+                        content += parameters[customer_response_prop] + " "
+
                     setattr(call.claim, parameters["field"], parameters["value"])
                     model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
 
                 elif name == IndentAction.NEW_CLAIM:
                     intent = IndentAction.NEW_CLAIM
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+
+                    if not customer_response_prop in parameters:
+                        _logger.warn(
+                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                        )
+                    else:
+                        content += parameters[customer_response_prop] + " "
+
                     call.claim = ClaimModel()
                     call.reminders = []
                     model.content = "Claim and reminders created reset."
@@ -747,7 +761,13 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 elif name == IndentAction.NEW_OR_UPDATED_REMINDER:
                     intent = IndentAction.NEW_OR_UPDATED_REMINDER
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+
+                    if not customer_response_prop in parameters:
+                        _logger.warn(
+                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                        )
+                    else:
+                        content += parameters[customer_response_prop] + " "
 
                     updated = False
                     for reminder in call.reminders:
