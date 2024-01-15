@@ -13,8 +13,6 @@ from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from azure.mgmt.core.polling.arm_polling import ARMPolling
-from azure.mgmt.eventgrid import EventGridManagementClient
 from contextlib import asynccontextmanager
 from datetime import datetime
 from enum import Enum
@@ -38,7 +36,6 @@ from models.claim import ClaimModel
 from openai import AsyncAzureOpenAI
 from os import environ
 from uuid import UUID, uuid4
-import asyncio
 import json
 import sqlite3
 
@@ -59,10 +56,6 @@ oai_gpt = AsyncAzureOpenAI(
     azure_deployment=CONFIG.openai.gpt_deployment,
 )
 eventgrid_subscription_name = f"tmp-{uuid4()}"
-eventgrid_mgmt_client = EventGridManagementClient(
-    credential=DefaultAzureCredential(),
-    subscription_id=CONFIG.eventgrid.subscription_id,
-)
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
 # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
 call_automation_client = CallAutomationClient(
@@ -89,10 +82,7 @@ class Context(str, Enum):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
-    task = asyncio.create_task(eventgrid_register())  # Background task
     yield
-    task.cancel()
-    eventgrid_unregister()  # Foreground task
 
 
 api = FastAPI(
@@ -116,56 +106,6 @@ api.add_middleware(
     allow_methods=["*"],
     allow_origins=["*"],
 )
-
-
-async def eventgrid_register() -> None:
-    def callback(future: ARMPolling):
-        _logger.info(f"Event Grid subscription created (status {future.status()})")
-
-    _logger.info(f"Creating Event Grid subscription {eventgrid_subscription_name}")
-    eventgrid_mgmt_client.system_topic_event_subscriptions.begin_create_or_update(
-        resource_group_name=CONFIG.eventgrid.resource_group,
-        system_topic_name=CONFIG.eventgrid.system_topic,
-        event_subscription_name=eventgrid_subscription_name,
-        event_subscription_info={
-            "properties": {
-                "eventDeliverySchema": "EventGridSchema",
-                "retryPolicy": {
-                    "maxDeliveryAttempts": 8,
-                    "eventTimeToLiveInMinutes": 3,  # Call are real time, no need to wait
-                },
-                "destination": {
-                    "endpointType": "WebHook",
-                    "properties": {
-                        "endpointUrl": CALL_INBOUND_URL,
-                        "maxEventsPerBatch": 1,
-                    },
-                },
-                "filter": {
-                    "enableAdvancedFilteringOnArrays": True,
-                    "includedEventTypes": ["Microsoft.Communication.IncomingCall"],
-                    "advancedFilters": [
-                        {
-                            "key": "data.to.PhoneNumber.Value",
-                            "operatorType": "StringBeginsWith",
-                            "values": [CONFIG.communication_service.phone_number],
-                        }
-                    ],
-                },
-            },
-        },
-    ).add_done_callback(callback)
-
-
-def eventgrid_unregister() -> None:
-    _logger.info(
-        f"Deleting Event Grid subscription {eventgrid_subscription_name} (do not wait for completion)"
-    )
-    eventgrid_mgmt_client.system_topic_event_subscriptions.begin_delete(
-        event_subscription_name=eventgrid_subscription_name,
-        resource_group_name=CONFIG.eventgrid.resource_group,
-        system_topic_name=CONFIG.eventgrid.system_topic,
-    )
 
 
 @api.get(

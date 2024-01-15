@@ -61,16 +61,43 @@ build:
 		.
 
 run:
+	@echo "🛠️ Deploying to localhost..."
 	$(docker) run \
+		--detach \
 		--env EVENTS_DOMAIN=$(tunnel_url) \
 		--env VERSION=$(version_full) \
 		--mount type=bind,source="$(CURDIR)/.env",target="/app/.env" \
 		--mount type=bind,source="$(CURDIR)/config.yaml",target="/app/config.yaml" \
-		--name claim-ai-phone-bot \
+		--name claim-ai \
 		--publish 8080:8080 \
 		--rm \
 		$(container_name):$(version_small)
 
+	$(MAKE) eventgrid-register \
+		endpoint=$(tunnel_url) \
+		name=$(tunnel_name) \
+		phone_number=$(shell cat config.yaml | yq '.communication_service.phone_number') \
+		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/claim-ai/providers/Microsoft.Communication/communicationServices/claim-ai"
+
+	@echo "🚀 Claim AI is running on $(tunnel_url)"
+	$(docker) attach --name claim-ai
+
 stop:
 	@echo "Stopping container..."
-	$(docker) stop claim-ai-phone-bot
+	$(docker) stop claim-ai
+
+eventgrid-register:
+	@echo "⚙️ Deleting previous event grid subscription..."
+	az eventgrid event-subscription delete --name $(name) || true
+
+	@echo "⚙️ Creating event grid subscription..."
+	az eventgrid event-subscription create \
+		--advanced-filter data.to.PhoneNumber.Value StringBeginsWith $(phone_number) \
+		--enable-advanced-filtering-on-arrays true \
+		--endpoint $(endpoint)/call/inbound \
+		--event-delivery-schema eventgridschema \
+		--event-ttl 3 \
+		--included-event-types Microsoft.Communication.IncomingCall \
+		--max-delivery-attempts 8 \
+		--name $(name) \
+		--source-resource-id $(source)
