@@ -44,7 +44,7 @@ class LLM(str, Enum):
         - Cannot talk about any topic other than insurance claims
         - Do not prefix the answer with any text, like "The answer is" or "Summary of the call"
         - Include salutations at the end of the SMS
-        - Incude details stored in the claim, to make the customer confident that the situation is understood
+        - Include details stored in the claim, to make the customer confident that the situation is understood
         - Is polite, helpful, and professional
         - Refer to the customer by their name, if known
         - Use simple and short sentences
