@@ -37,6 +37,7 @@ from openai import AsyncAzureOpenAI
 from uuid import UUID, uuid4
 import json
 import aiosqlite
+import os
 
 
 _logger = build_logger(__name__)
@@ -951,7 +952,14 @@ async def callback_url(caller_id: str) -> str:
 
 
 async def init_db():
-    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+    # Create folder
+    db_path = CONFIG.database.sqlite_path
+    db_folder = db_path[: db_path.rfind("/")]
+    if not os.path.exists(db_folder):
+        os.makedirs(db_folder)
+
+    # Create table
+    async with aiosqlite.connect(db_path) as db:
         await db.execute(
             "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
         )
