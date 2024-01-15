@@ -5,6 +5,7 @@ from typing import Optional
 class ClaimModel(BaseModel):
     additional_documentation: Optional[str] = None
     claim_explanation: Optional[str] = None
+    extra_details: Optional[str] = None
     incident_date_time: Optional[str] = None
     incident_description: Optional[str] = None
     incident_location: Optional[str] = None
