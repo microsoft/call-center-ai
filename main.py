@@ -426,12 +426,16 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
         IndentAction.UPDATED_CLAIM,
         IndentAction.NEW_OR_UPDATED_REMINDER,
     ):
+        # Save in DB allowing demos to be more "real-time"
+        await save_call(call)
+        # Answer with intermediate response
         await handle_play(
             call=call,
             client=client,
             store=False,
             text=chat_res.content,
         )
+        # Recursively call intelligence to continue the conversation
         await intelligence(call, client)
 
     else:

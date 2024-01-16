@@ -129,3 +129,11 @@ eventgrid-register:
 		--max-delivery-attempts 8 \
 		--name $(name) \
 		--source-resource-id $(source)
+
+watch-call:
+	@echo "👀 Watching status of $(phone_number)..."
+	while true; do \
+		clear; \
+		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .phone_number, "claim": .claim, "reminders": .reminders}'; \
+		sleep 3; \
+	done
