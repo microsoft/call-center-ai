@@ -70,3 +70,7 @@ run:
 		--publish 8080:8080 \
 		--rm \
 		$(container_name):$(version_small)
+
+stop:
+	@echo "Stopping container..."
+	$(docker) stop claim-ai-phone-bot
