@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -175,6 +175,14 @@ def eventgrid_unregister() -> None:
 )
 async def health_liveness_get() -> None:
     pass
+
+
+@api.get(
+    "/call",
+    description="Get all calls by phone number.",
+)
+async def call_get(phone_number: str) -> List[CallModel]:
+    return await get_calls_by_phone_number(phone_number)
 
 
 @api.get(
@@ -1022,3 +1030,13 @@ def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
     )
     row = cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
+
+
+async def get_calls_by_phone_number(phone_number: str) -> List[CallModel]:
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        cursor = await db.execute(
+            f"SELECT data FROM calls WHERE phone_number = ? ORDER BY DATETIME(created_at) DESC",
+            (phone_number,),
+        )
+        rows = await cursor.fetchall()
+    return [CallModel.model_validate_json(row[0]) for row in rows if row]
