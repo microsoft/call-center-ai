@@ -22,15 +22,15 @@ class ToolModel(BaseModel):
 
 class MessageModel(BaseModel):
     content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
     persona: Persona
     tool_calls: List[ToolModel] = []
 
 
 class CallModel(BaseModel):
     claim: ClaimModel = Field(default_factory=ClaimModel)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    id: UUID = Field(default_factory=uuid4)
+    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    id: UUID = Field(default_factory=uuid4, frozen=True)
     messages: List[MessageModel] = []
     phone_number: str
     recognition_retry: int = Field(default=0)
