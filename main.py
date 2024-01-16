@@ -587,7 +587,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to talk to an agent and Assistant is unable to help, this will transfer the customer to an human agent.",
+                "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
                 "name": IndentAction.TALK_TO_HUMAN,
                 "parameters": {
                     "properties": {},
