@@ -1,8 +1,8 @@
+aiosqlite==0.19.0
 azure-communication-callautomation==1.1.0
 azure-communication-sms==1.0.1
 azure-eventgrid==4.16.0
 azure-identity==1.15.0
-azure-mgmt-eventgrid==10.2.0
 fastapi==0.108.0
 openai==1.7.1
 phonenumbers==8.13.27
