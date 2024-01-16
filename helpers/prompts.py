@@ -73,3 +73,6 @@ class TTS(str, Enum):
     HELLO = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je suis spécialiste des sinistres. Je ne peux pas travailler et écouter en même temps. Voici comment je fonctionne  : lorsque je travaillerai, vous entendrez une petite musique ; après, au bip, ce sera à votre tour de parler. Vous pouvez me parler comme à un humain, je comprendrai la conversation. Je suis là pour vous aider. Quel est l'objet de votre appel ?"
     TIMEOUT_SILENCE = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
     WELCOME_BACK = f"Bonjour, je suis {CONFIG.workflow.bot_name}, l'assistant {CONFIG.workflow.bot_company} ! Je vois que vous avez déjà appelé il y a moins de {CONFIG.workflow.conversation_timeout_hour} heures. Laissez-moi quelques secondes pour récupérer votre dossier..."
+    TIMEOUT_LOADING = (
+        "Je mets plus de temps que prévu à vous répondre. Merci de votre patience..."
+    )

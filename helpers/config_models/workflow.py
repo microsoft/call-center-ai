@@ -12,3 +12,5 @@ class WorkflowModel(BaseModel):
     bot_name: str
     conversation_lang: str = "fr-FR"  # French
     conversation_timeout_hour: int = 72  # 3 days
+    intelligence_hard_timeout_sec: int = 180  # 3 minutes
+    intelligence_soft_timeout_sec: int = 30  # 30 seconds

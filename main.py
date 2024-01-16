@@ -27,6 +27,7 @@ from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundP
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
 from pydantic.json import pydantic_encoder
+import asyncio
 from models.call import (
     CallModel,
     MessageModel as CallMessageModel,
@@ -385,21 +386,71 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
 
 
 async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
-    # Start loading sound
-    await handle_media_loop(
-        call=call,
-        client=client,
-        sound=SoundPrompt.LOADING,
-    )
+    """
+    Handle the intelligence of the call, including: GPT chat, GPT completion, TTS, and media play.
 
-    chat_res = await gpt_chat(call)
-    _logger.info(f"Chat ({call.id}): {chat_res}")
+    Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after 15 seconds, play the timeout sound. If the intelligence is not processed after 30 seconds, stop the intelligence processing and play the error sound.
+    """
+    chat_task = asyncio.create_task(gpt_chat(call))
+    soft_timeout_task = asyncio.create_task(
+        asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
+    )
+    soft_timeout_triggered = False
+    hard_timeout_task = asyncio.create_task(
+        asyncio.sleep(CONFIG.workflow.intelligence_hard_timeout_sec)
+    )
+    chat_res = None
 
     try:
-        # Cancel loading sound
-        client.cancel_all_media_operations()
-    except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing ({call.id})")
+        while True:
+            _logger.debug(f"Chat task status ({call.id}): {chat_task.done()}")
+            # Play loading sound
+            await handle_media(
+                call=call,
+                client=client,
+                sound=SoundPrompt.LOADING,
+            )
+            # Break when chat coroutine is done
+            if chat_task.done():
+                # Clean up
+                soft_timeout_task.cancel()
+                hard_timeout_task.cancel()
+                # Answer with chat result
+                chat_res = chat_task.result()
+                break
+            # Break when hard timeout is reached
+            if hard_timeout_task.done():
+                _logger.warn(
+                    f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached ({call.id})"
+                )
+                # Clean up
+                chat_task.cancel()
+                soft_timeout_task.cancel()
+                break
+            # Speak when soft timeout is reached
+            if soft_timeout_task.done() and not soft_timeout_triggered:
+                _logger.warn(
+                    f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached ({call.id})"
+                )
+                soft_timeout_triggered = True
+                await handle_play(
+                    call=call,
+                    client=client,
+                    text=TTSPrompt.TIMEOUT_LOADING,
+                )
+            # Wait to not block the event loop and play too many sounds
+            await asyncio.sleep(5)
+    except Exception:
+        _logger.warn(f"Error loading intelligence ({call.id})", exc_info=True)
+
+    # For any error reason, answer with error
+    if not chat_res:
+        _logger.debug(
+            f"Error loading intelligence ({call.id}), answering with default error"
+        )
+        chat_res = ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
+
+    _logger.info(f"Chat ({call.id}): {chat_res}")
 
     if chat_res.intent == IndentAction.TALK_TO_HUMAN:
         await handle_play(
@@ -473,7 +524,7 @@ async def handle_play(
     try:
         for chunk in chunks:
             _logger.debug(f"Playing chunk ({call.id}): {chunk}")
-            client.play_media_to_all(
+            client.play_media(
                 operation_context=context,
                 play_source=audio_from_text(chunk),
             )
@@ -844,15 +895,14 @@ async def handle_recognize_media(
         _logger.debug(f"Call hung up before recognizing ({call.id})")
 
 
-async def handle_media_loop(
+async def handle_media(
     client: CallConnectionClient,
     call: CallModel,
     sound: SoundPrompt,
     context: Optional[str] = None,
 ) -> None:
     try:
-        client.play_media_to_all(
-            loop=True,
+        client.play_media(
             operation_context=context,
             play_source=FileSource(url=sound),
         )
