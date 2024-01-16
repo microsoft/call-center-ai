@@ -49,11 +49,17 @@ _logger.info(f'Using root path "{ROOT_PATH}"')
 
 oai_gpt = AsyncAzureOpenAI(
     api_version="2023-12-01-preview",
-    azure_ad_token_provider=get_bearer_token_provider(
-        AZ_CREDENTIAL, "https://cognitiveservices.azure.com/.default"
-    ),
-    azure_endpoint=CONFIG.openai.endpoint,
     azure_deployment=CONFIG.openai.gpt_deployment,
+    azure_endpoint=CONFIG.openai.endpoint,
+    # Authentication, either RBAC or API key
+    api_key=CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,
+    azure_ad_token_provider=(
+        get_bearer_token_provider(
+            AZ_CREDENTIAL, "https://cognitiveservices.azure.com/.default"
+        )
+        if not CONFIG.openai.api_key
+        else None
+    ),
 )
 eventgrid_subscription_name = f"tmp-{uuid4()}"
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
