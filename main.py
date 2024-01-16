@@ -34,7 +34,6 @@ from models.call import (
 )
 from models.claim import ClaimModel
 from openai import AsyncAzureOpenAI
-from os import environ
 from uuid import UUID, uuid4
 import json
 import sqlite3
@@ -67,7 +66,6 @@ call_automation_client = CallAutomationClient(
 sms_client = SmsClient(
     credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint
 )
-db = sqlite3.connect(".local.sqlite", check_same_thread=False)
 
 CALL_EVENT_URL = f"{CONFIG.api.events_domain}/call/event"
 CALL_INBOUND_URL = f"{CONFIG.api.events_domain}/call/inbound"
@@ -933,40 +931,44 @@ def callback_url(caller_id: str) -> str:
 
 
 def init_db():
-    db.execute(
-        "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
-    )
-    db.commit()
+    with sqlite3.connect(".local.sqlite") as db:
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
+        )
+        await db.commit()
 
 
 def save_call(call: CallModel):
-    db.execute(
-        "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
-        (
-            call.id.hex,  # id
-            call.phone_number,  # phone_number
-            call.model_dump_json(),  # data
-            call.created_at.isoformat(),  # created_at
-        ),
-    )
-    db.commit()
+    with sqlite3.connect(".local.sqlite") as db:
+        db.execute(
+            "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
+            (
+                call.id.hex,  # id
+                call.phone_number,  # phone_number
+                call.model_dump_json(),  # data
+                call.created_at.isoformat(),  # created_at
+            ),
+        )
+        await db.commit()
 
 
 def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
-    cursor = db.execute(
-        "SELECT data FROM calls WHERE id = ?",
-        (call_id.hex,),
-    )
-    row = cursor.fetchone()
+    with sqlite3.connect(".local.sqlite") as db:
+        cursor = db.execute(
+            "SELECT data FROM calls WHERE id = ?",
+            (call_id.hex,),
+        )
+        row = cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
 
 
 def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
-    cursor = db.execute(
-        f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY created_at DESC LIMIT 1",
-        (phone_number,),
-    )
-    row = cursor.fetchone()
+    with sqlite3.connect(".local.sqlite") as db:
+        cursor = db.execute(
+            f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY created_at DESC LIMIT 1",
+            (phone_number,),
+        )
+        row = cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
 
 
