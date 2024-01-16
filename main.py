@@ -999,7 +999,7 @@ async def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
 async def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
     async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
         cursor = await db.execute(
-            f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY created_at DESC LIMIT 1",
+            f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(created_at) DESC LIMIT 1",
             (phone_number,),
         )
         row = await cursor.fetchone()
