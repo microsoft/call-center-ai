@@ -43,7 +43,7 @@ tunnel:
 	@echo "➡️ Starting tunnel..."
 	devtunnel host $(tunnel_name)
 
-start:
+dev:
 	VERSION=$(version_full) EVENTS_DOMAIN=$(tunnel_url) python3 -m uvicorn main:api \
 		--header x-version:$${VERSION} \
 		--no-server-header \

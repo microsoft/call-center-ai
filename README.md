@@ -195,7 +195,7 @@ make tunnel
 
 ```bash
 # Start the local API server
-make start
+make dev
 ```
 
 ## Remote deployment
