@@ -13,8 +13,6 @@ from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from azure.mgmt.core.polling.arm_polling import ARMPolling
-from azure.mgmt.eventgrid import EventGridManagementClient
 from contextlib import asynccontextmanager
 from datetime import datetime
 from enum import Enum
@@ -36,11 +34,10 @@ from models.call import (
 )
 from models.claim import ClaimModel
 from openai import AsyncAzureOpenAI
-from os import environ
 from uuid import UUID, uuid4
-import asyncio
 import json
-import sqlite3
+import aiosqlite
+import os
 
 
 _logger = build_logger(__name__)
@@ -52,17 +49,19 @@ _logger.info(f'Using root path "{ROOT_PATH}"')
 
 oai_gpt = AsyncAzureOpenAI(
     api_version="2023-12-01-preview",
-    azure_ad_token_provider=get_bearer_token_provider(
-        AZ_CREDENTIAL, "https://cognitiveservices.azure.com/.default"
-    ),
-    azure_endpoint=CONFIG.openai.endpoint,
     azure_deployment=CONFIG.openai.gpt_deployment,
+    azure_endpoint=CONFIG.openai.endpoint,
+    # Authentication, either RBAC or API key
+    api_key=CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,
+    azure_ad_token_provider=(
+        get_bearer_token_provider(
+            AZ_CREDENTIAL, "https://cognitiveservices.azure.com/.default"
+        )
+        if not CONFIG.openai.api_key
+        else None
+    ),
 )
 eventgrid_subscription_name = f"tmp-{uuid4()}"
-eventgrid_mgmt_client = EventGridManagementClient(
-    credential=DefaultAzureCredential(),
-    subscription_id=CONFIG.eventgrid.subscription_id,
-)
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
 # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
 call_automation_client = CallAutomationClient(
@@ -74,7 +73,6 @@ call_automation_client = CallAutomationClient(
 sms_client = SmsClient(
     credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint
 )
-db = sqlite3.connect(".local.sqlite", check_same_thread=False)
 
 CALL_EVENT_URL = f"{CONFIG.api.events_domain}/call/event"
 CALL_INBOUND_URL = f"{CONFIG.api.events_domain}/call/inbound"
@@ -88,11 +86,8 @@ class Context(str, Enum):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_db()
-    task = asyncio.create_task(eventgrid_register())  # Background task
+    await init_db()
     yield
-    task.cancel()
-    eventgrid_unregister()  # Foreground task
 
 
 api = FastAPI(
@@ -118,56 +113,6 @@ api.add_middleware(
 )
 
 
-async def eventgrid_register() -> None:
-    def callback(future: ARMPolling):
-        _logger.info(f"Event Grid subscription created (status {future.status()})")
-
-    _logger.info(f"Creating Event Grid subscription {eventgrid_subscription_name}")
-    eventgrid_mgmt_client.system_topic_event_subscriptions.begin_create_or_update(
-        resource_group_name=CONFIG.eventgrid.resource_group,
-        system_topic_name=CONFIG.eventgrid.system_topic,
-        event_subscription_name=eventgrid_subscription_name,
-        event_subscription_info={
-            "properties": {
-                "eventDeliverySchema": "EventGridSchema",
-                "retryPolicy": {
-                    "maxDeliveryAttempts": 8,
-                    "eventTimeToLiveInMinutes": 3,  # Call are real time, no need to wait
-                },
-                "destination": {
-                    "endpointType": "WebHook",
-                    "properties": {
-                        "endpointUrl": CALL_INBOUND_URL,
-                        "maxEventsPerBatch": 1,
-                    },
-                },
-                "filter": {
-                    "enableAdvancedFilteringOnArrays": True,
-                    "includedEventTypes": ["Microsoft.Communication.IncomingCall"],
-                    "advancedFilters": [
-                        {
-                            "key": "data.to.PhoneNumber.Value",
-                            "operatorType": "StringBeginsWith",
-                            "values": [CONFIG.communication_service.phone_number],
-                        }
-                    ],
-                },
-            },
-        },
-    ).add_done_callback(callback)
-
-
-def eventgrid_unregister() -> None:
-    _logger.info(
-        f"Deleting Event Grid subscription {eventgrid_subscription_name} (do not wait for completion)"
-    )
-    eventgrid_mgmt_client.system_topic_event_subscriptions.begin_delete(
-        event_subscription_name=eventgrid_subscription_name,
-        resource_group_name=CONFIG.eventgrid.resource_group,
-        system_topic_name=CONFIG.eventgrid.system_topic,
-    )
-
-
 @api.get(
     "/health/liveness",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -190,10 +135,10 @@ async def call_get(phone_number: str) -> List[CallModel]:
     status_code=status.HTTP_204_NO_CONTENT,
     description="Initiate an outbound call to a phone number.",
 )
-def call_initiate_get(phone_number: str) -> None:
+async def call_initiate_get(phone_number: str) -> None:
     _logger.info(f"Initiating outbound call to {phone_number}")
     call_connection_properties = call_automation_client.create_call(
-        callback_url=callback_url(phone_number),
+        callback_url=await callback_url(phone_number),
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=source_caller,
         target_participant=PhoneNumberIdentifier(phone_number),
@@ -231,7 +176,7 @@ async def call_inbound_post(request: Request):
             _logger.debug(f"Incoming call handler caller ID: {phone_number}")
             call_context = event.data["incomingCallContext"]
             answer_call_result = call_automation_client.answer_call(
-                callback_url=callback_url(phone_number),
+                callback_url=await callback_url(phone_number),
                 cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
                 incoming_call_context=call_context,
             )
@@ -249,7 +194,7 @@ async def call_inbound_post(request: Request):
 # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(request: Request, call_id: UUID) -> None:
     for event_dict in await request.json():
-        call = get_call_by_id(call_id)
+        call = await get_call_by_id(call_id)
         if not call:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -390,7 +335,7 @@ async def call_event_post(request: Request, call_id: UUID) -> None:
                 text=TTSPrompt.CALLTRANSFER_FAILURE,
             )
 
-        save_call(call)
+        await save_call(call)
 
 
 async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
@@ -481,12 +426,16 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
         IndentAction.UPDATED_CLAIM,
         IndentAction.NEW_OR_UPDATED_REMINDER,
     ):
+        # Save in DB allowing demos to be more "real-time"
+        await save_call(call)
+        # Answer with intermediate response
         await handle_play(
             call=call,
             client=client,
             store=False,
             text=chat_res.content,
         )
+        # Recursively call intelligence to continue the conversation
         await intelligence(call, client)
 
     else:
@@ -794,14 +743,28 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 elif name == IndentAction.UPDATED_CLAIM:
                     intent = IndentAction.UPDATED_CLAIM
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+
+                    if not customer_response_prop in parameters:
+                        _logger.warn(
+                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                        )
+                    else:
+                        content += parameters[customer_response_prop] + " "
+
                     setattr(call.claim, parameters["field"], parameters["value"])
                     model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
 
                 elif name == IndentAction.NEW_CLAIM:
                     intent = IndentAction.NEW_CLAIM
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+
+                    if not customer_response_prop in parameters:
+                        _logger.warn(
+                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                        )
+                    else:
+                        content += parameters[customer_response_prop] + " "
+
                     call.claim = ClaimModel()
                     call.reminders = []
                     model.content = "Claim and reminders created reset."
@@ -809,7 +772,13 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 elif name == IndentAction.NEW_OR_UPDATED_REMINDER:
                     intent = IndentAction.NEW_OR_UPDATED_REMINDER
                     parameters = json.loads(arguments)
-                    content += parameters[customer_response_prop] + " "
+
+                    if not customer_response_prop in parameters:
+                        _logger.warn(
+                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                        )
+                    else:
+                        content += parameters[customer_response_prop] + " "
 
                     updated = False
                     for reminder in call.reminders:
@@ -979,54 +948,65 @@ def audio_from_text(text: str) -> SsmlSource:
     return SsmlSource(ssml_text=ssml)
 
 
-def callback_url(caller_id: str) -> str:
+async def callback_url(caller_id: str) -> str:
     """
     Generate the callback URL for a call.
 
     If the caller has already called, use the same call ID, to keep the conversation history. Otherwise, create a new call ID.
     """
-    call = get_last_call_by_phone_number(caller_id)
+    call = await get_last_call_by_phone_number(caller_id)
     if not call:
         call = CallModel(phone_number=caller_id)
-        save_call(call)
+        await save_call(call)
     return f"{CALL_EVENT_URL}/{call.id}"
 
 
-def init_db():
-    db.execute(
-        "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
-    )
-    db.commit()
+async def init_db():
+    # Create folder
+    db_path = CONFIG.database.sqlite_path
+    db_folder = db_path[: db_path.rfind("/")]
+    if not os.path.exists(db_folder):
+        os.makedirs(db_folder)
+
+    # Create table
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
+        )
+        await db.commit()
 
 
-def save_call(call: CallModel):
-    db.execute(
-        "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
-        (
-            call.id.hex,  # id
-            call.phone_number,  # phone_number
-            call.model_dump_json(),  # data
-            call.created_at.isoformat(),  # created_at
-        ),
-    )
-    db.commit()
+async def save_call(call: CallModel):
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
+            (
+                call.id.hex,  # id
+                call.phone_number,  # phone_number
+                call.model_dump_json(),  # data
+                call.created_at.isoformat(),  # created_at
+            ),
+        )
+        await db.commit()
 
 
-def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
-    cursor = db.execute(
-        "SELECT data FROM calls WHERE id = ?",
-        (call_id.hex,),
-    )
-    row = cursor.fetchone()
+async def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        cursor = await db.execute(
+            "SELECT data FROM calls WHERE id = ?",
+            (call_id.hex,),
+        )
+        row = await cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
 
 
-def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
-    cursor = db.execute(
-        f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY created_at DESC LIMIT 1",
-        (phone_number,),
-    )
-    row = cursor.fetchone()
+async def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
+    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
+        cursor = await db.execute(
+            f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(created_at) DESC LIMIT 1",
+            (phone_number,),
+        )
+        row = await cursor.fetchone()
     return CallModel.model_validate_json(row[0]) if row else None
 
 

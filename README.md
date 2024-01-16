@@ -6,6 +6,8 @@ AI-powered call center solution with Azure and OpenAI GPT.
 [![Last release date](https://img.shields.io/github/release-date/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/releases)
 [![Project license](https://img.shields.io/github/license/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/blob/main/LICENSE)
 
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fclemlesne%2Fclaim-ai-phone-bot%2Fmain%2Fbicep%2Fmain.bicep)
+
 ## Overview
 
 A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
@@ -125,6 +127,8 @@ Place a file called `config.yaml` in the root of the project with the following 
 api:
   root_path: "/"
 
+database: {}
+
 monitoring:
   logging:
     app_level: INFO
@@ -202,3 +206,12 @@ Container is available on GitHub Actions, at:
 
 - Latest version from a branch: `ghcr.io/clemlesne/claim-ai-phone-bot:main`
 - Specific tag: `ghcr.io/clemlesne/claim-ai-phone-bot:0.1.0` (recommended)
+
+Steps to deploy:
+
+1. Create an Azure Communication Services resource with a phone number
+2. Create a local `config.yaml` file (be sure to use the phone number previously created)
+3. Connect to Azure (for example `az login`)
+4. Run deployment with `make deploy name=my-instance`
+5. Wait for the deployment to finish
+6. Get the logs with `make logs name=my-instance`
