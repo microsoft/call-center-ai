@@ -611,7 +611,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Double check with the user before using this.",
+                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
                 "name": IndentAction.NEW_CLAIM,
                 "parameters": {
                     "properties": {
