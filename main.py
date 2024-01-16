@@ -931,7 +931,7 @@ def callback_url(caller_id: str) -> str:
 
 
 def init_db():
-    with sqlite3.connect(".local.sqlite") as db:
+    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
         db.execute(
             "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
         )
@@ -939,7 +939,7 @@ def init_db():
 
 
 def save_call(call: CallModel):
-    with sqlite3.connect(".local.sqlite") as db:
+    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
         db.execute(
             "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
             (
@@ -953,7 +953,7 @@ def save_call(call: CallModel):
 
 
 def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
-    with sqlite3.connect(".local.sqlite") as db:
+    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
         cursor = db.execute(
             "SELECT data FROM calls WHERE id = ?",
             (call_id.hex,),
@@ -963,7 +963,7 @@ def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
 
 
 def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
-    with sqlite3.connect(".local.sqlite") as db:
+    with sqlite3.connect(CONFIG.database.sqlite_path) as db:
         cursor = db.execute(
             f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY created_at DESC LIMIT 1",
             (phone_number,),

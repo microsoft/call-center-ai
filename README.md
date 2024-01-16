@@ -6,6 +6,8 @@ AI-powered call center solution with Azure and OpenAI GPT.
 [![Last release date](https://img.shields.io/github/release-date/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/releases)
 [![Project license](https://img.shields.io/github/license/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/blob/main/LICENSE)
 
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fclemlesne%2Fclaim-ai-phone-bot%2Fmain%2Fbicep%2Fmain.bicep)
+
 ## Overview
 
 A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
@@ -124,6 +126,8 @@ Place a file called `config.yaml` in the root of the project with the following 
 # config.yaml
 api:
   root_path: "/"
+
+database: {}
 
 monitoring:
   logging:

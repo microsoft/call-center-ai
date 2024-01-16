@@ -86,6 +86,34 @@ stop:
 	@echo "Stopping container..."
 	$(docker) stop claim-ai
 
+deploy:
+	@echo "🛠️ Deploying to Azure..."
+	az deployment sub create \
+		--location westeurope \
+		--parameters config='$(shell cat config.yaml | yq -o json)' \
+		--template-file bicep/main.bicep \
+	 	--name $(name)
+
+	$(MAKE) eventgrid-register \
+		endpoint=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value') \
+		name=$(name) \
+		phone_number=$(shell cat config.yaml | yq '.communication_service.phone_number') \
+		source=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
+
+	@echo "🚀 Claim AI is running on $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')"
+	$(MAKE) logs name=$(name)
+
+destroy:
+	az deployment sub delete --name $(name)
+
+logs:
+	az containerapp logs show \
+		--follow \
+		--format text \
+		--name claim-ai \
+		--resource-group $(name) \
+		--tail 100
+
 eventgrid-register:
 	@echo "⚙️ Deleting previous event grid subscription..."
 	az eventgrid event-subscription delete --name $(name) || true

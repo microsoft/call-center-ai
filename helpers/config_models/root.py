@@ -1,6 +1,7 @@
 from helpers.config_models.api import ApiModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_service import CommunicationServiceModel
+from helpers.config_models.database import DatabaseModel
 from helpers.config_models.eventgrid import EventgridModel
 from helpers.config_models.monitoring import MonitoringModel
 from helpers.config_models.openai import OpenAiModel
@@ -13,6 +14,7 @@ class RootModel(BaseModel):
     api: ApiModel
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
+    database: DatabaseModel
     eventgrid: EventgridModel
     monitoring: MonitoringModel
     openai: OpenAiModel
