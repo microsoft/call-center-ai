@@ -137,8 +137,6 @@ workflow:
   agent_phone_number: "+33612345678"
   bot_company: Contoso
   bot_name: Robert
-  conversation_lang: fr-FR
-  conversation_timeout_hour: 72
 
 communication_service_call:
   access_key: xxx

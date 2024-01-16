@@ -10,5 +10,5 @@ class WorkflowModel(BaseModel):
     agent_phone_number: PhoneNumber
     bot_company: str
     bot_name: str
-    conversation_lang: str
-    conversation_timeout_hour: int
+    conversation_lang: str = "fr-FR"  # French
+    conversation_timeout_hour: int = 72  # 3 days
