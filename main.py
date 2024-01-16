@@ -695,9 +695,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     "properties": {
                         "field": {
                             "description": "The claim field to update.",
-                            "enum": list(
-                                ClaimModel.model_json_schema()["properties"].keys()
-                            ),
+                            "enum": list(ClaimModel.editable_fields()),
                             "type": "string",
                         },
                         "value": {

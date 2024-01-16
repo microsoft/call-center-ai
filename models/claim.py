@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from typing import Optional, Set
 
 
 class ClaimModel(BaseModel):
@@ -23,3 +24,7 @@ class ClaimModel(BaseModel):
     stolen_lost_items: Optional[str] = None
     vehicle_info: Optional[str] = None
     witnesses: Optional[str] = None
+
+    @staticmethod
+    def editable_fields() -> Set[str]:
+        return ClaimModel.model_json_schema()["properties"].keys()
