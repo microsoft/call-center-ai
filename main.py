@@ -74,8 +74,8 @@ sms_client = SmsClient(
     credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint
 )
 
-CALL_EVENT_URL = f"{CONFIG.api.events_domain}/call/event"
-CALL_INBOUND_URL = f"{CONFIG.api.events_domain}/call/inbound"
+CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
+CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
 
 
 class Context(str, Enum):
