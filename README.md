@@ -61,6 +61,12 @@ Extract of the data stored during the call:
 - [ ] Call back the user when needed
 - [ ] Simulate a IVR workflow
 
+### User report after the call
+
+A report is available at `https://[your_domain]/call/report/[call_id]`. It shows the conversation history, claim data and reminders.
+
+![User report](./docs/user_report.jpg)
+
 ### High level architecture
 
 ```mermaid

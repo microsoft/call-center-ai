@@ -1,5 +1,5 @@
 param config string
-param imageVersion string = 'feat-bicep-deploy'
+param imageVersion string = 'main'
 param instance string = deployment().name
 param location string = 'westeurope'
 param openaiLocation string = 'swedencentral'

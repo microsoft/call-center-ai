@@ -16,12 +16,13 @@ from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from contextlib import asynccontextmanager
 from datetime import datetime
 from enum import Enum
-from fastapi import FastAPI, status, Request, HTTPException
+from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
 from pydantic.json import pydantic_encoder
@@ -47,6 +48,11 @@ AZ_CREDENTIAL = DefaultAzureCredential()
 
 _logger.info(f'Using root path "{ROOT_PATH}"')
 
+jinja = Environment(
+    autoescape=select_autoescape(),
+    enable_async=True,
+    loader=FileSystemLoader("public_website"),
+)
 oai_gpt = AsyncAzureOpenAI(
     api_version="2023-12-01-preview",
     azure_deployment=CONFIG.openai.gpt_deployment,
@@ -74,8 +80,8 @@ sms_client = SmsClient(
     credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint
 )
 
-CALL_EVENT_URL = f"{CONFIG.api.events_domain}/call/event"
-CALL_INBOUND_URL = f"{CONFIG.api.events_domain}/call/inbound"
+CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
+CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
 
 
 class Context(str, Enum):
@@ -120,6 +126,27 @@ api.add_middleware(
 )
 async def health_liveness_get() -> None:
     pass
+
+
+@api.get(
+    "/call/report/{call_id}",
+    description="Display the call report in a web page.",
+)
+async def call_report_get(call_id: UUID) -> HTMLResponse:
+    call = await get_call_by_id(call_id)
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call {call_id} not found",
+        )
+
+    template = jinja.get_template("report.html")
+    render = await template.render_async(
+        bot_company=CONFIG.workflow.bot_company,
+        bot_name=CONFIG.workflow.bot_name,
+        call=call,
+    )
+    return HTMLResponse(content=render)
 
 
 @api.get(
@@ -192,150 +219,152 @@ async def call_inbound_post(request: Request):
 )
 # TODO: Secure this endpoint with a secret
 # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
-async def call_event_post(request: Request, call_id: UUID) -> None:
+async def call_event_post(
+    request: Request, background_tasks: BackgroundTasks, call_id: UUID
+) -> None:
     for event_dict in await request.json():
-        call = await get_call_by_id(call_id)
-        if not call:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Call {call_id} not found",
+        background_tasks.add_task(communication_evnt_worker, event_dict, call_id)
+
+
+async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
+    call = await get_call_by_id(call_id)
+    if not call:
+        _logger.warn(f"Call {call_id} not found")
+        return
+
+    event = CloudEvent.from_dict(event_dict)
+    connection_id = event.data["callConnectionId"]
+    operation_context = event.data.get("operationContext", None)
+    client = call_automation_client.get_call_connection(
+        call_connection_id=connection_id
+    )
+    event_type = event.type
+
+    _logger.debug(f"Call event received {event_type} for call {call}")
+    _logger.debug(event.data)
+
+    if event_type == "Microsoft.Communication.CallConnected":  # Call answered
+        _logger.info(f"Call connected ({call.id})")
+        call.recognition_retry = 0  # Reset recognition retry counter
+
+        if not call.messages:  # First call
+            await handle_recognize_text(
+                call=call,
+                client=client,
+                text=TTSPrompt.HELLO,
             )
 
-        event = CloudEvent.from_dict(event_dict)
-        connection_id = event.data["callConnectionId"]
-        operation_context = event.data.get("operationContext", None)
-        client = call_automation_client.get_call_connection(
-            call_connection_id=connection_id
-        )
-        event_type = event.type
-
-        _logger.debug(f"Call event received {event_type} for call {call}")
-        _logger.debug(event.data)
-
-        if event_type == "Microsoft.Communication.CallConnected":  # Call answered
-            _logger.info(f"Call connected ({call.id})")
-            call.recognition_retry = 0  # Reset recognition retry counter
-
-            if not call.messages:  # First call
-                await handle_recognize_text(
-                    call=call,
-                    client=client,
-                    text=TTSPrompt.HELLO,
+        else:  # Returning call
+            call.messages.append(
+                CallMessageModel(
+                    content="Customer called again.", persona=CallPersona.HUMAN
                 )
-
-            else:  # Returning call
-                call.messages.append(
-                    CallMessageModel(
-                        content="Customer called again.", persona=CallPersona.HUMAN
-                    )
-                )
-                await handle_play(
-                    call=call,
-                    client=client,
-                    text=TTSPrompt.WELCOME_BACK,
-                )
-                await intelligence(call, client)
-
-        elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
-            _logger.info(f"Call disconnected ({call.id})")
-            await handle_hangup(call=call, client=client)
-
-        elif (
-            event_type == "Microsoft.Communication.RecognizeCompleted"
-        ):  # Speech recognized
-            if event.data["recognitionType"] == "speech":
-                speech_text = event.data["speechResult"]["speech"]
-                _logger.info(f"Recognition completed ({call.id}): {speech_text}")
-
-                if speech_text is not None and len(speech_text) > 0:
-                    call.messages.append(
-                        CallMessageModel(content=speech_text, persona=CallPersona.HUMAN)
-                    )
-                    await intelligence(call, client)
-
-        elif (
-            event_type == "Microsoft.Communication.RecognizeFailed"
-        ):  # Speech recognition failed
-            result_information = event.data["resultInformation"]
-            error_code = result_information["subCode"]
-
-            # Error codes:
-            # 8510 = Action failed, initial silence timeout reached
-            # 8532 = Action failed, inter-digit silence timeout reached
-            # 8512 = Unknown internal server error
-            # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
-            if (
-                error_code in (8510, 8532, 8512) and call.recognition_retry < 10
-            ):  # Timeout retry
-                await handle_recognize_text(
-                    call=call,
-                    client=client,
-                    text=TTSPrompt.TIMEOUT_SILENCE,
-                )
-                call.recognition_retry += 1
-
-            else:  # Timeout reached or other error
-                await handle_play(
-                    call=call,
-                    client=client,
-                    context=Context.GOODBYE,
-                    text=TTSPrompt.GOODBYE,
-                )
-
-        elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
-            _logger.debug(f"Play completed ({call.id})")
-
-            if (
-                operation_context == Context.TRANSFER_FAILED
-                or operation_context == Context.GOODBYE
-            ):  # Call ended
-                _logger.info(f"Ending call ({call.id})")
-                await handle_hangup(call=call, client=client)
-
-            elif operation_context == Context.CONNECT_AGENT:  # Call transfer
-                _logger.info(f"Initiating transfer call initiated ({call.id})")
-                agent_caller = PhoneNumberIdentifier(CONFIG.workflow.agent_phone_number)
-                client.transfer_call_to_participant(target_participant=agent_caller)
-
-        elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
-            _logger.debug(f"Play failed ({call.id})")
-
-            result_information = event.data["resultInformation"]
-            error_code = result_information["subCode"]
-
-            # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
-            if error_code == 8535:  # Action failed, file format is invalid
-                _logger.warn("Error during media play, file format is invalid")
-            elif error_code == 8536:  # Action failed, file could not be downloaded
-                _logger.warn("Error during media play, file could not be downloaded")
-            elif error_code == 9999:  # Unknown internal server error
-                _logger.warn("Error during media play, unknown internal server error")
-            else:
-                _logger.warn(
-                    f"Error during media play, unknown error code {error_code}"
-                )
-
-        elif (
-            event_type == "Microsoft.Communication.CallTransferAccepted"
-        ):  # Call transfer accepted
-            _logger.info(f"Call transfer accepted event ({call.id})")
-            # TODO: Is there anything to do here?
-
-        elif (
-            event_type == "Microsoft.Communication.CallTransferFailed"
-        ):  # Call transfer failed
-            _logger.debug(f"Call transfer failed event ({call.id})")
-            result_information = event.data["resultInformation"]
-            sub_code = result_information["subCode"]
-            _logger.info(f"Error during call transfer, subCode {sub_code} ({call.id})")
+            )
             await handle_play(
                 call=call,
                 client=client,
-                context=Context.TRANSFER_FAILED,
-                text=TTSPrompt.CALLTRANSFER_FAILURE,
+                text=TTSPrompt.WELCOME_BACK,
+            )
+            await intelligence(call, client)
+
+    elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
+        _logger.info(f"Call disconnected ({call.id})")
+        await handle_hangup(call=call, client=client)
+
+    elif (
+        event_type == "Microsoft.Communication.RecognizeCompleted"
+    ):  # Speech recognized
+        if event.data["recognitionType"] == "speech":
+            speech_text = event.data["speechResult"]["speech"]
+            _logger.info(f"Recognition completed ({call.id}): {speech_text}")
+
+            if speech_text is not None and len(speech_text) > 0:
+                call.messages.append(
+                    CallMessageModel(content=speech_text, persona=CallPersona.HUMAN)
+                )
+                await intelligence(call, client)
+
+    elif (
+        event_type == "Microsoft.Communication.RecognizeFailed"
+    ):  # Speech recognition failed
+        result_information = event.data["resultInformation"]
+        error_code = result_information["subCode"]
+
+        # Error codes:
+        # 8510 = Action failed, initial silence timeout reached
+        # 8532 = Action failed, inter-digit silence timeout reached
+        # 8512 = Unknown internal server error
+        # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
+        if (
+            error_code in (8510, 8532, 8512) and call.recognition_retry < 10
+        ):  # Timeout retry
+            await handle_recognize_text(
+                call=call,
+                client=client,
+                text=TTSPrompt.TIMEOUT_SILENCE,
+            )
+            call.recognition_retry += 1
+
+        else:  # Timeout reached or other error
+            await handle_play(
+                call=call,
+                client=client,
+                context=Context.GOODBYE,
+                text=TTSPrompt.GOODBYE,
             )
 
-        await save_call(call)
+    elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
+        _logger.debug(f"Play completed ({call.id})")
+
+        if (
+            operation_context == Context.TRANSFER_FAILED
+            or operation_context == Context.GOODBYE
+        ):  # Call ended
+            _logger.info(f"Ending call ({call.id})")
+            await handle_hangup(call=call, client=client)
+
+        elif operation_context == Context.CONNECT_AGENT:  # Call transfer
+            _logger.info(f"Initiating transfer call initiated ({call.id})")
+            agent_caller = PhoneNumberIdentifier(CONFIG.workflow.agent_phone_number)
+            client.transfer_call_to_participant(target_participant=agent_caller)
+
+    elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
+        _logger.debug(f"Play failed ({call.id})")
+
+        result_information = event.data["resultInformation"]
+        error_code = result_information["subCode"]
+
+        # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
+        if error_code == 8535:  # Action failed, file format is invalid
+            _logger.warn("Error during media play, file format is invalid")
+        elif error_code == 8536:  # Action failed, file could not be downloaded
+            _logger.warn("Error during media play, file could not be downloaded")
+        elif error_code == 9999:  # Unknown internal server error
+            _logger.warn("Error during media play, unknown internal server error")
+        else:
+            _logger.warn(f"Error during media play, unknown error code {error_code}")
+
+    elif (
+        event_type == "Microsoft.Communication.CallTransferAccepted"
+    ):  # Call transfer accepted
+        _logger.info(f"Call transfer accepted event ({call.id})")
+        # TODO: Is there anything to do here?
+
+    elif (
+        event_type == "Microsoft.Communication.CallTransferFailed"
+    ):  # Call transfer failed
+        _logger.debug(f"Call transfer failed event ({call.id})")
+        result_information = event.data["resultInformation"]
+        sub_code = result_information["subCode"]
+        _logger.info(f"Error during call transfer, subCode {sub_code} ({call.id})")
+        await handle_play(
+            call=call,
+            client=client,
+            context=Context.TRANSFER_FAILED,
+            text=TTSPrompt.CALLTRANSFER_FAILURE,
+        )
+
+    await save_call(call)
 
 
 async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
@@ -684,6 +713,10 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "description": "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Title is unique and allows the reminder to be updated. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
                             "type": "string",
                         },
+                        "owner": {
+                            "description": "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'policyholder', 'witness', 'police'.",
+                            "type": "string",
+                        },
                         f"{customer_response_prop}": {
                             "description": "The text to be read to the customer to confirm the reminder. Only speak about this action. Use an imperative sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
                             "type": "string",
@@ -694,6 +727,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         "description",
                         "due_date_time",
                         "title",
+                        "owner",
                     ],
                     "type": "object",
                 },
@@ -785,6 +819,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         if reminder.title == parameters["title"]:
                             reminder.description = parameters["description"]
                             reminder.due_date_time = parameters["due_date_time"]
+                            reminder.owner = parameters["owner"]
                             model.content = (
                                 f"Reminder \"{parameters['title']}\" updated."
                             )

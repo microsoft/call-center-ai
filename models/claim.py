@@ -27,8 +27,9 @@ class ClaimModel(BaseModel):
     medical_records: Optional[str] = None
     police_report_number: Optional[str] = None
     policy_number: Optional[str] = None
-    policyholder_contact_info: Optional[str] = None
+    policyholder_email: Optional[str] = None
     policyholder_name: Optional[str] = None
+    policyholder_phone: Optional[str] = None
     pre_existing_damage_description: Optional[str] = None
     property_damage_description: Optional[str] = None
     repair_replacement_estimates: Optional[str] = None
