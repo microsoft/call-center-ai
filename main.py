@@ -832,6 +832,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                                 description=parameters["description"],
                                 due_date_time=parameters["due_date_time"],
                                 title=parameters["title"],
+                                owner=parameters["owner"],
                             )
                         )
                         model.content = f"Reminder \"{parameters['title']}\" created."
