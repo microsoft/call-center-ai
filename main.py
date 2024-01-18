@@ -18,10 +18,11 @@ from datetime import datetime
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
 from models.reminder import ReminderModel
 from pydantic.json import pydantic_encoder
@@ -47,6 +48,11 @@ AZ_CREDENTIAL = DefaultAzureCredential()
 
 _logger.info(f'Using root path "{ROOT_PATH}"')
 
+jinja = Environment(
+    autoescape=select_autoescape(),
+    enable_async=True,
+    loader=FileSystemLoader("public_website"),
+)
 oai_gpt = AsyncAzureOpenAI(
     api_version="2023-12-01-preview",
     azure_deployment=CONFIG.openai.gpt_deployment,
@@ -120,6 +126,27 @@ api.add_middleware(
 )
 async def health_liveness_get() -> None:
     pass
+
+
+@api.get(
+    "/call/report/{call_id}",
+    description="Display the call report in a web page.",
+)
+async def call_report_get(call_id: UUID) -> HTMLResponse:
+    call = await get_call_by_id(call_id)
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call {call_id} not found",
+        )
+
+    template = jinja.get_template("report.html")
+    render = await template.render_async(
+        bot_company=CONFIG.workflow.bot_company,
+        bot_name=CONFIG.workflow.bot_name,
+        call=call,
+    )
+    return HTMLResponse(content=render)
 
 
 @api.get(
@@ -686,6 +713,10 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "description": "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Title is unique and allows the reminder to be updated. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
                             "type": "string",
                         },
+                        "owner": {
+                            "description": "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'policyholder', 'witness', 'police'.",
+                            "type": "string",
+                        },
                         f"{customer_response_prop}": {
                             "description": "The text to be read to the customer to confirm the reminder. Only speak about this action. Use an imperative sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
                             "type": "string",
@@ -696,6 +727,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         "description",
                         "due_date_time",
                         "title",
+                        "owner",
                     ],
                     "type": "object",
                 },
@@ -787,6 +819,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         if reminder.title == parameters["title"]:
                             reminder.description = parameters["description"]
                             reminder.due_date_time = parameters["due_date_time"]
+                            reminder.owner = parameters["owner"]
                             model.content = (
                                 f"Reminder \"{parameters['title']}\" updated."
                             )

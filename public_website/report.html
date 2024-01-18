@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Claim report {{ call.claim.id }}</title>
+  </head>
+  <body class="container mx-auto px-4 bg-white text-sm">
+    <div class="grid grid-cols-6 gap-4 m-4">
+      <!-- Top introduction -->
+      <div class="col-span-full px-4 py-8">
+        <h2 class="text-2xl">Hello {{ call.claim.policyholder_name }} 👋🏻</h2>
+        <p>Your claim <span class="font-mono">#{{ call.claim.id }}</span> of the {{ call.claim.created_at.strftime('%d %b %Y') }} is being processed.</p>
+      </div>
+
+      <!-- Claim details -->
+      <div class="col-span-full">
+        <div class="rounded-md ring-1 ring-gray-200">
+          <h2 class="text-lg px-4 pt-4">🔎 Claim details</h2>
+
+          <table class="table-auto w-full">
+            <tbody>
+              <tr class="border-b border-slate-100">
+                <td class="p-4 text-gray-500">We understood</td>
+                <td class="p-4">{{ call.claim.incident_description }}</td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td class="p-4 text-gray-500">Incident date</td>
+                <!-- TODO: Try to parse the date and display it in a human readable format -->
+                <td class="p-4">{{ call.claim.incident_date_time }}</td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td class="p-4 text-gray-500">Extra details</td>
+                <td class="p-4">{{ call.claim.extra_details }}</td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td class="p-4 text-gray-500">Policy number</td>
+                <td class="p-4">{{ call.claim.policy_number }}</td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td class="p-4 text-gray-500">Contact info</td>
+                <td class="p-4">{{ call.claim.policyholder_email }}, {{ call.claim.policyholder_phone }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Conversation -->
+      <div class="col-start-1 col-end-5">
+        <div class="p-4 space-y-4 rounded-md ring-1 ring-gray-200">
+          <h2 class="text-lg">💬 Conversation</h2>
+
+          <!-- Agent and customer -->
+          <div class="overflow-hidden space-y-6">
+            {% for message in call.messages | reverse %}
+            {% set name = bot_name if message.persona == 'assistant' else call.claim.policyholder_name %}
+            <div class="flex flex-row">
+              <div class="basis-6 relative self-stretch">
+                <div class="absolute top-0 left-0 w-full h-full -z-10">
+                  <div class="h-screen mx-auto w-0.5 bg-gray-100"></div>
+                </div>
+                <div class="py-1.5 bg-white">
+                  {% if message.persona == 'assistant' %}
+                  <div
+                    class="rounded-full h-2 w-2 mx-auto bg-gray-100 ring-1 ring-gray-300"
+                  ></div>
+                  {% else %}
+                  <div
+                    class="rounded-full h-2 w-2 mx-auto bg-blue-200 ring-1 ring-blue-400"
+                  ></div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="basis-full space-y-2 px-4 py-0.5">
+                <div class="flex flex-row justify-between content-center text-xs">
+                  <div>
+                    {{ name }}&nbsp;<span class="text-gray-500">commented</span>
+                  </div>
+                  <div class="text-gray-500">
+                    {{ message.created_at.strftime('%d %b %Y') }}
+                  </div>
+                </div>
+                <p class="text-gray-500">{{ message.content }}</p>
+              </div>
+            </div>
+            {% else %}
+            <p class="text-gray-500">No messages yet.</p>
+            {% endfor %}
+          </div>
+
+          <!-- TODO: Add a action for a new phone call -->
+        </div>
+      </div>
+
+      <!-- Reminders -->
+      <div class="col-start-5 col-end-7">
+        <div class="rounded-md ring-1 ring-gray-200 p-4">
+          <h2 class="text-lg pb-4">⏰ Reminders</h2>
+
+          {% if not call.reminders %}
+          <p class="p-4 text-gray-500">No reminders yet.</p>
+          {% else %}
+          <div class="space-y-6">
+            <!-- TODO: Sort reminders by due date -->
+            {% for reminder in call.reminders %}
+            <div>
+              <div class="text-xs">
+                {{ reminder.owner }}&nbsp;<span class="text-gray-500">({{ reminder.due_date_time }})</span>
+              </div>
+              <p class="text-gray-500">{{ reminder.title }}</p>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
