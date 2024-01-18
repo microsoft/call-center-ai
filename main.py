@@ -686,6 +686,10 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                             "description": "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Title is unique and allows the reminder to be updated. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
                             "type": "string",
                         },
+                        "owner": {
+                            "description": "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'policyholder', 'witness', 'police'.",
+                            "type": "string",
+                        },
                         f"{customer_response_prop}": {
                             "description": "The text to be read to the customer to confirm the reminder. Only speak about this action. Use an imperative sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
                             "type": "string",
@@ -696,6 +700,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         "description",
                         "due_date_time",
                         "title",
+                        "owner",
                     ],
                     "type": "object",
                 },
@@ -787,6 +792,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                         if reminder.title == parameters["title"]:
                             reminder.description = parameters["description"]
                             reminder.due_date_time = parameters["due_date_time"]
+                            reminder.owner = parameters["owner"]
                             model.content = (
                                 f"Reminder \"{parameters['title']}\" updated."
                             )
