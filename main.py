@@ -9,6 +9,7 @@ from azure.communication.callautomation import (
 )
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import ClientAuthenticationError
 from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
@@ -16,23 +17,26 @@ from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from datetime import datetime
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config import CONFIG
+from helpers.config_models.database import Mode as DatabaseMode
 from helpers.logging import build_logger
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
+from models.call import CallModel
 from models.reminder import ReminderModel
-from helpers.config_models.database import Mode as DatabaseMode
-from persistence.sqlite import SqliteStore
+from models.synthesis import SynthesisModel
 from persistence.cosmos import CosmosStore
-from pydantic.json import pydantic_encoder
+from persistence.sqlite import SqliteStore
+import re
 import asyncio
-from models.call import (
-    CallModel,
-    MessageModel as CallMessageModel,
-    Persona as CallPersona,
-    ToolModel as CallToolModel,
+from models.message import (
+    Action as MessageAction,
+    MessageModel,
+    Persona as MessagePersona,
+    ToolModel as MessageToolModel,
 )
 from models.claim import ClaimModel
 from openai import AsyncAzureOpenAI
@@ -234,6 +238,14 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
         _logger.info(f"Call connected ({call.call_id})")
         call.recognition_retry = 0  # Reset recognition retry counter
 
+        call.messages.append(
+            MessageModel(
+                action=MessageAction.CALL,
+                content="",
+                persona=MessagePersona.HUMAN,
+            )
+        )
+
         if not call.messages:  # First call
             await handle_recognize_text(
                 call=call,
@@ -242,11 +254,6 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
             )
 
         else:  # Returning call
-            call.messages.append(
-                CallMessageModel(
-                    content="Customer called again.", persona=CallPersona.HUMAN
-                )
-            )
             await handle_play(
                 call=call,
                 client=client,
@@ -267,7 +274,7 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
 
             if speech_text is not None and len(speech_text) > 0:
                 call.messages.append(
-                    CallMessageModel(content=speech_text, persona=CallPersona.HUMAN)
+                    MessageModel(content=speech_text, persona=MessagePersona.HUMAN)
                 )
                 await intelligence(call, client)
 
@@ -481,7 +488,7 @@ async def handle_play(
     """
     if store:
         call.messages.append(
-            CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
+            MessageModel(content=text, persona=MessagePersona.ASSISTANT)
         )
 
     # Split text in chunks of max 400 characters, separated by a comma
@@ -520,9 +527,9 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
         },
         {
             "content": system.format(
-                claim=call.claim.model_dump_json(),
-                conversation=json.dumps(call.messages, default=pydantic_encoder),
-                reminders=json.dumps(call.reminders, default=pydantic_encoder),
+                claim=json.dumps(jsonable_encoder(call.claim)),
+                conversation=json.dumps(jsonable_encoder(call.messages)),
+                reminders=json.dumps(jsonable_encoder(call.reminders)),
             ),
             "role": "system",
         },
@@ -558,32 +565,32 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         },
         {
             "content": LLMPrompt.CHAT_SYSTEM.format(
-                claim=call.claim.model_dump_json(),
-                reminders=json.dumps(call.reminders, default=pydantic_encoder),
+                claim=json.dumps(jsonable_encoder(call.claim)),
+                reminders=json.dumps(jsonable_encoder(call.reminders)),
             ),
             "role": "system",
         },
     ]
     for message in call.messages:
-        if message.persona == CallPersona.HUMAN:
+        if message.persona == MessagePersona.HUMAN:
             messages.append(
                 {
-                    "content": message.content,
+                    "content": f"{message.action.value}: {message.content}",
                     "role": "user",
                 }
             )
-        elif message.persona == CallPersona.ASSISTANT:
+        elif message.persona == MessagePersona.ASSISTANT:
             if not message.tool_calls:
                 messages.append(
                     {
-                        "content": message.content,
+                        "content": f"{message.action.value}: {message.content}",
                         "role": "assistant",
                     }
                 )
             else:
                 messages.append(
                     {
-                        "content": message.content,
+                        "content": f"{message.action.value}: {message.content}",
                         "role": "assistant",
                         "tool_calls": [
                             {
@@ -601,7 +608,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 for tool_call in message.tool_calls:
                     messages.append(
                         {
-                            "content": message.content,
+                            "content": tool_call.content,
                             "role": "tool",
                             "tool_call_id": tool_call.tool_id,
                         }
@@ -614,7 +621,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
-                "name": IndentAction.TALK_TO_HUMAN,
+                "name": IndentAction.TALK_TO_HUMAN.value,
                 "parameters": {
                     "properties": {},
                     "required": [],
@@ -626,7 +633,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to end the call, or if the user is satisfied with the answer and confirmed the end of the call.",
-                "name": IndentAction.END_CALL,
+                "name": IndentAction.END_CALL.value,
                 "parameters": {
                     "properties": {},
                     "required": [],
@@ -638,7 +645,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
-                "name": IndentAction.NEW_CLAIM,
+                "name": IndentAction.NEW_CLAIM.value,
                 "parameters": {
                     "properties": {
                         f"{customer_response_prop}": {
@@ -657,7 +664,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update policyholder contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
-                "name": IndentAction.UPDATED_CLAIM,
+                "name": IndentAction.UPDATED_CLAIM.value,
                 "parameters": {
                     "properties": {
                         "field": {
@@ -687,7 +694,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
-                "name": IndentAction.NEW_OR_UPDATED_REMINDER,
+                "name": IndentAction.NEW_OR_UPDATED_REMINDER.value,
                 "parameters": {
                     "properties": {
                         "description": {
@@ -736,6 +743,9 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         )
 
         content = res.choices[0].message.content or ""
+        content = re.sub(
+            rf"^(?:{'|'.join([action.value for action in MessageAction])}):", "", content
+        ).strip()  # Remove action from content, AI often adds it by mistake event if explicitly asked not to
         tool_calls = res.choices[0].message.tool_calls
 
         _logger.debug(f"Chat response: {content}")
@@ -750,20 +760,20 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 arguments = tool_call.function.arguments
                 _logger.info(f"Tool call {name} with parameters {arguments}")
 
-                model = CallToolModel(
+                model = MessageToolModel(
                     content="",
                     function_arguments=arguments,
                     function_name=name,
                     tool_id=tool_call.id,
                 )
 
-                if name == IndentAction.TALK_TO_HUMAN:
+                if name == IndentAction.TALK_TO_HUMAN.value:
                     intent = IndentAction.TALK_TO_HUMAN
 
-                elif name == IndentAction.END_CALL:
+                elif name == IndentAction.END_CALL.value:
                     intent = IndentAction.END_CALL
 
-                elif name == IndentAction.UPDATED_CLAIM:
+                elif name == IndentAction.UPDATED_CLAIM.value:
                     intent = IndentAction.UPDATED_CLAIM
                     parameters = json.loads(arguments)
 
@@ -774,10 +784,15 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     else:
                         content += parameters[customer_response_prop] + " "
 
-                    setattr(call.claim, parameters["field"], parameters["value"])
-                    model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
+                    if not parameters["field"] in ClaimModel.editable_fields():
+                        _logger.debug(
+                            f"AI model tried to update a non-editable field {parameters['field']}"
+                        )
+                    else:
+                        setattr(call.claim, parameters["field"], parameters["value"])
+                        model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
 
-                elif name == IndentAction.NEW_CLAIM:
+                elif name == IndentAction.NEW_CLAIM.value:
                     intent = IndentAction.NEW_CLAIM
                     parameters = json.loads(arguments)
 
@@ -792,7 +807,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     call.reminders = []
                     model.content = "Claim and reminders created reset."
 
-                elif name == IndentAction.NEW_OR_UPDATED_REMINDER:
+                elif name == IndentAction.NEW_OR_UPDATED_REMINDER.value:
                     intent = IndentAction.NEW_OR_UPDATED_REMINDER
                     parameters = json.loads(arguments)
 
@@ -829,9 +844,9 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 models.append(model)
 
         call.messages.append(
-            CallMessageModel(
+            MessageModel(
                 content=content,
-                persona=CallPersona.ASSISTANT,
+                persona=MessagePersona.ASSISTANT,
                 tool_calls=models,
             )
         )
@@ -918,9 +933,24 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         _logger.debug(f"Call already hung up ({call.call_id})")
 
     call.messages.append(
-        CallMessageModel(content="Customer ended the call.", persona=CallPersona.HUMAN)
+        MessageModel(
+            content="",
+            persona=MessagePersona.HUMAN,
+            action=MessageAction.HANGUP,
+        )
     )
 
+    # Start post-call intelligence
+    await asyncio.gather(
+        post_call_sms(call),
+        post_call_synthesis(call),
+    )
+
+
+async def post_call_sms(call: CallModel) -> None:
+    """
+    Send an SMS report to the customer.
+    """
     content = await gpt_completion(LLMPrompt.SMS_SUMMARY_SYSTEM, call)
     _logger.info(f"SMS report ({call.call_id}): {content}")
 
@@ -933,26 +963,23 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         response = responses[0]
 
         if response.successful:
-            _logger.info(
+            _logger.debug(
                 f"SMS report sent {response.message_id} to {response.to} ({call.call_id})"
             )
             call.messages.append(
-                CallMessageModel(
-                    content=f"SMS report sent to {response.to}: {content}",
-                    persona=CallPersona.ASSISTANT,
+                MessageModel(
+                    action=MessageAction.SMS,
+                    content=content,
+                    persona=MessagePersona.ASSISTANT,
                 )
             )
         else:
             _logger.warn(
                 f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.call_id})"
             )
-            call.messages.append(
-                CallMessageModel(
-                    content=f"Failed to send SMS report to {response.to}: {response.error_message}",
-                    persona=CallPersona.ASSISTANT,
-                )
-            )
 
+    except ClientAuthenticationError:
+        _logger.error("Authentication error for SMS, check the credentials")
     except Exception:
         _logger.warn(
             f"Failed SMS to {call.phone_number} ({call.call_id})", exc_info=True
@@ -986,3 +1013,22 @@ async def callback_url(caller_id: str) -> str:
         call = CallModel(phone_number=caller_id)
         await db.call_aset(call)
     return f"{CALL_EVENT_URL}/{call.call_id}"
+
+
+async def post_call_synthesis(call: CallModel) -> None:
+    """
+    Synthesize the call and store it to the model.
+    """
+    _logger.debug(f"Synthesizing call ({call.call_id})")
+
+    short, long = await asyncio.gather(
+        gpt_completion(LLMPrompt.SYNTHESIS_SHORT_SYSTEM, call),
+        gpt_completion(LLMPrompt.SYNTHESIS_LONG_SYSTEM, call),
+    )
+    _logger.info(f"Short synthesis ({call.call_id}): {short}")
+    _logger.info(f"Long synthesis ({call.call_id}): {long}")
+
+    call.synthesis = SynthesisModel(
+        long=long,
+        short=short,
+    )

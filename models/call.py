@@ -1,30 +1,11 @@
 from datetime import datetime
-from enum import Enum
 from models.claim import ClaimModel
+from models.message import MessageModel
 from models.reminder import ReminderModel
+from models.synthesis import SynthesisModel
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from uuid import UUID, uuid4
-
-
-class Persona(str, Enum):
-    ASSISTANT = "assistant"
-    HUMAN = "human"
-    TOOL = "tool"
-
-
-class ToolModel(BaseModel):
-    content: str
-    function_arguments: str
-    function_name: str
-    tool_id: str
-
-
-class MessageModel(BaseModel):
-    content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
-    persona: Persona
-    tool_calls: List[ToolModel] = []
 
 
 class CallModel(BaseModel):
@@ -35,3 +16,4 @@ class CallModel(BaseModel):
     phone_number: str
     recognition_retry: int = Field(default=0)
     reminders: List[ReminderModel] = []
+    synthesis: Optional[SynthesisModel] = None
