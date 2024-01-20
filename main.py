@@ -2,6 +2,7 @@
 import openai_multi_tool_use_parallel_patch
 
 # General imports
+from typing import List, Optional, Tuple
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -33,6 +34,7 @@ from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
+import html
 import re
 import asyncio
 from models.message import (
@@ -207,23 +209,23 @@ async def call_inbound_post(request: Request):
 
 
 @api.post(
-    "/call/event/{call_id}",
+    "/call/event/{phone_number}",
     description="Handle callbacks from Azure Communication Services.",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 # TODO: Secure this endpoint with a secret
 # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(
-    request: Request, background_tasks: BackgroundTasks, call_id: UUID
+    request: Request, background_tasks: BackgroundTasks, phone_number: str
 ) -> None:
     for event_dict in await request.json():
-        background_tasks.add_task(communication_evnt_worker, event_dict, call_id)
+        background_tasks.add_task(communication_event_worker, event_dict, phone_number)
 
 
-async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
-    call = await db.call_aget(call_id)
+async def communication_event_worker(event_dict: dict, phone_number: str) -> None:
+    call = await db.call_asearch_one(phone_number)
     if not call:
-        _logger.warn(f"Call {call_id} not found")
+        _logger.warn(f"Call with {phone_number} not found")
         return
 
     event = CloudEvent.from_dict(event_dict)
@@ -249,7 +251,7 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
             )
         )
 
-        if not call.messages:  # First call
+        if len(call.messages) == 1:  # First call
             await handle_recognize_text(
                 call=call,
                 client=client,
@@ -262,7 +264,7 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
                 client=client,
                 text=TTSPrompt.WELCOME_BACK,
             )
-            await intelligence(call, client)
+            call = await intelligence(call, client)
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         _logger.info(f"Call disconnected ({call.call_id})")
@@ -279,7 +281,7 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
                 call.messages.append(
                     MessageModel(content=speech_text, persona=MessagePersona.HUMAN)
                 )
-                await intelligence(call, client)
+                call = await intelligence(call, client)
 
     elif (
         event_type == "Microsoft.Communication.RecognizeFailed"
@@ -366,7 +368,7 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
     await db.call_aset(call)
 
 
-async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
+async def intelligence(call: CallModel, client: CallConnectionClient) -> CallModel:
     """
     Handle the intelligence of the call, including: GPT chat, GPT completion, TTS, and media play.
 
@@ -380,7 +382,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
     hard_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_hard_timeout_sec)
     )
-    chat_res = None
+    chat_action = None
 
     try:
         while True:
@@ -397,7 +399,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
                 soft_timeout_task.cancel()
                 hard_timeout_task.cancel()
                 # Answer with chat result
-                chat_res = chat_task.result()
+                call, chat_action = chat_task.result()
                 break
             # Break when hard timeout is reached
             if hard_timeout_task.done():
@@ -425,15 +427,15 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
         _logger.warn(f"Error loading intelligence ({call.call_id})", exc_info=True)
 
     # For any error reason, answer with error
-    if not chat_res:
+    if not chat_action:
         _logger.debug(
             f"Error loading intelligence ({call.call_id}), answering with default error"
         )
-        chat_res = ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
+        chat_action = ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
 
-    _logger.info(f"Chat ({call.call_id}): {chat_res}")
+    _logger.info(f"Chat ({call.call_id}): {chat_action}")
 
-    if chat_res.intent == IndentAction.TALK_TO_HUMAN:
+    if chat_action.intent == IndentAction.TALK_TO_HUMAN:
         await handle_play(
             call=call,
             client=client,
@@ -441,7 +443,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             text=TTSPrompt.END_CALL_TO_CONNECT_AGENT,
         )
 
-    elif chat_res.intent == IndentAction.END_CALL:
+    elif chat_action.intent == IndentAction.END_CALL:
         await handle_play(
             call=call,
             client=client,
@@ -449,30 +451,32 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             text=TTSPrompt.GOODBYE,
         )
 
-    elif chat_res.intent in (
+    elif chat_action.intent in (
         IndentAction.NEW_CLAIM,
         IndentAction.UPDATED_CLAIM,
         IndentAction.NEW_OR_UPDATED_REMINDER,
     ):
-        # Save in DB allowing demos to be more "real-time"
+        # Save in DB for new claims and allowing demos to be more "real-time"
         await db.call_aset(call)
         # Answer with intermediate response
         await handle_play(
             call=call,
             client=client,
             store=False,
-            text=chat_res.content,
+            text=chat_action.content,
         )
         # Recursively call intelligence to continue the conversation
-        await intelligence(call, client)
+        call = await intelligence(call, client)
 
     else:
         await handle_recognize_text(
             call=call,
             client=client,
             store=False,
-            text=chat_res.content,
+            text=chat_action.content,
         )
+
+    return call
 
 
 async def handle_play(
@@ -555,7 +559,7 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
     return content or ""
 
 
-async def gpt_chat(call: CallModel) -> ActionModel:
+async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
 
     messages = [
@@ -647,7 +651,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
+                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Do not use this action twice in a row. Example: 'I want to create a new claim'.",
                 "name": IndentAction.NEW_CLAIM.value,
                 "parameters": {
                     "properties": {
@@ -747,7 +751,9 @@ async def gpt_chat(call: CallModel) -> ActionModel:
 
         content = res.choices[0].message.content or ""
         content = re.sub(
-            rf"^(?:{'|'.join([action.value for action in MessageAction])}):", "", content
+            rf"^(?:{'|'.join([action.value for action in MessageAction])}):",
+            "",
+            content,
         ).strip()  # Remove action from content, AI often adds it by mistake event if explicitly asked not to
         tool_calls = res.choices[0].message.tool_calls
 
@@ -806,9 +812,11 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     else:
                         content += parameters[customer_response_prop] + " "
 
-                    call.claim = ClaimModel()
-                    call.reminders = []
-                    model.content = "Claim and reminders created reset."
+                    # Add context of the last message, if not, LLM messed up and loop on this action
+                    last_message = call.messages[-1]
+                    call = CallModel(phone_number=call.phone_number)
+                    call.messages.append(last_message)
+                    model.content = "Claim, reminders and messages reset."
 
                 elif name == IndentAction.NEW_OR_UPDATED_REMINDER.value:
                     intent = IndentAction.NEW_OR_UPDATED_REMINDER
@@ -854,15 +862,21 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             )
         )
 
-        return ActionModel(
-            content=content,
-            intent=intent,
+        return (
+            call,
+            ActionModel(
+                content=content,
+                intent=intent,
+            ),
         )
 
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
-    return ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
+    return (
+        call,
+        ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE),
+    )
 
 
 async def handle_recognize_text(
@@ -1015,7 +1029,7 @@ async def callback_url(caller_id: str) -> str:
     if not call:
         call = CallModel(phone_number=caller_id)
         await db.call_aset(call)
-    return f"{CALL_EVENT_URL}/{call.call_id}"
+    return f"{CALL_EVENT_URL}/{html.escape(call.phone_number)}"
 
 
 async def post_call_synthesis(call: CallModel) -> None:
