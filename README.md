@@ -90,25 +90,22 @@ graph
 ---
 title: Claim AI component diagram (C4 model)
 ---
-graph
-  user(["User"])
+graph LR
   agent(["Agent"])
-
+  user(["User"])
 
   subgraph "Claim AI"
-    communication_service_call["Call gateway\n(Azure Communication Services)"]
-    communication_service_sms["SMS gateway\n(Azure Communication Services)"]
-    event_grid[("Broker\n(Azure Event Grid)")]
     api["API"]
-    db_conversation[("Conversations")]
-    db_claim[("Claims")]
-    gpt["GPT-4 Turbo\n(Azure OpenAI)"]
+    communication_service_call["Call gateway\n(Communication Services)"]
+    communication_service_sms["SMS gateway\n(Communication Services)"]
+    db[("Conversations and claims\n(Cosmos DB or SQLite)")]
+    event_grid[("Broker\n(Event Grid)")]
+    gpt["GPT-4 Turbo\n(OpenAI)"]
   end
 
   api -- Answer with text --> communication_service_call
   api -- Generate completion --> gpt
-  api -- Save claim --> db_claim
-  api -- Save conversation --> db_conversation
+  api -- Save conversation --> db
   api -- Send SMS report --> communication_service_sms
   api -- Transfer to agent --> communication_service_call
   api -. Watch .-> event_grid
