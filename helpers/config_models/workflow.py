@@ -1,12 +1,12 @@
-from pydantic import BaseModel
 from pydantic_extra_types.phone_numbers import PhoneNumber
+from pydantic_settings import BaseSettings
 
 
 # E164 is standard accross all Microsoft services
 PhoneNumber.phone_format = "E164"
 
 
-class WorkflowModel(BaseModel):
+class WorkflowModel(BaseSettings, env_prefix="workflow_"):
     agent_phone_number: PhoneNumber
     bot_company: str
     bot_name: str

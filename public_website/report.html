@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <title>Claim report {{ call.claim.id }}</title>
+    <title>Claim report {{ call.claim.claim_id }}</title>
   </head>
   <body class="container mx-auto px-4 bg-white text-sm">
     <div class="grid grid-cols-6 gap-4 m-4">
       <!-- Top introduction -->
       <div class="col-span-full px-4 py-8">
         <h2 class="text-2xl">Hello {{ call.claim.policyholder_name }} 👋🏻</h2>
-        <p>Your claim <span class="font-mono">#{{ call.claim.id }}</span> of the {{ call.claim.created_at.strftime('%d %b %Y') }} is being processed.</p>
+        <p>Your claim <span class="font-mono">#{{ call.claim.claim_id }}</span> of the {{ call.claim.created_at.strftime('%d %b %Y') }} is being processed.</p>
       </div>
 
       <!-- Claim details -->
