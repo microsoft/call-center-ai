@@ -1,4 +1,8 @@
-from typing import List, Optional
+# See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653/23
+import openai_multi_tool_use_parallel_patch
+
+# General imports
+from typing import List, Optional, Tuple
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -9,50 +13,51 @@ from azure.communication.callautomation import (
 )
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import ClientAuthenticationError
 from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from contextlib import asynccontextmanager
 from datetime import datetime
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config import CONFIG
+from helpers.config_models.database import Mode as DatabaseMode
 from helpers.logging import build_logger
 from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
+from models.call import CallModel
 from models.reminder import ReminderModel
-from pydantic.json import pydantic_encoder
+from models.synthesis import SynthesisModel
+from persistence.cosmos import CosmosStore
+from persistence.sqlite import SqliteStore
+import html
+import re
 import asyncio
-from models.call import (
-    CallModel,
-    MessageModel as CallMessageModel,
-    Persona as CallPersona,
-    ToolModel as CallToolModel,
+from models.message import (
+    Action as MessageAction,
+    MessageModel,
+    Persona as MessagePersona,
+    ToolModel as MessageToolModel,
 )
 from models.claim import ClaimModel
 from openai import AsyncAzureOpenAI
-from uuid import UUID, uuid4
+from uuid import UUID
 import json
-import aiosqlite
-import os
 
 
 _logger = build_logger(__name__)
-
-ROOT_PATH = CONFIG.api.root_path
-AZ_CREDENTIAL = DefaultAzureCredential()
-
-_logger.info(f'Using root path "{ROOT_PATH}"')
+_logger.info(f"claim-ai v{CONFIG.version}")
 
 jinja = Environment(
     autoescape=select_autoescape(),
     enable_async=True,
     loader=FileSystemLoader("public_website"),
 )
+_logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")
 oai_gpt = AsyncAzureOpenAI(
     api_version="2023-12-01-preview",
     azure_deployment=CONFIG.openai.gpt_deployment,
@@ -61,14 +66,14 @@ oai_gpt = AsyncAzureOpenAI(
     api_key=CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,
     azure_ad_token_provider=(
         get_bearer_token_provider(
-            AZ_CREDENTIAL, "https://cognitiveservices.azure.com/.default"
+            DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
         )
         if not CONFIG.openai.api_key
         else None
     ),
 )
-eventgrid_subscription_name = f"tmp-{uuid4()}"
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
+_logger.info(f"Using phone number {str(CONFIG.communication_service.phone_number)}")
 # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
 call_automation_client = CallAutomationClient(
     endpoint=CONFIG.communication_service.endpoint,
@@ -77,25 +82,14 @@ call_automation_client = CallAutomationClient(
     ),
 )
 sms_client = SmsClient(
-    credential=AZ_CREDENTIAL, endpoint=CONFIG.communication_service.endpoint
+    credential=DefaultAzureCredential(), endpoint=CONFIG.communication_service.endpoint
 )
-
-CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
-CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
-
-
-class Context(str, Enum):
-    TRANSFER_FAILED = "transfer_failed"
-    CONNECT_AGENT = "connect_agent"
-    GOODBYE = "goodbye"
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    await init_db()
-    yield
-
-
+db = (
+    SqliteStore(CONFIG.database.sqlite)
+    if CONFIG.database.mode == DatabaseMode.SQLITE
+    else CosmosStore(CONFIG.database.cosmos_db)
+)
+_logger.info(f'Using root path "{CONFIG.api.root_path}"')
 api = FastAPI(
     contact={
         "url": "https://github.com/clemlesne/claim-ai-phone-bot",
@@ -105,18 +99,20 @@ api = FastAPI(
         "name": "Apache-2.0",
         "url": "https://github.com/clemlesne/claim-ai-phone-bot/blob/master/LICENCE",
     },
-    lifespan=lifespan,
-    root_path=ROOT_PATH,
+    root_path=CONFIG.api.root_path,
     title="claim-ai-phone-bot",
-    version=CONFIG.api.version,
+    version=CONFIG.version,
 )
 
-api.add_middleware(
-    CORSMiddleware,
-    allow_headers=["*"],
-    allow_methods=["*"],
-    allow_origins=["*"],
-)
+
+CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
+CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
+
+
+class Context(str, Enum):
+    TRANSFER_FAILED = "transfer_failed"
+    CONNECT_AGENT = "connect_agent"
+    GOODBYE = "goodbye"
 
 
 @api.get(
@@ -133,7 +129,7 @@ async def health_liveness_get() -> None:
     description="Display the call report in a web page.",
 )
 async def call_report_get(call_id: UUID) -> HTMLResponse:
-    call = await get_call_by_id(call_id)
+    call = await db.call_aget(call_id)
     if not call:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -154,7 +150,7 @@ async def call_report_get(call_id: UUID) -> HTMLResponse:
     description="Get all calls by phone number.",
 )
 async def call_get(phone_number: str) -> List[CallModel]:
-    return await get_calls_by_phone_number(phone_number)
+    return await db.call_asearch_all(phone_number) or []
 
 
 @api.get(
@@ -213,23 +209,23 @@ async def call_inbound_post(request: Request):
 
 
 @api.post(
-    "/call/event/{call_id}",
+    "/call/event/{phone_number}",
     description="Handle callbacks from Azure Communication Services.",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 # TODO: Secure this endpoint with a secret
 # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(
-    request: Request, background_tasks: BackgroundTasks, call_id: UUID
+    request: Request, background_tasks: BackgroundTasks, phone_number: str
 ) -> None:
     for event_dict in await request.json():
-        background_tasks.add_task(communication_evnt_worker, event_dict, call_id)
+        background_tasks.add_task(communication_event_worker, event_dict, phone_number)
 
 
-async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
-    call = await get_call_by_id(call_id)
+async def communication_event_worker(event_dict: dict, phone_number: str) -> None:
+    call = await db.call_asearch_one(phone_number)
     if not call:
-        _logger.warn(f"Call {call_id} not found")
+        _logger.warn(f"Call with {phone_number} not found")
         return
 
     event = CloudEvent.from_dict(event_dict)
@@ -244,10 +240,18 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
     _logger.debug(event.data)
 
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
-        _logger.info(f"Call connected ({call.id})")
+        _logger.info(f"Call connected ({call.call_id})")
         call.recognition_retry = 0  # Reset recognition retry counter
 
-        if not call.messages:  # First call
+        call.messages.append(
+            MessageModel(
+                action=MessageAction.CALL,
+                content="",
+                persona=MessagePersona.HUMAN,
+            )
+        )
+
+        if len(call.messages) == 1:  # First call
             await handle_recognize_text(
                 call=call,
                 client=client,
@@ -255,20 +259,15 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
             )
 
         else:  # Returning call
-            call.messages.append(
-                CallMessageModel(
-                    content="Customer called again.", persona=CallPersona.HUMAN
-                )
-            )
             await handle_play(
                 call=call,
                 client=client,
                 text=TTSPrompt.WELCOME_BACK,
             )
-            await intelligence(call, client)
+            call = await intelligence(call, client)
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
-        _logger.info(f"Call disconnected ({call.id})")
+        _logger.info(f"Call disconnected ({call.call_id})")
         await handle_hangup(call=call, client=client)
 
     elif (
@@ -276,13 +275,13 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
     ):  # Speech recognized
         if event.data["recognitionType"] == "speech":
             speech_text = event.data["speechResult"]["speech"]
-            _logger.info(f"Recognition completed ({call.id}): {speech_text}")
+            _logger.info(f"Recognition completed ({call.call_id}): {speech_text}")
 
             if speech_text is not None and len(speech_text) > 0:
                 call.messages.append(
-                    CallMessageModel(content=speech_text, persona=CallPersona.HUMAN)
+                    MessageModel(content=speech_text, persona=MessagePersona.HUMAN)
                 )
-                await intelligence(call, client)
+                call = await intelligence(call, client)
 
     elif (
         event_type == "Microsoft.Communication.RecognizeFailed"
@@ -314,22 +313,24 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
             )
 
     elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
-        _logger.debug(f"Play completed ({call.id})")
+        _logger.debug(f"Play completed ({call.call_id})")
 
         if (
             operation_context == Context.TRANSFER_FAILED
             or operation_context == Context.GOODBYE
         ):  # Call ended
-            _logger.info(f"Ending call ({call.id})")
+            _logger.info(f"Ending call ({call.call_id})")
             await handle_hangup(call=call, client=client)
 
         elif operation_context == Context.CONNECT_AGENT:  # Call transfer
-            _logger.info(f"Initiating transfer call initiated ({call.id})")
-            agent_caller = PhoneNumberIdentifier(CONFIG.workflow.agent_phone_number)
+            _logger.info(f"Initiating transfer call initiated ({call.call_id})")
+            agent_caller = PhoneNumberIdentifier(
+                str(CONFIG.workflow.agent_phone_number)
+            )
             client.transfer_call_to_participant(target_participant=agent_caller)
 
     elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
-        _logger.debug(f"Play failed ({call.id})")
+        _logger.debug(f"Play failed ({call.call_id})")
 
         result_information = event.data["resultInformation"]
         error_code = result_information["subCode"]
@@ -347,16 +348,16 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
     elif (
         event_type == "Microsoft.Communication.CallTransferAccepted"
     ):  # Call transfer accepted
-        _logger.info(f"Call transfer accepted event ({call.id})")
+        _logger.info(f"Call transfer accepted event ({call.call_id})")
         # TODO: Is there anything to do here?
 
     elif (
         event_type == "Microsoft.Communication.CallTransferFailed"
     ):  # Call transfer failed
-        _logger.debug(f"Call transfer failed event ({call.id})")
+        _logger.debug(f"Call transfer failed event ({call.call_id})")
         result_information = event.data["resultInformation"]
         sub_code = result_information["subCode"]
-        _logger.info(f"Error during call transfer, subCode {sub_code} ({call.id})")
+        _logger.info(f"Error during call transfer, subCode {sub_code} ({call.call_id})")
         await handle_play(
             call=call,
             client=client,
@@ -364,10 +365,10 @@ async def communication_evnt_worker(event_dict: dict, call_id: UUID) -> None:
             text=TTSPrompt.CALLTRANSFER_FAILURE,
         )
 
-    await save_call(call)
+    await db.call_aset(call)
 
 
-async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
+async def intelligence(call: CallModel, client: CallConnectionClient) -> CallModel:
     """
     Handle the intelligence of the call, including: GPT chat, GPT completion, TTS, and media play.
 
@@ -381,11 +382,11 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
     hard_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_hard_timeout_sec)
     )
-    chat_res = None
+    chat_action = None
 
     try:
         while True:
-            _logger.debug(f"Chat task status ({call.id}): {chat_task.done()}")
+            _logger.debug(f"Chat task status ({call.call_id}): {chat_task.done()}")
             # Play loading sound
             await handle_media(
                 call=call,
@@ -398,12 +399,12 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
                 soft_timeout_task.cancel()
                 hard_timeout_task.cancel()
                 # Answer with chat result
-                chat_res = chat_task.result()
+                call, chat_action = chat_task.result()
                 break
             # Break when hard timeout is reached
             if hard_timeout_task.done():
                 _logger.warn(
-                    f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached ({call.id})"
+                    f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached ({call.call_id})"
                 )
                 # Clean up
                 chat_task.cancel()
@@ -412,7 +413,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             # Speak when soft timeout is reached
             if soft_timeout_task.done() and not soft_timeout_triggered:
                 _logger.warn(
-                    f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached ({call.id})"
+                    f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached ({call.call_id})"
                 )
                 soft_timeout_triggered = True
                 await handle_play(
@@ -423,18 +424,18 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             # Wait to not block the event loop and play too many sounds
             await asyncio.sleep(5)
     except Exception:
-        _logger.warn(f"Error loading intelligence ({call.id})", exc_info=True)
+        _logger.warn(f"Error loading intelligence ({call.call_id})", exc_info=True)
 
     # For any error reason, answer with error
-    if not chat_res:
+    if not chat_action:
         _logger.debug(
-            f"Error loading intelligence ({call.id}), answering with default error"
+            f"Error loading intelligence ({call.call_id}), answering with default error"
         )
-        chat_res = ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
+        chat_action = ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
 
-    _logger.info(f"Chat ({call.id}): {chat_res}")
+    _logger.info(f"Chat ({call.call_id}): {chat_action}")
 
-    if chat_res.intent == IndentAction.TALK_TO_HUMAN:
+    if chat_action.intent == IndentAction.TALK_TO_HUMAN:
         await handle_play(
             call=call,
             client=client,
@@ -442,7 +443,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             text=TTSPrompt.END_CALL_TO_CONNECT_AGENT,
         )
 
-    elif chat_res.intent == IndentAction.END_CALL:
+    elif chat_action.intent == IndentAction.END_CALL:
         await handle_play(
             call=call,
             client=client,
@@ -450,30 +451,32 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> None:
             text=TTSPrompt.GOODBYE,
         )
 
-    elif chat_res.intent in (
+    elif chat_action.intent in (
         IndentAction.NEW_CLAIM,
         IndentAction.UPDATED_CLAIM,
         IndentAction.NEW_OR_UPDATED_REMINDER,
     ):
-        # Save in DB allowing demos to be more "real-time"
-        await save_call(call)
+        # Save in DB for new claims and allowing demos to be more "real-time"
+        await db.call_aset(call)
         # Answer with intermediate response
         await handle_play(
             call=call,
             client=client,
             store=False,
-            text=chat_res.content,
+            text=chat_action.content,
         )
         # Recursively call intelligence to continue the conversation
-        await intelligence(call, client)
+        call = await intelligence(call, client)
 
     else:
         await handle_recognize_text(
             call=call,
             client=client,
             store=False,
-            text=chat_res.content,
+            text=chat_action.content,
         )
+
+    return call
 
 
 async def handle_play(
@@ -492,7 +495,7 @@ async def handle_play(
     """
     if store:
         call.messages.append(
-            CallMessageModel(content=text, persona=CallPersona.ASSISTANT)
+            MessageModel(content=text, persona=MessagePersona.ASSISTANT)
         )
 
     # Split text in chunks of max 400 characters, separated by a comma
@@ -509,17 +512,17 @@ async def handle_play(
 
     try:
         for chunk in chunks:
-            _logger.debug(f"Playing chunk ({call.id}): {chunk}")
+            _logger.debug(f"Playing chunk ({call.call_id}): {chunk}")
             client.play_media(
                 operation_context=context,
                 play_source=audio_from_text(chunk),
             )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing ({call.id})")
+        _logger.debug(f"Call hung up before playing ({call.call_id})")
 
 
 async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
-    _logger.debug(f"Running GPT completion ({call.id})")
+    _logger.debug(f"Running GPT completion ({call.call_id})")
 
     messages = [
         {
@@ -531,9 +534,9 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
         },
         {
             "content": system.format(
-                claim=call.claim.model_dump_json(),
-                conversation=json.dumps(call.messages, default=pydantic_encoder),
-                reminders=json.dumps(call.reminders, default=pydantic_encoder),
+                claim=json.dumps(jsonable_encoder(call.claim)),
+                conversation=json.dumps(jsonable_encoder(call.messages)),
+                reminders=json.dumps(jsonable_encoder(call.reminders)),
             ),
             "role": "system",
         },
@@ -556,8 +559,8 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
     return content or ""
 
 
-async def gpt_chat(call: CallModel) -> ActionModel:
-    _logger.debug(f"Running GPT chat ({call.id})")
+async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
+    _logger.debug(f"Running GPT chat ({call.call_id})")
 
     messages = [
         {
@@ -569,36 +572,36 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         },
         {
             "content": LLMPrompt.CHAT_SYSTEM.format(
-                claim=call.claim.model_dump_json(),
-                reminders=json.dumps(call.reminders, default=pydantic_encoder),
+                claim=json.dumps(jsonable_encoder(call.claim)),
+                reminders=json.dumps(jsonable_encoder(call.reminders)),
             ),
             "role": "system",
         },
     ]
     for message in call.messages:
-        if message.persona == CallPersona.HUMAN:
+        if message.persona == MessagePersona.HUMAN:
             messages.append(
                 {
-                    "content": message.content,
+                    "content": f"{message.action.value}: {message.content}",
                     "role": "user",
                 }
             )
-        elif message.persona == CallPersona.ASSISTANT:
+        elif message.persona == MessagePersona.ASSISTANT:
             if not message.tool_calls:
                 messages.append(
                     {
-                        "content": message.content,
+                        "content": f"{message.action.value}: {message.content}",
                         "role": "assistant",
                     }
                 )
             else:
                 messages.append(
                     {
-                        "content": message.content,
+                        "content": f"{message.action.value}: {message.content}",
                         "role": "assistant",
                         "tool_calls": [
                             {
-                                "id": tool_call.id,
+                                "id": tool_call.tool_id,
                                 "type": "function",
                                 "function": {
                                     "arguments": tool_call.function_arguments,
@@ -612,9 +615,9 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 for tool_call in message.tool_calls:
                     messages.append(
                         {
-                            "content": message.content,
+                            "content": tool_call.content,
                             "role": "tool",
-                            "tool_call_id": tool_call.id,
+                            "tool_call_id": tool_call.tool_id,
                         }
                     )
     _logger.debug(f"Messages: {messages}")
@@ -625,7 +628,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
-                "name": IndentAction.TALK_TO_HUMAN,
+                "name": IndentAction.TALK_TO_HUMAN.value,
                 "parameters": {
                     "properties": {},
                     "required": [],
@@ -637,7 +640,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to end the call, or if the user is satisfied with the answer and confirmed the end of the call.",
-                "name": IndentAction.END_CALL,
+                "name": IndentAction.END_CALL.value,
                 "parameters": {
                     "properties": {},
                     "required": [],
@@ -648,8 +651,8 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
-                "name": IndentAction.NEW_CLAIM,
+                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Do not use this action twice in a row. Example: 'I want to create a new claim'.",
+                "name": IndentAction.NEW_CLAIM.value,
                 "parameters": {
                     "properties": {
                         f"{customer_response_prop}": {
@@ -668,7 +671,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update policyholder contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
-                "name": IndentAction.UPDATED_CLAIM,
+                "name": IndentAction.UPDATED_CLAIM.value,
                 "parameters": {
                     "properties": {
                         "field": {
@@ -698,7 +701,7 @@ async def gpt_chat(call: CallModel) -> ActionModel:
             "type": "function",
             "function": {
                 "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
-                "name": IndentAction.NEW_OR_UPDATED_REMINDER,
+                "name": IndentAction.NEW_OR_UPDATED_REMINDER.value,
                 "parameters": {
                     "properties": {
                         "description": {
@@ -747,6 +750,11 @@ async def gpt_chat(call: CallModel) -> ActionModel:
         )
 
         content = res.choices[0].message.content or ""
+        content = re.sub(
+            rf"^(?:{'|'.join([action.value for action in MessageAction])}):",
+            "",
+            content,
+        ).strip()  # Remove action from content, AI often adds it by mistake event if explicitly asked not to
         tool_calls = res.choices[0].message.tool_calls
 
         _logger.debug(f"Chat response: {content}")
@@ -761,20 +769,20 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 arguments = tool_call.function.arguments
                 _logger.info(f"Tool call {name} with parameters {arguments}")
 
-                model = CallToolModel(
+                model = MessageToolModel(
                     content="",
                     function_arguments=arguments,
                     function_name=name,
-                    id=tool_call.id,
+                    tool_id=tool_call.id,
                 )
 
-                if name == IndentAction.TALK_TO_HUMAN:
+                if name == IndentAction.TALK_TO_HUMAN.value:
                     intent = IndentAction.TALK_TO_HUMAN
 
-                elif name == IndentAction.END_CALL:
+                elif name == IndentAction.END_CALL.value:
                     intent = IndentAction.END_CALL
 
-                elif name == IndentAction.UPDATED_CLAIM:
+                elif name == IndentAction.UPDATED_CLAIM.value:
                     intent = IndentAction.UPDATED_CLAIM
                     parameters = json.loads(arguments)
 
@@ -785,10 +793,15 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     else:
                         content += parameters[customer_response_prop] + " "
 
-                    setattr(call.claim, parameters["field"], parameters["value"])
-                    model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
+                    if not parameters["field"] in ClaimModel.editable_fields():
+                        _logger.debug(
+                            f"AI model tried to update a non-editable field {parameters['field']}"
+                        )
+                    else:
+                        setattr(call.claim, parameters["field"], parameters["value"])
+                        model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
 
-                elif name == IndentAction.NEW_CLAIM:
+                elif name == IndentAction.NEW_CLAIM.value:
                     intent = IndentAction.NEW_CLAIM
                     parameters = json.loads(arguments)
 
@@ -799,11 +812,13 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                     else:
                         content += parameters[customer_response_prop] + " "
 
-                    call.claim = ClaimModel()
-                    call.reminders = []
-                    model.content = "Claim and reminders created reset."
+                    # Add context of the last message, if not, LLM messed up and loop on this action
+                    last_message = call.messages[-1]
+                    call = CallModel(phone_number=call.phone_number)
+                    call.messages.append(last_message)
+                    model.content = "Claim, reminders and messages reset."
 
-                elif name == IndentAction.NEW_OR_UPDATED_REMINDER:
+                elif name == IndentAction.NEW_OR_UPDATED_REMINDER.value:
                     intent = IndentAction.NEW_OR_UPDATED_REMINDER
                     parameters = json.loads(arguments)
 
@@ -840,22 +855,28 @@ async def gpt_chat(call: CallModel) -> ActionModel:
                 models.append(model)
 
         call.messages.append(
-            CallMessageModel(
+            MessageModel(
                 content=content,
-                persona=CallPersona.ASSISTANT,
+                persona=MessagePersona.ASSISTANT,
                 tool_calls=models,
             )
         )
 
-        return ActionModel(
-            content=content,
-            intent=intent,
+        return (
+            call,
+            ActionModel(
+                content=content,
+                intent=intent,
+            ),
         )
 
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
-    return ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
+    return (
+        call,
+        ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE),
+    )
 
 
 async def handle_recognize_text(
@@ -876,7 +897,7 @@ async def handle_recognize_text(
         text=text,
     )
 
-    _logger.debug(f"Recognizing ({call.id})")
+    _logger.debug(f"Recognizing ({call.call_id})")
     await handle_recognize_media(
         call=call,
         client=client,
@@ -903,7 +924,7 @@ async def handle_recognize_media(
             target_participant=PhoneNumberIdentifier(call.phone_number),
         )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before recognizing ({call.id})")
+        _logger.debug(f"Call hung up before recognizing ({call.call_id})")
 
 
 async def handle_media(
@@ -918,54 +939,68 @@ async def handle_media(
             play_source=FileSource(url=sound),
         )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing ({call.id})")
+        _logger.debug(f"Call hung up before playing ({call.call_id})")
 
 
 async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
-    _logger.debug(f"Hanging up call ({call.id})")
+    _logger.debug(f"Hanging up call ({call.call_id})")
     try:
         client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
-        _logger.debug(f"Call already hung up ({call.id})")
+        _logger.debug(f"Call already hung up ({call.call_id})")
 
     call.messages.append(
-        CallMessageModel(content="Customer ended the call.", persona=CallPersona.HUMAN)
+        MessageModel(
+            content="",
+            persona=MessagePersona.HUMAN,
+            action=MessageAction.HANGUP,
+        )
     )
 
+    # Start post-call intelligence
+    await asyncio.gather(
+        post_call_sms(call),
+        post_call_synthesis(call),
+    )
+
+
+async def post_call_sms(call: CallModel) -> None:
+    """
+    Send an SMS report to the customer.
+    """
     content = await gpt_completion(LLMPrompt.SMS_SUMMARY_SYSTEM, call)
-    _logger.info(f"SMS report ({call.id}): {content}")
+    _logger.info(f"SMS report ({call.call_id}): {content}")
 
     try:
         responses = sms_client.send(
-            from_=CONFIG.communication_service.phone_number,
+            from_=str(CONFIG.communication_service.phone_number),
             message=content,
             to=call.phone_number,
         )
         response = responses[0]
 
         if response.successful:
-            _logger.info(
-                f"SMS report sent {response.message_id} to {response.to} ({call.id})"
+            _logger.debug(
+                f"SMS report sent {response.message_id} to {response.to} ({call.call_id})"
             )
             call.messages.append(
-                CallMessageModel(
-                    content=f"SMS report sent to {response.to}: {content}",
-                    persona=CallPersona.ASSISTANT,
+                MessageModel(
+                    action=MessageAction.SMS,
+                    content=content,
+                    persona=MessagePersona.ASSISTANT,
                 )
             )
         else:
             _logger.warn(
-                f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.id})"
-            )
-            call.messages.append(
-                CallMessageModel(
-                    content=f"Failed to send SMS report to {response.to}: {response.error_message}",
-                    persona=CallPersona.ASSISTANT,
-                )
+                f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.call_id})"
             )
 
+    except ClientAuthenticationError:
+        _logger.error("Authentication error for SMS, check the credentials")
     except Exception:
-        _logger.warn(f"Failed SMS to {call.phone_number} ({call.id})", exc_info=True)
+        _logger.warn(
+            f"Failed SMS to {call.phone_number} ({call.call_id})", exc_info=True
+        )
 
 
 def audio_from_text(text: str) -> SsmlSource:
@@ -990,67 +1025,27 @@ async def callback_url(caller_id: str) -> str:
 
     If the caller has already called, use the same call ID, to keep the conversation history. Otherwise, create a new call ID.
     """
-    call = await get_last_call_by_phone_number(caller_id)
+    call = await db.call_asearch_one(caller_id)
     if not call:
         call = CallModel(phone_number=caller_id)
-        await save_call(call)
-    return f"{CALL_EVENT_URL}/{call.id}"
+        await db.call_aset(call)
+    return f"{CALL_EVENT_URL}/{html.escape(call.phone_number)}"
 
 
-async def init_db():
-    # Create folder
-    db_path = CONFIG.database.sqlite_path
-    db_folder = db_path[: db_path.rfind("/")]
-    if not os.path.exists(db_folder):
-        os.makedirs(db_folder)
+async def post_call_synthesis(call: CallModel) -> None:
+    """
+    Synthesize the call and store it to the model.
+    """
+    _logger.debug(f"Synthesizing call ({call.call_id})")
 
-    # Create table
-    async with aiosqlite.connect(db_path) as db:
-        await db.execute(
-            "CREATE TABLE IF NOT EXISTS calls (id VARCHAR(32) PRIMARY KEY, phone_number TEXT, data TEXT, created_at TEXT)"
-        )
-        await db.commit()
+    short, long = await asyncio.gather(
+        gpt_completion(LLMPrompt.SYNTHESIS_SHORT_SYSTEM, call),
+        gpt_completion(LLMPrompt.SYNTHESIS_LONG_SYSTEM, call),
+    )
+    _logger.info(f"Short synthesis ({call.call_id}): {short}")
+    _logger.info(f"Long synthesis ({call.call_id}): {long}")
 
-
-async def save_call(call: CallModel):
-    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO calls VALUES (?, ?, ?, ?)",
-            (
-                call.id.hex,  # id
-                call.phone_number,  # phone_number
-                call.model_dump_json(),  # data
-                call.created_at.isoformat(),  # created_at
-            ),
-        )
-        await db.commit()
-
-
-async def get_call_by_id(call_id: UUID) -> Optional[CallModel]:
-    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
-        cursor = await db.execute(
-            "SELECT data FROM calls WHERE id = ?",
-            (call_id.hex,),
-        )
-        row = await cursor.fetchone()
-    return CallModel.model_validate_json(row[0]) if row else None
-
-
-async def get_last_call_by_phone_number(phone_number: str) -> Optional[CallModel]:
-    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
-        cursor = await db.execute(
-            f"SELECT data FROM calls WHERE phone_number = ? AND DATETIME(created_at) > DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(created_at) DESC LIMIT 1",
-            (phone_number,),
-        )
-        row = await cursor.fetchone()
-    return CallModel.model_validate_json(row[0]) if row else None
-
-
-async def get_calls_by_phone_number(phone_number: str) -> List[CallModel]:
-    async with aiosqlite.connect(CONFIG.database.sqlite_path) as db:
-        cursor = await db.execute(
-            f"SELECT data FROM calls WHERE phone_number = ? ORDER BY DATETIME(created_at) DESC",
-            (phone_number,),
-        )
-        rows = await cursor.fetchall()
-    return [CallModel.model_validate_json(row[0]) for row in rows if row]
+    call.synthesis = SynthesisModel(
+        long=long,
+        short=short,
+    )

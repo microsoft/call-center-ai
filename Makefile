@@ -44,7 +44,7 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) EVENTS_DOMAIN=$(tunnel_url) python3 -m uvicorn main:api \
+	VERSION=$(version_full) API_EVENTS_DOMAIN=$(tunnel_url) python3 -m uvicorn main:api \
 		--header x-version:$${VERSION} \
 		--no-server-header \
 		--port 8080 \
@@ -64,7 +64,7 @@ start:
 	@echo "🛠️ Deploying to localhost..."
 	$(docker) run \
 		--detach \
-		--env EVENTS_DOMAIN=$(tunnel_url) \
+		--env API_EVENTS_DOMAIN=$(tunnel_url) \
 		--env VERSION=$(version_full) \
 		--mount type=bind,source="$(CURDIR)/.env",target="/app/.env" \
 		--mount type=bind,source="$(CURDIR)/config.yaml",target="/app/config.yaml" \

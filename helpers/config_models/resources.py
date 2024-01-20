@@ -1,5 +1,5 @@
-from pydantic import BaseModel
+from pydantic_settings import BaseSettings
 
 
-class ResourcesModel(BaseModel):
+class ResourcesModel(BaseSettings, env_prefix="resources_"):
     public_url: str

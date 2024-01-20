@@ -90,25 +90,22 @@ graph
 ---
 title: Claim AI component diagram (C4 model)
 ---
-graph
-  user(["User"])
+graph LR
   agent(["Agent"])
-
+  user(["User"])
 
   subgraph "Claim AI"
-    communication_service_call["Call gateway\n(Azure Communication Services)"]
-    communication_service_sms["SMS gateway\n(Azure Communication Services)"]
-    event_grid[("Broker\n(Azure Event Grid)")]
     api["API"]
-    db_conversation[("Conversations")]
-    db_claim[("Claims")]
-    gpt["GPT-4 Turbo\n(Azure OpenAI)"]
+    communication_service_call["Call gateway\n(Communication Services)"]
+    communication_service_sms["SMS gateway\n(Communication Services)"]
+    db[("Conversations and claims\n(Cosmos DB or SQLite)")]
+    event_grid[("Broker\n(Event Grid)")]
+    gpt["GPT-4 Turbo\n(OpenAI)"]
   end
 
   api -- Answer with text --> communication_service_call
   api -- Generate completion --> gpt
-  api -- Save claim --> db_claim
-  api -- Save conversation --> db_conversation
+  api -- Save conversation --> db
   api -- Send SMS report --> communication_service_sms
   api -- Transfer to agent --> communication_service_call
   api -. Watch .-> event_grid
@@ -133,7 +130,13 @@ Place a file called `config.yaml` in the root of the project with the following 
 api:
   root_path: "/"
 
-database: {}
+database:
+  # mode: cosmos_db
+  # cosmos_db:
+  #   container: calls
+  #   database: claim-ai
+  #   endpoint: https://xxx.documents.azure.com:443
+  sqlite: {}
 
 monitoring:
   logging:
@@ -155,19 +158,14 @@ communication_service_call:
   voice_name: fr-FR-DeniseNeural
 
 cognitive_service:
-  # Must be of type "Azure AI services multi-service account"
+  # Must be of type "AI services multi-service account"
   # See: https://learn.microsoft.com/en-us/azure/ai-services/multi-service-resource?tabs=macos&pivots=azportal#create-a-new-multi-service-resource
   endpoint: https://xxx.cognitiveservices.azure.com
 
 openai:
   endpoint: https://xxx.openai.azure.com
-  gpt_deployment: gpt-4-turbo
+  gpt_deployment: gpt
   gpt_model: gpt-4-1106-preview
-
-eventgrid:
-  resource_group: claim-ai-poc
-  subscription_id: xxx
-  system_topic: claim-ai-poc
 ```
 
 If you want to use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
@@ -187,7 +185,7 @@ make install
 
 Also, a public file server is needed to host the audio files.
 
-For this, you can use Azure Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account. This folder contains:
+For this, you can use Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account. This folder contains:
 
 - Audio files (`xxx.wav`) to be played during the call
 - [Lexicon file (`lexicon.xml`)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon) to be used by the bot to understand the company products (note: any change [makes up to 15 minutes](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon-file) to be taken into account)
@@ -215,9 +213,9 @@ Container is available on GitHub Actions, at:
 
 Steps to deploy:
 
-1. Create an Azure Communication Services resource with a phone number
+1. Create an Communication Services resource with a phone number
 2. Create a local `config.yaml` file (be sure to use the phone number previously created)
-3. Connect to Azure (for example `az login`)
+3. Connect to (for example `az login`)
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish
 6. Get the logs with `make logs name=my-instance`

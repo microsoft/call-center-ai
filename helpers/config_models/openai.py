@@ -1,8 +1,9 @@
-from pydantic import BaseModel, SecretStr
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings
 from typing import Optional
 
 
-class OpenAiModel(BaseModel):
+class OpenAiModel(BaseSettings, env_prefix="openai_"):
     api_key: Optional[SecretStr] = None
     endpoint: str
     gpt_deployment: str

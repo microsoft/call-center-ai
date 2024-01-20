@@ -1,12 +1,14 @@
 param config string
+param gptModel string
+param gptVersion string
 param imageVersion string
-param instance string = deployment().name
-param location string = resourceGroup().location
+param location string
 param openaiLocation string
 param tags object
 
-var prefix = instance
+var prefix = deployment().name
 var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
+var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 
 output appUrl string = appUrl
 output communicationId string = communication.id
@@ -62,9 +64,6 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
     }
     environmentId: acaEnv.id
     template: {
-      scale: {
-        maxReplicas: 1
-      }
       containers: [
         {
           image: 'ghcr.io/clemlesne/claim-ai-phone-bot:${imageVersion}'
@@ -75,12 +74,24 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
               value: config
             }
             {
-              name: 'EVENTS_DOMAIN'
+              name: 'API_EVENTS_DOMAIN'
               value: appUrl
             }
             {
-              name: 'SQLITE_PATH'
-              value: '/app/data/.default.sqlite'
+              name: 'DATABASE_MODE'
+              value: 'cosmos_db'
+            }
+            {
+              name: 'DATABASE_COSMOS_DB_ENDPOINT'
+              value: cosmos.properties.documentEndpoint
+            }
+            {
+              name: 'DATABASE_COSMOS_DB_CONTAINER'
+              value: container.name
+            }
+            {
+              name: 'DATABASE_COSMOS_DB_DATABASE'
+              value: database.name
             }
           ]
           resources: {
@@ -122,12 +133,12 @@ resource blobContainer 'Microsoft.Storage/storageAccounts/blobServices/container
   name: '$web'
 }
 
-resource roleCommunicationContributor 'Microsoft.Authorization/roleDefinitions@2018-01-01-preview' existing = {
+resource roleCommunicationContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'b24988ac-6180-42a0-ab88-20f7382dd24c'
 }
 
-resource appContributeCommunication 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, 'appContributeCommunication')
+resource appContribCommunication 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, deployment().name, 'appContribCommunication')
   scope: communication
   properties: {
     principalId: containerApp.identity.principalId
@@ -150,12 +161,12 @@ resource eventgridTopic 'Microsoft.EventGrid/systemTopics@2023-12-15-preview' = 
   }
 }
 
-resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2018-01-01-preview' existing = {
+resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'a001fd3d-188f-4b5d-821b-7da978bf7442'
 }
 
-resource appAccessOpenai 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, 'appAccessOpenai')
+resource appContribOpenai 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, deployment().name, 'appContribOpenai')
   scope: cognitiveOpenai
   properties: {
     principalId: containerApp.identity.principalId
@@ -179,7 +190,7 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-previe
 
 resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
-  name: 'gpt'
+  name: gptModelFullName
   sku: {
     capacity: 50
     name: 'Standard'
@@ -188,8 +199,8 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     raiPolicyName: contentfilter.name
     model: {
       format: 'OpenAI'
-      name: 'gpt-4'
-      version: '1106-Preview'
+      name: gptModel
+      version: gptVersion
     }
   }
 }
@@ -250,5 +261,102 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2023-06
         source: 'Completion'
       }
     ]
+  }
+}
+
+resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
+  name: prefix
+  location: location
+  tags: tags
+  kind: 'GlobalDocumentDB'
+  properties: {
+    databaseAccountOfferType: 'Standard'
+    locations: [
+      {
+        locationName: location
+      }
+    ]
+    capabilities: [
+      {
+        name: 'EnableServerless'
+      }
+    ]
+  }
+}
+
+resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15' = {
+  parent: cosmos
+  name: 'claim-ai'
+  properties: {
+    resource: {
+      id: 'claim-ai'
+    }
+  }
+}
+
+resource roleSqlContrib 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions@2023-11-15' = {
+  parent: cosmos
+  name: guid('sql-role-definition-', deployment().name, 'roleSqlContrib')
+  properties: {
+    roleName: 'roleSqlContrib'
+    type: 'CustomRole'
+    assignableScopes: [
+      cosmos.id
+    ]
+    permissions: [
+      {
+        dataActions: [
+          'Microsoft.DocumentDB/databaseAccounts/readMetadata'
+          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/*'
+          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/executeQuery'
+        ]
+      }
+    ]
+  }
+}
+
+resource appContribSql 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2021-04-15' = {
+  parent: cosmos
+  name: guid(roleSqlContrib.id, deployment().name, 'appContribSql')
+  properties: {
+    principalId: containerApp.identity.principalId
+    roleDefinitionId: roleSqlContrib.id
+    scope: cosmos.id
+  }
+}
+
+resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-11-15' = {
+  parent: database
+  name: 'calls'
+  properties: {
+    resource: {
+      id: 'calls'
+      indexingPolicy: {
+        automatic: true
+        includedPaths: [
+          {
+            path: '/created_at/?'
+            indexes: [
+              {
+                dataType: 'String'
+                kind: 'Range'
+                precision: -1
+              }
+            ]
+          }
+        ]
+        excludedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+      }
+      partitionKey: {
+        paths: [
+          '/phone_number'
+        ]
+        kind: 'Hash'
+      }
+    }
   }
 }
