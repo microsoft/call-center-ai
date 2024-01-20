@@ -134,6 +134,11 @@ api:
   root_path: "/"
 
 database:
+  # mode: cosmos_db
+  # cosmos_db:
+  #   container: calls
+  #   database: claim-ai
+  #   endpoint: https://xxx.documents.azure.com:443
   sqlite: {}
 
 monitoring:
