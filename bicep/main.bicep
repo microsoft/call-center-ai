@@ -1,5 +1,7 @@
 param config string
 param imageVersion string = 'main'
+param gptModel string = 'gpt-4'
+param gptVersion string = '1106-Preview'
 param instance string = deployment().name
 param location string = 'westeurope'
 param openaiLocation string = 'swedencentral'
@@ -28,6 +30,8 @@ module app 'app.bicep' = {
   scope: sub
   params: {
     config: config
+    gptModel: gptModel
+    gptVersion: gptVersion
     imageVersion: imageVersion
     location: location
     openaiLocation: openaiLocation

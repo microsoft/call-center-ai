@@ -1,4 +1,6 @@
 param config string
+param gptModel string
+param gptVersion string
 param imageVersion string
 param location string
 param openaiLocation string
@@ -6,6 +8,7 @@ param tags object
 
 var prefix = deployment().name
 var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
+var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 
 output appUrl string = appUrl
 output communicationId string = communication.id
@@ -187,7 +190,7 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-previe
 
 resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
-  name: 'gpt'
+  name: gptModelFullName
   sku: {
     capacity: 50
     name: 'Standard'
@@ -196,8 +199,8 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     raiPolicyName: contentfilter.name
     model: {
       format: 'OpenAI'
-      name: 'gpt-4'
-      version: '1106-Preview'
+      name: gptModel
+      version: gptVersion
     }
   }
 }
