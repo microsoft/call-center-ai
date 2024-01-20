@@ -2,7 +2,7 @@
 .version.cache
 
 # Temporary database
-.local.sqlite
+.local.sqlite*
 
 # Local app config file
 config.yaml

@@ -1,8 +1,6 @@
-from os import environ
-from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
 
 
-class ApiModel(BaseModel):
-    events_domain: str = environ["EVENTS_DOMAIN"]
+class ApiModel(BaseSettings, env_prefix="api_"):
+    events_domain: str
     root_path: str = ""
-    version: str = Field(default=environ["VERSION"], frozen=True)

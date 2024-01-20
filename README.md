@@ -133,7 +133,8 @@ Place a file called `config.yaml` in the root of the project with the following 
 api:
   root_path: "/"
 
-database: {}
+database:
+  sqlite: {}
 
 monitoring:
   logging:

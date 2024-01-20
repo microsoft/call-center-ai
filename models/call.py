@@ -17,7 +17,7 @@ class ToolModel(BaseModel):
     content: str
     function_arguments: str
     function_name: str
-    id: str
+    tool_id: str
 
 
 class MessageModel(BaseModel):
@@ -28,9 +28,9 @@ class MessageModel(BaseModel):
 
 
 class CallModel(BaseModel):
+    call_id: UUID = Field(default_factory=uuid4, frozen=True)
     claim: ClaimModel = Field(default_factory=ClaimModel)
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
-    id: UUID = Field(default_factory=uuid4, frozen=True)
     messages: List[MessageModel] = []
     phone_number: str
     recognition_retry: int = Field(default=0)

@@ -7,7 +7,7 @@ import string
 
 class ClaimModel(BaseModel):
     # Immutable fields
-    id: str = Field(
+    claim_id: str = Field(
         default_factory=(
             lambda: "".join(
                 random.choice(string.ascii_lowercase + string.digits) for _ in range(6)

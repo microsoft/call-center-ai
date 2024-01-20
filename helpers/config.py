@@ -6,6 +6,7 @@ load_dotenv(find_dotenv())
 
 # Load deps
 from helpers.config_models.root import RootModel
+from pydantic import ValidationError
 import os
 import yaml
 
@@ -34,6 +35,8 @@ else:
     try:
         with open(path, "r", encoding="utf-8") as f:
             CONFIG = RootModel.model_validate(yaml.safe_load(f))
+    except ValidationError as e:
+        raise ConfigBadFormat(f"Config values are not valid") from e
     except Exception as e:
-        raise ConfigBadFormat(f'Config "{path}" is not valid YAML') from e
+        raise ConfigBadFormat(f"Config YAML format is not valid") from e
     print(f'Config "{path}" loaded')

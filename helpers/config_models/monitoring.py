@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import BaseModel, SecretStr
+from pydantic_settings import BaseSettings
 
 
 class LoggingLevel(str, Enum):
@@ -12,10 +12,10 @@ class LoggingLevel(str, Enum):
     WARNING = "WARNING"
 
 
-class LoggingMonitoringModel(BaseModel):
+class LoggingMonitoringModel(BaseSettings, env_prefix="monitoring_logging_"):
     app_level: LoggingLevel = LoggingLevel.INFO
     sys_level: LoggingLevel = LoggingLevel.WARNING
 
 
-class MonitoringModel(BaseModel):
+class MonitoringModel(BaseSettings, env_prefix="monitoring_"):
     logging: LoggingMonitoringModel
