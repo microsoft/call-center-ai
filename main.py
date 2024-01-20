@@ -1,4 +1,7 @@
-from typing import List, Optional
+# See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653/23
+import openai_multi_tool_use_parallel_patch
+
+# General imports
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
