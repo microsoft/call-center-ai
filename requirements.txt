@@ -12,4 +12,4 @@ pydantic-extra-types==2.4.0
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
-uvicorn==0.25.0
+uvicorn==0.26.0
