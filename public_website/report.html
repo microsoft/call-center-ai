@@ -23,16 +23,12 @@
             <tbody>
               <tr class="border-b border-slate-100">
                 <td class="p-4 text-gray-500">We understood</td>
-                <td class="p-4">{{ call.claim.incident_description }}</td>
+                <td class="p-4">{{ call.claim.incident_description }} {{ call.claim.extra_details }}</td>
               </tr>
               <tr class="border-b border-slate-100">
                 <td class="p-4 text-gray-500">Incident date</td>
                 <!-- TODO: Try to parse the date and display it in a human readable format -->
                 <td class="p-4">{{ call.claim.incident_date_time }}</td>
-              </tr>
-              <tr class="border-b border-slate-100">
-                <td class="p-4 text-gray-500">Extra details</td>
-                <td class="p-4">{{ call.claim.extra_details }}</td>
               </tr>
               <tr class="border-b border-slate-100">
                 <td class="p-4 text-gray-500">Policy number</td>
