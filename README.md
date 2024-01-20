@@ -156,13 +156,13 @@ communication_service_call:
   voice_name: fr-FR-DeniseNeural
 
 cognitive_service:
-  # Must be of type "Azure AI services multi-service account"
+  # Must be of type "AI services multi-service account"
   # See: https://learn.microsoft.com/en-us/azure/ai-services/multi-service-resource?tabs=macos&pivots=azportal#create-a-new-multi-service-resource
   endpoint: https://xxx.cognitiveservices.azure.com
 
 openai:
   endpoint: https://xxx.openai.azure.com
-  gpt_deployment: gpt-4-turbo
+  gpt_deployment: gpt
   gpt_model: gpt-4-1106-preview
 ```
 
@@ -183,7 +183,7 @@ make install
 
 Also, a public file server is needed to host the audio files.
 
-For this, you can use Azure Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account. This folder contains:
+For this, you can use Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account. This folder contains:
 
 - Audio files (`xxx.wav`) to be played during the call
 - [Lexicon file (`lexicon.xml`)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon) to be used by the bot to understand the company products (note: any change [makes up to 15 minutes](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon-file) to be taken into account)
@@ -211,9 +211,9 @@ Container is available on GitHub Actions, at:
 
 Steps to deploy:
 
-1. Create an Azure Communication Services resource with a phone number
+1. Create an Communication Services resource with a phone number
 2. Create a local `config.yaml` file (be sure to use the phone number previously created)
-3. Connect to Azure (for example `az login`)
+3. Connect to (for example `az login`)
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish
 6. Get the logs with `make logs name=my-instance`
