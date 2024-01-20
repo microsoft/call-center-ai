@@ -10,7 +10,7 @@
     <div class="grid grid-cols-6 gap-4 m-4">
       <!-- Top introduction -->
       <div class="col-span-full px-4 py-8">
-        <h2 class="text-2xl">Hello {{ call.claim.policyholder_name }} 👋🏻</h2>
+        <h2 class="text-2xl">Hello {{ call.claim.policyholder_name | title }} 👋🏻</h2>
         <p>Your claim <span class="font-mono">#{{ call.claim.claim_id }}</span> of the {{ call.claim.created_at.strftime('%d %b %Y') }} is being processed.</p>
       </div>
 
@@ -40,7 +40,7 @@
               </tr>
               <tr class="border-b border-slate-100">
                 <td class="p-4 text-gray-500">Contact info</td>
-                <td class="p-4">{{ call.claim.policyholder_email }}, {{ call.claim.policyholder_phone }}</td>
+                <td class="p-4">{{ call.claim.policyholder_email | lower }}, {{ call.claim.policyholder_phone }}</td>
               </tr>
             </tbody>
           </table>
@@ -76,7 +76,7 @@
               <div class="basis-full space-y-2 px-4 py-0.5">
                 <div class="flex flex-row justify-between content-center text-xs">
                   <div>
-                    {{ name }}&nbsp;<span class="text-gray-500">commented</span>
+                    {{ name | title }}&nbsp;<span class="text-gray-500">commented</span>
                   </div>
                   <div class="text-gray-500">
                     {{ message.created_at.strftime('%d %b %Y') }}
@@ -107,9 +107,9 @@
             {% for reminder in call.reminders %}
             <div>
               <div class="text-xs">
-                {{ reminder.owner }}&nbsp;<span class="text-gray-500">({{ reminder.due_date_time }})</span>
+                {{ reminder.owner | title }}&nbsp;<span class="text-gray-500">({{ reminder.due_date_time }})</span>
               </div>
-              <p class="text-gray-500">{{ reminder.title }}</p>
+              <p class="text-gray-500">{{ reminder.title | capitalize }}</p>
             </div>
             {% endfor %}
           </div>
