@@ -164,11 +164,6 @@ openai:
   endpoint: https://xxx.openai.azure.com
   gpt_deployment: gpt-4-turbo
   gpt_model: gpt-4-1106-preview
-
-eventgrid:
-  resource_group: claim-ai-poc
-  subscription_id: xxx
-  system_topic: claim-ai-poc
 ```
 
 If you want to use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:

@@ -1,11 +1,10 @@
 param config string
 param imageVersion string
-param instance string = deployment().name
-param location string = resourceGroup().location
+param location string
 param openaiLocation string
 param tags object
 
-var prefix = instance
+var prefix = deployment().name
 var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
 
 output appUrl string = appUrl
