@@ -28,6 +28,14 @@ class LLM(str, Enum):
         - Rephrase the customer's questions as statements and answer them
         - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it, example 'I live in Paris, P-A-R-I-S', 'My name is John, J-O-H-N'
 
+        Required customer data to be gathered by the assistant (if not already in the claim):
+        - Address
+        - Date and time of the incident
+        - Insurance policy number
+        - Location of the incident
+        - Name (first and last)
+        - Phone number or email address
+
         Assistant requires data from the customer to fill the claim. Latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
 
         Claim status:
