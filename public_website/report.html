@@ -6,8 +6,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <title>Déclaration de sinistre {{ call.claim.claim_id }}</title>
   </head>
-  <body class="container mx-auto lg:p-8 bg-white text-sm">
+  <body class="container mx-auto lg:p-8 text-black dark:text-white bg-white dark:bg-neutral-900 text-sm">
+
+    <!-- Main content -->
     <div class="flex flex-col lg:grid lg:grid-cols-6 gap-4">
+
       <!-- Top introduction -->
       <div class="col-span-full my-8 px-4">
         <h1>Bonjour {{ call.claim.policyholder_name | title }} 👋🏻</h1>
@@ -16,15 +19,15 @@
 
       <!-- Long synthesis -->
       <div class="col-span-full mb-8">
-        <div class="rounded-md lg:shadow-xl lg:ring-1 ring-gray-200/60 p-4 space-y-4">
+        <div class="rounded-md lg:shadow-xl dark:shadow-none dark:lg:bg-neutral-700/25 lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
           <h2 class="text-lg">✏️ Synthèse</h2>
           <p>{{ call.synthesis.long }}</p>
         </div>
       </div>
 
       <!-- Conversation -->
-      <div class="col-start-1 col-end-5">
-        <div class="p-4 space-y-4 rounded-md lg:ring-1 ring-gray-200/60">
+      <div class="col-start-1 col-end-5 order-last lg:order-none">
+        <div class="p-4 space-y-4 rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
           <h2 class="text-lg">💬 Conversation</h2>
 
           <!-- Agent and customer -->
@@ -34,16 +37,16 @@
             <div class="flex flex-row">
               <div class="basis-6 relative self-stretch">
                 <div class="absolute top-0 left-0 w-full h-full -z-10">
-                  <div class="h-screen mx-auto w-0.5 bg-gray-100"></div>
+                  <div class="h-screen mx-auto w-0.5 bg-neutral-200/60 dark:bg-neutral-800/60"></div>
                 </div>
-                <div class="py-1.5 bg-white">
+                <div class="py-1.5 bg-white dark:bg-neutral-900">
                   {% if message.persona == 'assistant' %}
                   <div
-                    class="rounded-full h-2 w-2 mx-auto bg-gray-100 ring-1 ring-gray-300"
+                    class="rounded-full h-2 w-2 mx-auto bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700"
                   ></div>
                   {% else %}
                   <div
-                    class="rounded-full h-2 w-2 mx-auto bg-blue-200 ring-1 ring-blue-400"
+                    class="rounded-full h-2 w-2 mx-auto bg-blue-200 dark:bg-blue-800 ring-1 ring-blue-400 dark:ring-blue-600"
                   ></div>
                   {% endif %}
                 </div>
@@ -52,7 +55,7 @@
                 <div class="flex flex-row justify-between content-center text-xs">
                   <div>
                     {{ name | title }}
-                    <span class="text-gray-500">
+                    <span class="text-neutral-600 dark:text-neutral-400">
                       {% if message.action == 'call' %}
                       a appelé
                       {% elif message.action == 'hangup' %}
@@ -64,17 +67,17 @@
                       {% endif %}
                     </span>
                   </div>
-                  <div class="text-gray-500">
+                  <div class="text-neutral-600 dark:text-neutral-400">
                     {{ message.created_at.strftime('%d %b %Y %H:%M') }}
                   </div>
                 </div>
                 {% if message.content %}
-                <p class="text-gray-500">{{ message.content }}</p>
+                <p class="text-neutral-600 dark:text-neutral-400">{{ message.content }}</p>
                 {% endif %}
               </div>
             </div>
             {% else %}
-            <p class="text-gray-500">No messages yet.</p>
+            <p class="text-neutral-600 dark:text-neutral-400">No messages yet.</p>
             {% endfor %}
           </div>
 
@@ -84,20 +87,20 @@
 
       <div class="col-start-5 col-end-7 space-y-4">
         <!-- Reminders -->
-        <div class="rounded-md lg:ring-1 ring-gray-200/60 p-4">
+        <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4">
           <h2 class="text-lg pb-4">⏰ Rappels</h2>
 
           {% if not call.reminders %}
-          <p class="text-gray-500">Aucun rappel pour l'instant.</p>
+          <p class="text-neutral-600 dark:text-neutral-400">Aucun rappel pour l'instant.</p>
           {% else %}
           <div class="space-y-6">
             <!-- TODO: Sort reminders by due date -->
             {% for reminder in call.reminders %}
             <div>
               <div class="text-xs">
-                {{ reminder.owner | title }}&nbsp;<span class="text-gray-500">({{ reminder.due_date_time }})</span>
+                {{ reminder.owner | title }}&nbsp;<span class="text-neutral-600 dark:text-neutral-400">({{ reminder.due_date_time }})</span>
               </div>
-              <p class="text-gray-500">{{ reminder.title | capitalize }}</p>
+              <p class="text-neutral-600 dark:text-neutral-400">{{ reminder.title | capitalize }}</p>
             </div>
             {% endfor %}
           </div>
@@ -105,32 +108,51 @@
         </div>
 
         <!-- Details -->
-        <div class="rounded-md lg:ring-1 ring-gray-200/60">
+        <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
           <h2 class="text-lg px-4 pt-4">🔎 Détails</h2>
           <table class="table-auto w-full">
             <tbody>
-              <tr class="border-b border-slate-100">
-                <td class="p-4 text-gray-500">Date</td>
-                <!-- TODO: Try to parse the date and display it in a human readable format -->
-                <td class="p-4">
-                  {{ call.claim.incident_location }}, {{ call.claim.incident_date_time }}
-                </td>
+              {%
+                set details = [
+                  {
+                    'title': 'Date',
+                    'value': call.claim.incident_date_time
+                  },
+                  {
+                    'title': 'Location',
+                    'value': call.claim.incident_location
+                  },
+                  {
+                    'title': 'Police',
+                    'value': call.claim.policy_number
+                  },
+                  {
+                    'title': 'Contact',
+                    'value': call.claim.policyholder_email | lower ~ ', ' ~ call.claim.policyholder_phone
+                  }
+                ]
+              %}
+              <!-- Disable shadow to avoid overlapping with the table border -->
+              {% for detail in details %}
+              <tr {% if not loop.last %}class="border-b border-neutral-200/60 dark:border-neutral-700/60"{% endif %}>
+                <td class="p-4 text-neutral-600 dark:text-neutral-400">{{ detail.title }}</td>
+                <td class="p-4">{{ detail.value }}</td>
               </tr>
-              <tr class="border-b border-slate-100">
-                <td class="p-4 text-gray-500">Police</td>
-                <td class="p-4">
-                  {{ call.claim.policy_number }}
-                </td>
-              </tr>
-              <tr class="border-b border-slate-100">
-                <td class="p-4 text-gray-500">Contact</td>
-                <td class="p-4">
-                  {{ call.claim.policyholder_email | lower }}, {{ call.claim.policyholder_phone }}
-                </td>
-              </tr>
+              {% endfor %}
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="my-16 space-y-2 text-center">
+      <p>
+        Call center claim AI phone bot<br>
+        v{{ version }}
+      </p>
+      <div>
+        <a class="underline text-neutral-600 dark:text-neutral-400" href="https://github.com/clemlesne/claim-ai-phone-bot">Created with ❤️ on GitHub</a>
       </div>
     </div>
   </body>
