@@ -133,6 +133,10 @@
                   {
                     'title': 'Contact',
                     'value': call.claim.policyholder_email | lower ~ ', ' ~ call.claim.policyholder_phone
+                  },
+                  {
+                    'title': 'Téléphone utilisé',
+                    'value': call.phone_number
                   }
                 ]
               %}
