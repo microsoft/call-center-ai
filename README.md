@@ -138,11 +138,6 @@ database:
   #   endpoint: https://xxx.documents.azure.com:443
   sqlite: {}
 
-monitoring:
-  logging:
-    app_level: INFO
-    sys_level: WARN
-
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 

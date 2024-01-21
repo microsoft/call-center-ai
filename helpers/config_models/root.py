@@ -19,7 +19,9 @@ class RootModel(BaseSettings, env_prefix=""):
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
     database: DatabaseModel
-    monitoring: MonitoringModel
+    monitoring: MonitoringModel = (
+        MonitoringModel()
+    )  # Object is fully defined by default
     openai: OpenAiModel
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel
