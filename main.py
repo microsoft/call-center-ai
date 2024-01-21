@@ -140,6 +140,7 @@ async def call_report_get(call_id: UUID) -> HTMLResponse:
     render = await template.render_async(
         bot_company=CONFIG.workflow.bot_company,
         bot_name=CONFIG.workflow.bot_name,
+        version=CONFIG.version,
         call=call,
     )
     return HTMLResponse(content=render)
