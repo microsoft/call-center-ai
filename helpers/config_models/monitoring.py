@@ -18,4 +18,6 @@ class LoggingMonitoringModel(BaseSettings, env_prefix="monitoring_logging_"):
 
 
 class MonitoringModel(BaseSettings, env_prefix="monitoring_"):
-    logging: LoggingMonitoringModel
+    logging: LoggingMonitoringModel = (
+        LoggingMonitoringModel()
+    )  # Object is fully defined by default
