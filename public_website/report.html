@@ -21,7 +21,11 @@
       <div class="col-span-full mb-8">
         <div class="rounded-md lg:shadow-xl dark:shadow-none dark:lg:bg-neutral-700/25 lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
           <h2 class="text-lg">✏️ Synthèse</h2>
+          {% if not call.synthesis.long %}
+          <p class="text-neutral-600 dark:text-neutral-400">Aucune synthèse pour l'instant.</p>
+          {% else %}
           <p>{{ call.synthesis.long }}</p>
+          {% endif %}
         </div>
       </div>
 
@@ -77,7 +81,7 @@
               </div>
             </div>
             {% else %}
-            <p class="text-neutral-600 dark:text-neutral-400">No messages yet.</p>
+            <p class="text-neutral-600 dark:text-neutral-400">Aucun message pour l'instant.</p>
             {% endfor %}
           </div>
 
@@ -119,7 +123,7 @@
                     'value': call.claim.incident_date_time
                   },
                   {
-                    'title': 'Location',
+                    'title': 'Localisation',
                     'value': call.claim.incident_location
                   },
                   {
