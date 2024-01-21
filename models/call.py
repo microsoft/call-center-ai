@@ -9,9 +9,11 @@ from uuid import UUID, uuid4
 
 
 class CallModel(BaseModel):
+    # Immutable fields
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
-    claim: ClaimModel = Field(default_factory=ClaimModel)
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    # Editable fields
+    claim: ClaimModel = Field(default_factory=ClaimModel)
     messages: List[MessageModel] = []
     phone_number: str
     recognition_retry: int = Field(default=0)

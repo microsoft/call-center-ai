@@ -12,6 +12,9 @@ from pydantic_settings import BaseSettings
 
 
 class RootModel(BaseSettings, env_prefix=""):
+    # Immutable fields
+    version: str = Field(frozen=True)
+    # Editable fields
     api: ApiModel
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
@@ -20,5 +23,4 @@ class RootModel(BaseSettings, env_prefix=""):
     openai: OpenAiModel
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel
-    version: str = Field(frozen=True)
     workflow: WorkflowModel

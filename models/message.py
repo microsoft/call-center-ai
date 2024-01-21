@@ -25,8 +25,10 @@ class ToolModel(BaseModel):
 
 
 class MessageModel(BaseModel):
+    # Immutable fields
+    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    # Editable fields
     action: Action = Action.TALK
     content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
     persona: Persona
     tool_calls: List[ToolModel] = []
