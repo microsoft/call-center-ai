@@ -18,15 +18,12 @@ from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from datetime import datetime
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config import CONFIG
 from helpers.config_models.database import Mode as DatabaseMode
 from helpers.logging import build_logger
-from helpers.prompts import LLM as LLMPrompt, TTS as TTSPrompt, Sounds as SoundPrompt
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
@@ -220,10 +217,14 @@ async def call_event_post(
     request: Request, background_tasks: BackgroundTasks, phone_number: str
 ) -> None:
     for event_dict in await request.json():
-        background_tasks.add_task(communication_event_worker, event_dict, phone_number)
+        background_tasks.add_task(
+            communication_event_worker, background_tasks, event_dict, phone_number
+        )
 
 
-async def communication_event_worker(event_dict: dict, phone_number: str) -> None:
+async def communication_event_worker(
+    background_tasks: BackgroundTasks, event_dict: dict, phone_number: str
+) -> None:
     call = await db.call_asearch_one(phone_number)
     if not call:
         _logger.warn(f"Call with {phone_number} not found")
@@ -254,18 +255,16 @@ async def communication_event_worker(event_dict: dict, phone_number: str) -> Non
 
         if len(call.messages) == 1:  # First call
             await handle_recognize_text(
-                call=call,
-                client=client,
-                text=TTSPrompt.HELLO,
+                call=call, client=client, text=CONFIG.prompts.tts.hello()
             )
 
         else:  # Returning call
             await handle_play(
                 call=call,
                 client=client,
-                text=TTSPrompt.WELCOME_BACK,
+                text=CONFIG.prompts.tts.welcome_back(),
             )
-            call = await intelligence(call, client)
+            call = await intelligence(background_tasks, call, client)
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         _logger.info(f"Call disconnected ({call.call_id})")
@@ -282,7 +281,7 @@ async def communication_event_worker(event_dict: dict, phone_number: str) -> Non
                 call.messages.append(
                     MessageModel(content=speech_text, persona=MessagePersona.HUMAN)
                 )
-                call = await intelligence(call, client)
+                call = await intelligence(background_tasks, call, client)
 
     elif (
         event_type == "Microsoft.Communication.RecognizeFailed"
@@ -301,7 +300,7 @@ async def communication_event_worker(event_dict: dict, phone_number: str) -> Non
             await handle_recognize_text(
                 call=call,
                 client=client,
-                text=TTSPrompt.TIMEOUT_SILENCE,
+                text=CONFIG.prompts.tts.timeout_silence(),
             )
             call.recognition_retry += 1
 
@@ -310,7 +309,7 @@ async def communication_event_worker(event_dict: dict, phone_number: str) -> Non
                 call=call,
                 client=client,
                 context=Context.GOODBYE,
-                text=TTSPrompt.GOODBYE,
+                text=CONFIG.prompts.tts.goodbye(),
             )
 
     elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
@@ -363,19 +362,21 @@ async def communication_event_worker(event_dict: dict, phone_number: str) -> Non
             call=call,
             client=client,
             context=Context.TRANSFER_FAILED,
-            text=TTSPrompt.CALLTRANSFER_FAILURE,
+            text=CONFIG.prompts.tts.calltransfer_failure(),
         )
 
     await db.call_aset(call)
 
 
-async def intelligence(call: CallModel, client: CallConnectionClient) -> CallModel:
+async def intelligence(
+    background_tasks: BackgroundTasks, call: CallModel, client: CallConnectionClient
+) -> CallModel:
     """
     Handle the intelligence of the call, including: GPT chat, GPT completion, TTS, and media play.
 
     Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after 15 seconds, play the timeout sound. If the intelligence is not processed after 30 seconds, stop the intelligence processing and play the error sound.
     """
-    chat_task = asyncio.create_task(gpt_chat(call))
+    chat_task = asyncio.create_task(gpt_chat(background_tasks, call))
     soft_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
     )
@@ -392,7 +393,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> CallMod
             await handle_media(
                 call=call,
                 client=client,
-                sound=SoundPrompt.LOADING,
+                sound_url=CONFIG.prompts.sounds.loading(),
             )
             # Break when chat coroutine is done
             if chat_task.done():
@@ -420,7 +421,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> CallMod
                 await handle_play(
                     call=call,
                     client=client,
-                    text=TTSPrompt.TIMEOUT_LOADING,
+                    text=CONFIG.prompts.tts.timeout_loading(),
                 )
             # Wait to not block the event loop and play too many sounds
             await asyncio.sleep(5)
@@ -432,7 +433,9 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> CallMod
         _logger.debug(
             f"Error loading intelligence ({call.call_id}), answering with default error"
         )
-        chat_action = ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE)
+        chat_action = ActionModel(
+            content=CONFIG.prompts.tts.error(), intent=IndentAction.CONTINUE
+        )
 
     _logger.info(f"Chat ({call.call_id}): {chat_action}")
 
@@ -441,7 +444,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> CallMod
             call=call,
             client=client,
             context=Context.CONNECT_AGENT,
-            text=TTSPrompt.END_CALL_TO_CONNECT_AGENT,
+            text=CONFIG.prompts.tts.end_call_to_connect_agent(),
         )
 
     elif chat_action.intent == IndentAction.END_CALL:
@@ -449,7 +452,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> CallMod
             call=call,
             client=client,
             context=Context.GOODBYE,
-            text=TTSPrompt.GOODBYE,
+            text=CONFIG.prompts.tts.goodbye(),
         )
 
     elif chat_action.intent in (
@@ -467,7 +470,7 @@ async def intelligence(call: CallModel, client: CallConnectionClient) -> CallMod
             text=chat_action.content,
         )
         # Recursively call intelligence to continue the conversation
-        call = await intelligence(call, client)
+        call = await intelligence(background_tasks, call, client)
 
     else:
         await handle_recognize_text(
@@ -522,23 +525,18 @@ async def handle_play(
         _logger.debug(f"Call hung up before playing ({call.call_id})")
 
 
-async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
+async def gpt_completion(system: str, call: CallModel) -> str:
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
     messages = [
         {
-            "content": LLMPrompt.DEFAULT_SYSTEM.format(
-                date=datetime.now().strftime("%A %d %B %Y %H:%M:%S"),
+            "content": CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
             "role": "system",
         },
         {
-            "content": system.format(
-                claim=json.dumps(jsonable_encoder(call.claim)),
-                conversation=json.dumps(jsonable_encoder(call.messages)),
-                reminders=json.dumps(jsonable_encoder(call.reminders)),
-            ),
+            "content": system,
             "role": "system",
         },
     ]
@@ -560,21 +558,22 @@ async def gpt_completion(system: LLMPrompt, call: CallModel) -> str:
     return content or ""
 
 
-async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
+async def gpt_chat(
+    background_tasks: BackgroundTasks, call: CallModel
+) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
 
     messages = [
         {
-            "content": LLMPrompt.DEFAULT_SYSTEM.format(
-                date=datetime.now().strftime("%A %d %B %Y %H:%M:%S"),
+            "content": CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
             "role": "system",
         },
         {
-            "content": LLMPrompt.CHAT_SYSTEM.format(
-                claim=json.dumps(jsonable_encoder(call.claim)),
-                reminders=json.dumps(jsonable_encoder(call.reminders)),
+            "content": CONFIG.prompts.llm.chat_system(
+                claim=call.claim,
+                reminders=call.reminders,
             ),
             "role": "system",
         },
@@ -652,7 +651,7 @@ async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to create a new claim. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Do not use this action twice in a row. Example: 'I want to create a new claim'.",
+                "description": "Use this if the user wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
                 "name": IndentAction.NEW_CLAIM.value,
                 "parameters": {
                     "properties": {
@@ -785,7 +784,13 @@ async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
 
                 elif name == IndentAction.UPDATED_CLAIM.value:
                     intent = IndentAction.UPDATED_CLAIM
-                    parameters = json.loads(arguments)
+                    try:
+                        parameters = json.loads(arguments)
+                    except Exception:
+                        _logger.warn(
+                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                        )
+                        continue
 
                     if not customer_response_prop in parameters:
                         _logger.warn(
@@ -804,7 +809,13 @@ async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
 
                 elif name == IndentAction.NEW_CLAIM.value:
                     intent = IndentAction.NEW_CLAIM
-                    parameters = json.loads(arguments)
+                    try:
+                        parameters = json.loads(arguments)
+                    except Exception:
+                        _logger.warn(
+                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                        )
+                        continue
 
                     if not customer_response_prop in parameters:
                         _logger.warn(
@@ -812,6 +823,9 @@ async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
                         )
                     else:
                         content += parameters[customer_response_prop] + " "
+
+                    # Generate synthesis for the old claim
+                    background_tasks.add_task(post_call_synthesis, call)
 
                     # Add context of the last message, if not, LLM messed up and loop on this action
                     last_message = call.messages[-1]
@@ -821,7 +835,13 @@ async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
 
                 elif name == IndentAction.NEW_OR_UPDATED_REMINDER.value:
                     intent = IndentAction.NEW_OR_UPDATED_REMINDER
-                    parameters = json.loads(arguments)
+                    try:
+                        parameters = json.loads(arguments)
+                    except Exception:
+                        _logger.warn(
+                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                        )
+                        continue
 
                     if not customer_response_prop in parameters:
                         _logger.warn(
@@ -876,7 +896,7 @@ async def gpt_chat(call: CallModel) -> Tuple[CallModel, ActionModel]:
 
     return (
         call,
-        ActionModel(content=TTSPrompt.ERROR, intent=IndentAction.CONTINUE),
+        ActionModel(content=CONFIG.prompts.tts.error(), intent=IndentAction.CONTINUE),
     )
 
 
@@ -902,14 +922,14 @@ async def handle_recognize_text(
     await handle_recognize_media(
         call=call,
         client=client,
-        sound=SoundPrompt.READY,
+        sound_url=CONFIG.prompts.sounds.ready(),
     )
 
 
 async def handle_recognize_media(
     client: CallConnectionClient,
     call: CallModel,
-    sound: SoundPrompt,
+    sound_url: str,
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
@@ -920,7 +940,7 @@ async def handle_recognize_media(
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
-            play_prompt=FileSource(url=sound),
+            play_prompt=FileSource(url=sound_url),
             speech_language=CONFIG.workflow.conversation_lang,
             target_participant=PhoneNumberIdentifier(call.phone_number),
         )
@@ -931,13 +951,13 @@ async def handle_recognize_media(
 async def handle_media(
     client: CallConnectionClient,
     call: CallModel,
-    sound: SoundPrompt,
+    sound_url: str,
     context: Optional[str] = None,
 ) -> None:
     try:
         client.play_media(
             operation_context=context,
-            play_source=FileSource(url=sound),
+            play_source=FileSource(url=sound_url),
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
@@ -969,7 +989,12 @@ async def post_call_sms(call: CallModel) -> None:
     """
     Send an SMS report to the customer.
     """
-    content = await gpt_completion(LLMPrompt.SMS_SUMMARY_SYSTEM, call)
+    content = await gpt_completion(
+        CONFIG.prompts.llm.sms_summary_system(
+            call.claim, call.messages, call.reminders
+        ),
+        call,
+    )
     _logger.info(f"SMS report ({call.call_id}): {content}")
 
     try:
@@ -1040,8 +1065,18 @@ async def post_call_synthesis(call: CallModel) -> None:
     _logger.debug(f"Synthesizing call ({call.call_id})")
 
     short, long = await asyncio.gather(
-        gpt_completion(LLMPrompt.SYNTHESIS_SHORT_SYSTEM, call),
-        gpt_completion(LLMPrompt.SYNTHESIS_LONG_SYSTEM, call),
+        gpt_completion(
+            CONFIG.prompts.llm.synthesis_short_system(
+                call.claim, call.messages, call.reminders
+            ),
+            call,
+        ),
+        gpt_completion(
+            CONFIG.prompts.llm.synthesis_long_system(
+                call.claim, call.messages, call.reminders
+            ),
+            call,
+        ),
     )
     _logger.info(f"Short synthesis ({call.call_id}): {short}")
     _logger.info(f"Long synthesis ({call.call_id}): {long}")
@@ -1050,3 +1085,4 @@ async def post_call_synthesis(call: CallModel) -> None:
         long=long,
         short=short,
     )
+    await db.call_aset(call)
