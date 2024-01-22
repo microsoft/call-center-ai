@@ -94,6 +94,9 @@ deploy:
 		--template-file bicep/main.bicep \
 	 	--name $(name)
 
+	$(MAKE) copy-resources \
+		name=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
+
 	$(MAKE) eventgrid-register \
 		endpoint=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value') \
 		name=$(name) \
@@ -129,6 +132,16 @@ eventgrid-register:
 		--max-delivery-attempts 8 \
 		--name $(name) \
 		--source-resource-id $(source)
+
+copy-resources:
+	@echo "📦 Copying resources to Azure storage account..."
+	az storage blob upload-batch \
+		--account-name $(name) \
+		--destination '$$web' \
+		--no-progress \
+		--output none \
+		--overwrite \
+		--source resources
 
 watch-call:
 	@echo "👀 Watching status of $(phone_number)..."

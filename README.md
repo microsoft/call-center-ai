@@ -177,9 +177,9 @@ Then run:
 make install
 ```
 
-Also, a public file server is needed to host the audio files.
+Also, a public file server is needed to host the audio files. Upload the files with `make copy-resources name=myinstance` (`myinstance` is the storage account name), or manually.
 
-For this, you can use Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account. This folder contains:
+For your knowledge, this `resources` folder contains:
 
 - Audio files (`xxx.wav`) to be played during the call
 - [Lexicon file (`lexicon.xml`)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon) to be used by the bot to understand the company products (note: any change [makes up to 15 minutes](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon-file) to be taken into account)
