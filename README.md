@@ -145,7 +145,7 @@ workflow:
   bot_company: Contoso
   bot_name: Robert
 
-communication_service_call:
+communication_service:
   access_key: xxx
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
