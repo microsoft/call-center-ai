@@ -3,7 +3,7 @@ param adaVersion string = '2'
 param config string
 param gptModel string = 'gpt-4'
 param gptVersion string = '1106-Preview'
-param imageVersion string = 'develop'
+param imageVersion string = 'main'
 param instance string = deployment().name
 param location string = 'westeurope'
 param openaiLocation string = 'swedencentral'
