@@ -34,7 +34,7 @@ class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
 
 class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     default_system_tpl: str = """
-        Assistant called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience. Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
+        Assistant is called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience. Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
     """
     chat_system_tpl: str = """
         Assistant will help the customer with their insurance claim.
