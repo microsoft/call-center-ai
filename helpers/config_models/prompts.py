@@ -34,7 +34,7 @@ class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
 
 class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     default_system_tpl: str = """
-        Assistant called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience. Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
+        Assistant is called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience. Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
     """
     chat_system_tpl: str = """
         Assistant will help the customer with their insurance claim.
@@ -45,13 +45,15 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Be proactive in the reminders you create, customer assistance is your priority
         - Cannot talk about any topic other than insurance claims
         - Do not ask the customer more than 2 questions in a row
+        - Do not have access to the customer history or information, only the current claim data, conversation history, and reminders
         - Each conversation message is prefixed with the the action ({actions}), it adds context to the message, never add it in your answer
         - If user called multiple times, continue the discussion from the previous call
         - Is allowed to make assumptions, as the customer will correct them if they are wrong
         - Is polite, helpful, and professional
         - Keep the sentences short and simple
         - Rephrase the customer's questions as statements and answer them
-        - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris, P-A-R-I-S", "My name is John, J-O-H-N")
+        - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris PARIS", "My name is John JOHN", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM")
+        - You work for {bot_company}, not someone else
 
         Required customer data to be gathered by the assistant (if not already in the claim):
         - Address
@@ -89,6 +91,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Include salutations (e.g. "Have a nice day", "Best regards", "Best wishes for recovery")
         - Is polite, helpful, and professional
         - Refer to the customer by their name, if known
+        - Update the claim as soon as possible with the information gathered
         - Use simple and short sentences
         - Won't make any assumptions
 
@@ -168,6 +171,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
 
         return self.chat_system_tpl.format(
             actions=", ".join([action.value for action in MessageAction]),
+            bot_company=CONFIG.workflow.bot_company,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
             reminders=_pydantic_to_str(reminders),
@@ -229,7 +233,17 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
         "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
     )
     goodbye_tpl: str = "Merci de votre appel, j'espère avoir pu vous aider. N'hésitez pas à rappeler, j'ai tout mémorisé. {bot_company} vous souhaite une excellente journée !"
-    hello_tpl: str = "Bonjour, je suis {bot_name}, l'assistant {bot_company} ! Je suis spécialiste des sinistres. Je ne peux pas travailler et écouter en même temps. Voici comment je fonctionne  : lorsque je travaillerai, vous entendrez une petite musique ; après, au bip, ce sera à votre tour de parler. Vous pouvez me parler comme à un humain, je comprendrai la conversation. Je suis là pour vous aider. Quel est l'objet de votre appel ?"
+    hello_tpl: str = """
+        Bonjour, je suis {bot_name}, l'assistant {bot_company} ! Je suis spécialiste des sinistres. Je ne peux pas travailler et écouter en même temps.
+
+        Voici comment je fonctionne : lorsque je travaillerai, vous entendrez une petite musique ; après, au bip, ce sera à votre tour de parler. Vous pouvez me parler naturellement, je comprendrai.
+
+        Exemples:
+        - "Je suis tombé de vélo hier, je me suis cassé le bras, ma voisine m'a emmené à l'hôpital"
+        - "J'ai eu un accident ce matin, je faisais des courses"
+
+        Quel est votre problème ?
+"""
     timeout_silence_tpl: str = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
     welcome_back_tpl: str = "Bonjour, je suis {bot_name}, l'assistant {bot_company} ! Je vois que vous avez déjà appelé il y a moins de {conversation_timeout_hour} heures. Laissez-moi quelques secondes pour récupérer votre dossier..."
     timeout_loading_tpl: str = (

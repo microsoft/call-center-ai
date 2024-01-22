@@ -6,8 +6,6 @@ AI-powered call center solution with Azure and OpenAI GPT.
 [![Last release date](https://img.shields.io/github/release-date/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/releases)
 [![Project license](https://img.shields.io/github/license/clemlesne/claim-ai-phone-bot)](https://github.com/clemlesne/claim-ai-phone-bot/blob/main/LICENSE)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fclemlesne%2Fclaim-ai-phone-bot%2Fmain%2Fbicep%2Fmain.bicep)
-
 ## Overview
 
 A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
@@ -51,6 +49,7 @@ Extract of the data stored during the call:
 - [x] Bot can be called from a phone number
 - [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
 - [x] Create by itself a todo list of tasks to complete the claim
+- [x] Customizable prompts
 - [x] Disengaging from a human agent when needed
 - [x] Fine understanding of the customer request with GPT-4 Turbo
 - [x] Follow a specific data schema for the claim
@@ -96,27 +95,27 @@ graph LR
 
   subgraph "Claim AI"
     api["API"]
-    communication_service_call["Call gateway\n(Communication Services)"]
+    communication_service["Call gateway\n(Communication Services)"]
     communication_service_sms["SMS gateway\n(Communication Services)"]
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
   end
 
-  api -- Answer with text --> communication_service_call
+  api -- Answer with text --> communication_service
   api -- Generate completion --> gpt
   api -- Save conversation --> db
   api -- Send SMS report --> communication_service_sms
-  api -- Transfer to agent --> communication_service_call
+  api -- Transfer to agent --> communication_service
   api -. Watch .-> event_grid
 
-  communication_service_call -- Notifies --> event_grid
-  communication_service_call -- Transfer to --> agent
-  communication_service_call -. Send voice .-> user
+  communication_service -- Notifies --> event_grid
+  communication_service -- Transfer to --> agent
+  communication_service -. Send voice .-> user
 
   communication_service_sms -- Send SMS --> user
 
-  user -- Call --> communication_service_call
+  user -- Call --> communication_service
 ```
 
 ## Local installation
@@ -146,7 +145,7 @@ workflow:
   bot_company: Contoso
   bot_name: Robert
 
-communication_service_call:
+communication_service:
   access_key: xxx
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
@@ -178,9 +177,9 @@ Then run:
 make install
 ```
 
-Also, a public file server is needed to host the audio files.
+Also, a public file server is needed to host the audio files. Upload the files with `make copy-resources name=myinstance` (`myinstance` is the storage account name), or manually.
 
-For this, you can use Blob Storage. In that case, content of the project folder `resources` requires to be uploaded to the public container `$web` of the storage account. This folder contains:
+For your knowledge, this `resources` folder contains:
 
 - Audio files (`xxx.wav`) to be played during the call
 - [Lexicon file (`lexicon.xml`)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon) to be used by the bot to understand the company products (note: any change [makes up to 15 minutes](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon-file) to be taken into account)
@@ -206,11 +205,129 @@ Container is available on GitHub Actions, at:
 - Latest version from a branch: `ghcr.io/clemlesne/claim-ai-phone-bot:main`
 - Specific tag: `ghcr.io/clemlesne/claim-ai-phone-bot:0.1.0` (recommended)
 
+Create a local `config.yaml` file (most of the fields are filled automatically by the deployment script):
+
+```yaml
+# config.yaml
+api: {}
+
+database:
+  cosmos_db: {}
+
+resources: {}
+
+workflow:
+  agent_phone_number: "+33612345678"
+  bot_company: Contoso
+  bot_name: Robert
+
+communication_service:
+  phone_number: "+33612345678"
+  voice_name: fr-FR-DeniseNeural
+
+cognitive_service:
+  endpoint: https://xxx.cognitiveservices.azure.com
+
+openai: {}
+```
+
 Steps to deploy:
 
-1. Create an Communication Services resource with a phone number
-2. Create a local `config.yaml` file (be sure to use the phone number previously created)
-3. Connect to (for example `az login`)
+1. Create an `Communication Services` resource plus a `Phone Number`
+2. Create the local `config.yaml`
+3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish
 6. Get the logs with `make logs name=my-instance`
+
+## Advanced usage
+
+### Customize the prompts
+
+Note that prompt examples contains `{xxx}` placeholders. These placeholders are replaced by the bot with the corresponding data. For example, `{bot_name}` is internally replaced by the bot name.
+
+```yaml
+# config.yaml
+[...]
+
+prompts:
+  tts:
+    hello_tpl: |
+      Bonjour, je suis {bot_name}, de {bot_company} ! Je suis spécialiste du support informatique.
+
+      Voici comment je fonctionne : lorsque je travaillerai, vous entendrez une petite musique ; après, au bip, ce sera à votre tour de parler. Vous pouvez me parler naturellement, je comprendrai.
+
+      Exemples:
+      - "J'ai un problème avec mon ordinateur, il ne s'allume plus"
+      - "L'écran externe clignote, je ne sais pas pourquoi"
+
+      Quel est votre problème ?
+  llm:
+    default_system_tpl: |
+      Assistant is called {bot_name} and is in a call center for the company {bot_company} as an expert with 20 years of experience in IT service. Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
+    chat_system_tpl: |
+      Assistant will provide internal IT support to employees.
+
+      Assistant:
+      - Answers in {conversation_lang}, even if the employee speaks in a different language
+      - Ask the employee to repeat or rephrase their question if it is not clear
+      - Be proactive in the reminders you create, employee assistance is your priority
+      - Cannot talk about any topic other than IT support
+      - Do not ask the employee more than 2 questions in a row
+      - Do not have access to the employee's personal information, only the current IT support data, conversation history, and reminders
+      - Each conversation message is prefixed with the action ({actions}), it adds context to the message, never add it in your answer
+      - If employee contacted multiple times, continue the discussion from the previous contact
+      - Is allowed to make assumptions, as the employee will correct them if they are wrong
+      - Is polite, helpful, and professional
+      - Keep the sentences short and simple
+      - Rephrase the employee's questions as statements and answer them
+      - When the employee says a word and then spells out letters, this means that the word is written in the way the employee spelled it (e.g. "I work in Paris PARIS", "My name is John JOHN", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM")
+      - You work for {bot_company}, not someone else
+
+      Required employee data to be gathered by the assistant:
+      - Employee name
+      - Department
+      - Location
+      - Description of the IT issue or request
+
+      General process to follow:
+      1. Gather information to know the employee's identity (e.g. name, department)
+      2. Gather details about the IT issue or request to understand the situation (e.g. description, location)
+      3. Provide initial troubleshooting steps or solutions
+      4. Gather additional information if needed (e.g. error messages, screenshots)
+      5. Be proactive and create reminders for follow-up or further assistance
+
+      Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
+
+      Support status:
+      {claim}
+
+      Reminders:
+      {reminders}
+```
+
+### Customize the claim data schema
+
+Customization of the data schema is not supported yet through the configuration file. However, you can customize the data schema by modifying the application source code.
+
+The data schema is defined in `models/claim.py`. All the fields are required to be of type `Optional[str]` (except the immutable fields).
+
+```python
+# models/claim.py
+class ClaimModel(BaseModel):
+    # Immutable fields
+    [...]
+    # Editable fields
+    employee_department: Optional[str] = None
+    employee_email: Optional[str] = None
+    employee_location: Optional[str] = None
+    employee_name: Optional[str] = None
+    employee_phone_number: Optional[str] = None
+    issue_business_impact: Optional[str] = None
+    issue_date_time: Optional[str] = None
+    issue_description: Optional[str] = None
+    issue_error_messages: Optional[str] = None
+    issue_reproduction_steps: Optional[str] = None
+
+    # Built-in functions
+    [...]

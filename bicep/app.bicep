@@ -11,6 +11,7 @@ var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 
 output appUrl string = appUrl
+output blobStoragePublicName string = storageAccount.name
 output communicationId string = communication.id
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -92,6 +93,30 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             {
               name: 'DATABASE_COSMOS_DB_DATABASE'
               value: database.name
+            }
+            {
+              name: 'RESOURCES_PUBLIC_URL'
+              value: storageAccount.properties.primaryEndpoints.web
+            }
+            {
+              name: 'COMMUNICATION_SERVICE_ENDPOINT'
+              value: communication.properties.hostName
+            }
+            {
+              name: 'COMMUNICATION_SERVICE_ACCESS_KEY'
+              value: communication.listKeys().primaryKey
+            }
+            {
+              name: 'OPENAI_ENDPOINT'
+              value: cognitiveOpenai.properties.endpoint
+            }
+            {
+              name: 'OPENAI_GPT_DEPLOYMENT'
+              value: gpt.name
+            }
+            {
+              name: 'OPENAI_GPT_MODEL'
+              value: gptModel
             }
           ]
           resources: {
