@@ -1,14 +1,18 @@
+param adaModel string
+param adaVersion string
 param config string
 param gptModel string
 param gptVersion string
 param imageVersion string
 param location string
 param openaiLocation string
+param searchLocation string
 param tags object
 
 var prefix = deployment().name
 var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
+var adaModelFullName = toLower('${adaModel}-${adaVersion}')
 
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
@@ -117,6 +121,14 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             {
               name: 'OPENAI_GPT_MODEL'
               value: gptModel
+            }
+            {
+              name: 'AI_SEARCH_ENDPOINT'
+              value: 'https://${search.name}.search.windows.net'
+            }
+            {
+              name: 'AI_SEARCH_ACCESS_KEY'
+              value: search.listAdminKeys().primaryKey
             }
           ]
           resources: {
@@ -289,6 +301,23 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2023-06
   }
 }
 
+resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+  parent: cognitiveOpenai
+  name: adaModelFullName
+  sku: {
+    capacity: 50
+    name: 'Standard'
+  }
+  properties: {
+    raiPolicyName: contentfilter.name
+    model: {
+      format: 'OpenAI'
+      name: adaModel
+      version: adaVersion
+    }
+  }
+}
+
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
   name: prefix
   location: location
@@ -383,5 +412,20 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
         kind: 'Hash'
       }
     }
+  }
+}
+
+resource search 'Microsoft.Search/searchServices@2023-11-01' = {
+  name: prefix
+  location: searchLocation
+  tags: tags
+  sku: {
+    name: 'basic'
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    semanticSearch: 'free'
   }
 }

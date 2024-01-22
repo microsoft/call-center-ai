@@ -37,14 +37,14 @@ class CosmosStore(IStore):
                 parameters=[{"name": "@id", "value": str(call_id)}],
             )
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e}")
+            _logger.error(f"Error accessing CosmosDB, {e.message}")
             return None
         try:
             raw = next(items)
             try:
                 return CallModel(**raw)
             except ValidationError as e:
-                _logger.warn(f'Error parsing call, "{e}"')
+                _logger.warn(f"Error parsing call, {e.message}")
         except StopIteration:
             return None
 
@@ -56,7 +56,7 @@ class CosmosStore(IStore):
             self._db.upsert_item(body=data)
             return True
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e}")
+            _logger.error(f"Error accessing CosmosDB: {e.message}")
             return False
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
@@ -77,14 +77,14 @@ class CosmosStore(IStore):
                 ],
             )
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e}")
+            _logger.error(f"Error accessing CosmosDB: {e.message}")
             return None
         try:
             raw = next(items)
             try:
                 return CallModel(**raw)
             except ValidationError as e:
-                _logger.warn(f'Error parsing call, "{e}"')
+                _logger.warn(f"Error parsing call, {e.message}")
         except StopIteration:
             return None
 
@@ -97,7 +97,7 @@ class CosmosStore(IStore):
                 query="SELECT * FROM c ORDER BY c.created_at DESC",
             )
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e}")
+            _logger.error(f"Error accessing CosmosDB, {e.message}")
             return None
         for raw in items:
             if not raw:
@@ -105,5 +105,5 @@ class CosmosStore(IStore):
             try:
                 calls.append(CallModel(**raw))
             except ValidationError as e:
-                _logger.warn(f'Error parsing call, "{e}"')
+                _logger.warn(f"Error parsing call, {e.message}")
         return calls or None
