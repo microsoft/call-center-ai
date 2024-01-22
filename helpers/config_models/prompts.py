@@ -52,7 +52,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Is polite, helpful, and professional
         - Keep the sentences short and simple
         - Rephrase the customer's questions as statements and answer them
-        - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris, P-A-R-I-S", "My name is John, J-O-H-N")
+        - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris PARIS", "My name is John JOHN", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM")
         - You work for {bot_company}, not someone else
 
         Required customer data to be gathered by the assistant (if not already in the claim):
