@@ -45,6 +45,7 @@ Extract of the data stored during the call:
 > [!NOTE]
 > This project is a proof of concept. It is not intended to be used in production. This demonstrates how can be combined Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
 
+- [x] Access the claim on a public website
 - [x] Access to customer conversation history
 - [x] Bot can be called from a phone number
 - [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
@@ -53,10 +54,10 @@ Extract of the data stored during the call:
 - [x] Disengaging from a human agent when needed
 - [x] Fine understanding of the customer request with GPT-4 Turbo
 - [x] Follow a specific data schema for the claim
+- [x] Has access to a documentation database (few-shot training / RAG)
 - [x] Help the user to find the information needed to complete the claim
 - [x] Send a SMS report after the call
 - [x] Take back a conversation after a disengagement
-- [ ] Access the claim on a public website
 - [ ] Call back the user when needed
 - [ ] Simulate a IVR workflow
 
@@ -95,14 +96,16 @@ graph LR
 
   subgraph "Claim AI"
     api["API"]
-    communication_service["Call gateway\n(Communication Services)"]
+    ai_search[("RAG\n(AI Search)")]
     communication_service_sms["SMS gateway\n(Communication Services)"]
+    communication_service["Call gateway\n(Communication Services)"]
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
   end
 
   api -- Answer with text --> communication_service
+  api -- Few-shot training --> ai_search
   api -- Generate completion --> gpt
   api -- Save conversation --> db
   api -- Send SMS report --> communication_service_sms
@@ -160,6 +163,12 @@ openai:
   endpoint: https://xxx.openai.azure.com
   gpt_deployment: gpt
   gpt_model: gpt-4-1106-preview
+
+ai_search:
+  access_key: xxx
+  endpoint: https://xxx.search.windows.net
+  index: trainings
+  semantic_configuration: default
 ```
 
 If you want to use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
@@ -229,6 +238,10 @@ cognitive_service:
   endpoint: https://xxx.cognitiveservices.azure.com
 
 openai: {}
+
+ai_search:
+  index: trainings
+  semantic_configuration: default
 ```
 
 Steps to deploy:
@@ -238,9 +251,16 @@ Steps to deploy:
 3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish
-6. Get the logs with `make logs name=my-instance`
+6. Create the AI Search index
+7. Get the logs with `make logs name=my-instance`
 
 ## Advanced usage
+
+### Add my custom training data
+
+Training data is stored on AI Search to be retrieved by the bot, on demand.
+
+An exampe is [available at `examples/import-training.ipynb`](examples/import-training.ipynb). It shows how to import training data from a PDF files dataset.
 
 ### Customize the prompts
 
@@ -297,13 +317,16 @@ prompts:
       4. Gather additional information if needed (e.g. error messages, screenshots)
       5. Be proactive and create reminders for follow-up or further assistance
 
-      Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
-
       Support status:
       {claim}
 
       Reminders:
       {reminders}
+
+      Documentation and training material:
+      {trainings}
+
+      Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
 ```
 
 ### Customize the claim data schema

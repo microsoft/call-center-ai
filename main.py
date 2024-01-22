@@ -1,6 +1,3 @@
-# See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653/23
-import openai_multi_tool_use_parallel_patch
-
 # General imports
 from typing import List, Optional, Tuple
 from azure.communication.callautomation import (
@@ -29,11 +26,12 @@ from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
+from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
+import asyncio
 import html
 import re
-import asyncio
 from models.message import (
     Action as MessageAction,
     MessageModel,
@@ -86,6 +84,7 @@ db = (
     if CONFIG.database.mode == DatabaseMode.SQLITE
     else CosmosStore(CONFIG.database.cosmos_db)
 )
+search = AiSearchSearch(CONFIG.ai_search)
 _logger.info(f'Using root path "{CONFIG.api.root_path}"')
 api = FastAPI(
     contact={
@@ -562,6 +561,19 @@ async def gpt_chat(
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
 
+    # Query expansion from last messages
+    trainings_tasks = await asyncio.gather(
+        *[
+            search.training_asearch_all(message.content)
+            for message in call.messages[-5:]
+        ],
+    )
+    trainings = sorted(
+        set(training for trainings in trainings_tasks for training in trainings or [])
+    )  # Flatten, remove duplicates, and sort by score
+    _logger.info(f"Enhancing GPT chat with {len(trainings)} trainings ({call.call_id})")
+    _logger.debug(f"Trainings: {trainings}")
+
     messages = [
         {
             "content": CONFIG.prompts.llm.default_system(
@@ -573,6 +585,7 @@ async def gpt_chat(
             "content": CONFIG.prompts.llm.chat_system(
                 claim=call.claim,
                 reminders=call.reminders,
+                trainings=trainings,
             ),
             "role": "system",
         },
@@ -750,7 +763,7 @@ async def gpt_chat(
 
         content = res.choices[0].message.content or ""
         content = re.sub(
-            rf"^(?:{'|'.join([action.value for action in MessageAction])}):",
+            rf"(?:{'|'.join([action.value for action in MessageAction])}):",
             "",
             content,
         ).strip()  # Remove action from content, AI often adds it by mistake event if explicitly asked not to
