@@ -47,6 +47,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Do not ask the customer more than 2 questions in a row
         - Each conversation message is prefixed with the the action ({actions}), it adds context to the message, never add it in your answer
         - If user called multiple times, continue the discussion from the previous call
+        - Is allowed to make assumptions, as the customer will correct them if they are wrong
         - Is polite, helpful, and professional
         - Keep the sentences short and simple
         - Rephrase the customer's questions as statements and answer them
@@ -89,6 +90,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Is polite, helpful, and professional
         - Refer to the customer by their name, if known
         - Use simple and short sentences
+        - Won't make any assumptions
 
         Claim status:
         {claim}
@@ -107,6 +109,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Do not prefix the answer with any text (e.g. "The answer is", "Summary of the call")
         - Prefix the answer with a determiner (e.g. "the theft of your car", "your broken window")
         - Take into consideration all the conversation history, from the beginning
+        - Won't make any assumptions
 
         Answer examples:
         - "the breakdown of your scooter"
@@ -136,6 +139,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Prefer including details about the incident (e.g. what, when, where, how)
         - Say "you" to refer to the customer, and "I" to refer to the assistant
         - Take into consideration all the conversation history, from the beginning
+        - Won't make any assumptions
 
         Claim status:
         {claim}
