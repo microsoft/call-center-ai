@@ -1,5 +1,5 @@
 param config string
-param imageVersion string = 'main'
+param imageVersion string = 'develop'
 param gptModel string = 'gpt-4'
 param gptVersion string = '1106-Preview'
 param instance string = deployment().name
@@ -9,6 +9,7 @@ param openaiLocation string = 'swedencentral'
 targetScope = 'subscription'
 
 output appUrl string = app.outputs.appUrl
+output blobStoragePublicName string = app.outputs.blobStoragePublicName
 output communicationId string = app.outputs.communicationId
 
 var tags = {

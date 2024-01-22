@@ -205,11 +205,37 @@ Container is available on GitHub Actions, at:
 - Latest version from a branch: `ghcr.io/clemlesne/claim-ai-phone-bot:main`
 - Specific tag: `ghcr.io/clemlesne/claim-ai-phone-bot:0.1.0` (recommended)
 
+Create a local `config.yaml` file (most of the fields are filled automatically by the deployment script):
+
+```yaml
+# config.yaml
+api: {}
+
+database:
+  cosmos_db: {}
+
+resources: {}
+
+workflow:
+  agent_phone_number: "+33612345678"
+  bot_company: Contoso
+  bot_name: Robert
+
+communication_service:
+  phone_number: "+33612345678"
+  voice_name: fr-FR-DeniseNeural
+
+cognitive_service:
+  endpoint: https://xxx.cognitiveservices.azure.com
+
+openai: {}
+```
+
 Steps to deploy:
 
-1. Create an Communication Services resource with a phone number
-2. Create a local `config.yaml` file (be sure to use the phone number previously created)
-3. Connect to (for example `az login`)
+1. Create an `Communication Services` resource plus a `Phone Number`
+2. Create the local `config.yaml`
+3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish
 6. Get the logs with `make logs name=my-instance`
