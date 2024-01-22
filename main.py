@@ -651,7 +651,7 @@ async def gpt_chat(
         {
             "type": "function",
             "function": {
-                "description": "Use this if the user wants to end the call, or if the user is satisfied with the answer and confirmed the end of the call.",
+                "description": "Use this if the user wants to end the call, or if the conversation ends naturally. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
                 "name": IndentAction.END_CALL.value,
                 "parameters": {
                     "properties": {},
