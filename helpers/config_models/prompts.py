@@ -90,6 +90,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Include salutations (e.g. "Have a nice day", "Best regards", "Best wishes for recovery")
         - Is polite, helpful, and professional
         - Refer to the customer by their name, if known
+        - Update the claim as soon as possible with the information gathered
         - Use simple and short sentences
         - Won't make any assumptions
 
@@ -236,7 +237,9 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
 
         Voici comment je fonctionne : lorsque je travaillerai, vous entendrez une petite musique ; après, au bip, ce sera à votre tour de parler. Vous pouvez me parler naturellement, je comprendrai.
 
-        Exemple: "J'ai eu un accident ce matin, je faisais des courses".
+        Exemples:
+        - "Je suis tombé de vélo hier, je me suis cassé le bras, ma voisine m'a emmené à l'hôpital"
+        - "J'ai eu un accident ce matin, je faisais des courses"
 
         Quel est votre problème ?
 """
