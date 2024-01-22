@@ -6,21 +6,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <title>Déclaration de sinistre {{ call.claim.claim_id }}</title>
   </head>
-  <body class="container mx-auto lg:p-8 text-black dark:text-white bg-white dark:bg-neutral-900 text-sm">
+  <body class="lg:container mx-auto lg:p-8 text-black dark:text-white bg-white dark:bg-neutral-900 text-sm">
 
     <!-- Main content -->
     <div class="flex flex-col lg:grid lg:grid-cols-6 gap-4">
 
       <!-- Top introduction -->
-      <div class="col-span-full my-8 px-4">
+      <header class="col-span-full my-8 px-4">
         <h1>Bonjour {{ call.claim.policyholder_name | title }} 👋🏻</h1>
         <p class="text-2xl">Votre sinistre <span class="font-mono">#{{ call.claim.claim_id }}</span> à propos de {{ call.synthesis.short | lower }} est en cours de traitement.</p>
-      </div>
+      </header>
 
       <!-- Long synthesis -->
       <div class="col-span-full mb-8">
-        <div class="rounded-md lg:shadow-xl dark:shadow-none dark:lg:bg-neutral-700/25 lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
-          <h2 class="text-lg">✏️ Synthèse</h2>
+        <div class="lg:rounded-md bg-gradient-to-r from-pink-300/30 dark:from-pink-700/30 to-violet-300/30 dark:to-violet-700/30 lg:ring-1 ring-transparent -mx-4 -my-2 px-8 py-6 space-y-4">
+          <h2 class="text-lg">Synthèse</h2>
           {% if not call.synthesis.long %}
           <p class="text-neutral-600 dark:text-neutral-400">Aucune synthèse pour l'instant.</p>
           {% else %}
@@ -154,14 +154,14 @@
     </div>
 
     <!-- Footer -->
-    <div class="my-16 space-y-2 text-center">
+    <footer class="my-16 space-y-2 text-center text-neutral-600 dark:text-neutral-400">
       <p>
         Call center claim AI phone bot<br>
         v{{ version }}
       </p>
       <div>
-        <a class="underline text-neutral-600 dark:text-neutral-400" href="https://github.com/clemlesne/claim-ai-phone-bot">Created with ❤️ on GitHub</a>
+        <a class="underline" href="https://github.com/clemlesne/claim-ai-phone-bot">Created with ❤️ on GitHub</a>
       </div>
-    </div>
+    </footer>
   </body>
 </html>
