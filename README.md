@@ -279,3 +279,29 @@ prompts:
       Reminders:
       {reminders}
 ```
+
+### Customize the claim data schema
+
+Customization of the data schema is not supported yet through the configuration file. However, you can customize the data schema by modifying the application source code.
+
+The data schema is defined in `models/claim.py`. All the fields are required to be of type `Optional[str]` (except the immutable fields).
+
+```python
+# models/claim.py
+class ClaimModel(BaseModel):
+    # Immutable fields
+    [...]
+    # Editable fields
+    employee_department: Optional[str] = None
+    employee_email: Optional[str] = None
+    employee_location: Optional[str] = None
+    employee_name: Optional[str] = None
+    employee_phone_number: Optional[str] = None
+    issue_business_impact: Optional[str] = None
+    issue_date_time: Optional[str] = None
+    issue_description: Optional[str] = None
+    issue_error_messages: Optional[str] = None
+    issue_reproduction_steps: Optional[str] = None
+
+    # Built-in functions
+    [...]
