@@ -95,27 +95,27 @@ graph LR
 
   subgraph "Claim AI"
     api["API"]
-    communication_service_call["Call gateway\n(Communication Services)"]
+    communication_service["Call gateway\n(Communication Services)"]
     communication_service_sms["SMS gateway\n(Communication Services)"]
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
   end
 
-  api -- Answer with text --> communication_service_call
+  api -- Answer with text --> communication_service
   api -- Generate completion --> gpt
   api -- Save conversation --> db
   api -- Send SMS report --> communication_service_sms
-  api -- Transfer to agent --> communication_service_call
+  api -- Transfer to agent --> communication_service
   api -. Watch .-> event_grid
 
-  communication_service_call -- Notifies --> event_grid
-  communication_service_call -- Transfer to --> agent
-  communication_service_call -. Send voice .-> user
+  communication_service -- Notifies --> event_grid
+  communication_service -- Transfer to --> agent
+  communication_service -. Send voice .-> user
 
   communication_service_sms -- Send SMS --> user
 
-  user -- Call --> communication_service_call
+  user -- Call --> communication_service
 ```
 
 ## Local installation
