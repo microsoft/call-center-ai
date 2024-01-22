@@ -389,22 +389,14 @@ async def intelligence(
     try:
         while True:
             _logger.debug(f"Chat task status ({call.call_id}): {chat_task.done()}")
-            # Play loading sound
-            await handle_media(
-                call=call,
-                client=client,
-                sound_url=CONFIG.prompts.sounds.loading(),
-            )
-            # Break when chat coroutine is done
-            if chat_task.done():
+            if chat_task.done():  # Break when chat coroutine is done
                 # Clean up
                 soft_timeout_task.cancel()
                 hard_timeout_task.cancel()
                 # Answer with chat result
                 call, chat_action = chat_task.result()
                 break
-            # Break when hard timeout is reached
-            if hard_timeout_task.done():
+            if hard_timeout_task.done():  # Break when hard timeout is reached
                 _logger.warn(
                     f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached ({call.call_id})"
                 )
@@ -412,8 +404,9 @@ async def intelligence(
                 chat_task.cancel()
                 soft_timeout_task.cancel()
                 break
-            # Speak when soft timeout is reached
-            if soft_timeout_task.done() and not soft_timeout_triggered:
+            if (
+                soft_timeout_task.done() and not soft_timeout_triggered
+            ):  # Speak when soft timeout is reached
                 _logger.warn(
                     f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached ({call.call_id})"
                 )
@@ -423,6 +416,12 @@ async def intelligence(
                     client=client,
                     text=CONFIG.prompts.tts.timeout_loading(),
                 )
+            else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
+                await handle_media(
+                    call=call,
+                    client=client,
+                    sound_url=CONFIG.prompts.sounds.loading(),
+                )  # Play loading sound
             # Wait to not block the event loop and play too many sounds
             await asyncio.sleep(5)
     except Exception:
