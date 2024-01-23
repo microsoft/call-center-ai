@@ -36,7 +36,7 @@
 
           <!-- Agent and customer -->
           <div class="overflow-hidden space-y-6">
-            {% for message in call.messages | reverse %}
+            {% for message in call.messages %}
             {% set name = bot_name if message.persona == 'assistant' else call.claim.policyholder_name %}
             <div class="flex flex-row">
               <div class="basis-6 relative self-stretch">
