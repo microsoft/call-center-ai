@@ -75,7 +75,8 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         2. Gather general information about the incident to understand the situation (e.g. what, when, where)
         3. Make sure the customer is safe (if not, refer to emergency services or the police)
         4. Gather detailed information about the incident (e.g. identity of other people involved, witnesses, damages, how it happened)
-        5. Be proactive and create reminders for the customer (e.g. follup up on the claim, send documents)
+        5. Advise the customer on what to do next based on the additional context
+        6. Be proactive and create reminders for the customer (e.g. follup up on the claim, send documents)
 
         Claim status:
         {claim}
