@@ -9,6 +9,7 @@ from helpers.logging import build_logger
 from models.training import TrainingModel
 from persistence.isearch import ISearch
 from pydantic import ValidationError
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 from typing import AsyncGenerator, List, Optional
 
 
@@ -27,8 +28,8 @@ class AiSearchSearch(ISearch):
         if not text:
             return None
         trainings = []
-        async with self._use_db() as db:
-            try:
+        try:
+            async with self._use_db() as db:
                 results = await db.search(
                     query_language=CONFIG.workflow.conversation_lang,  # Re-rank results based on language
                     query_speller="lexicon",  # Spell correction
@@ -59,10 +60,13 @@ class AiSearchSearch(ISearch):
                         )
                     except ValidationError as e:
                         _logger.warn(f"Error parsing training, {e.message}")
-            except HttpResponseError as e:
-                _logger.error(f"Error connecting to AI Search, {e.message}")
+        except HttpResponseError as e:
+            _logger.error(f"Error connecting to AI Search, {e.message}")
         return trainings or None
 
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30)
+    )
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SearchClient, None]:
         async with SearchClient(

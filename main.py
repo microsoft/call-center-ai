@@ -1,5 +1,5 @@
 # General imports
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -29,6 +29,7 @@ from models.synthesis import SynthesisModel
 from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 import asyncio
 import html
 import re
@@ -40,6 +41,8 @@ from models.message import (
 )
 from models.claim import ClaimModel
 from openai import AsyncAzureOpenAI
+from openai.types.chat import ChatCompletion
+from openai import _types as openaiTypes
 from uuid import UUID
 import json
 
@@ -542,12 +545,7 @@ async def gpt_completion(system: str, call: CallModel) -> str:
 
     content = None
     try:
-        res = await oai_gpt.chat.completions.create(
-            max_tokens=1000,  # Arbitrary limit
-            messages=messages,
-            model=CONFIG.openai.gpt_model,
-            temperature=0,  # Most focused and deterministic
-        )
+        res = await _gpt_completion(messages=messages)
         content = res.choices[0].message.content
 
     except Exception:
@@ -752,15 +750,10 @@ async def gpt_chat(
     _logger.debug(f"Tools: {tools}")
 
     try:
-        # TODO: Manage to catch timeouts to limit waiting time for end users
-        res = await oai_gpt.chat.completions.create(
-            max_tokens=400,  # Communication Services limit is 400 characters for TTS, 400 tokens ~= 300 words
+        res = await _gpt_completion(
             messages=messages,
-            model=CONFIG.openai.gpt_model,
-            temperature=0,  # Most focused and deterministic
             tools=tools,
         )
-
         content = res.choices[0].message.content or ""
         content = re.sub(
             rf"(?:{'|'.join([action.value for action in MessageAction])}):",
@@ -1098,3 +1091,18 @@ async def post_call_synthesis(call: CallModel) -> None:
         short=short,
     )
     await db.call_aset(call)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
+async def _gpt_completion(
+    messages: List[dict[str, Any]],
+    tools: Optional[List[dict[str, Any]]] = None,
+    max_tokens: int = 1000,  # Communication Services limit is 400 characters for TTS, 400 tokens ~= 300 words
+) -> ChatCompletion:
+    return await oai_gpt.chat.completions.create(
+        max_tokens=max_tokens,
+        messages=messages,
+        model=CONFIG.openai.gpt_model,
+        temperature=0,  # Most focused and deterministic
+        tools=tools or openaiTypes.NOT_GIVEN,
+    )
