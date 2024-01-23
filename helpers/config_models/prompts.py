@@ -1,12 +1,15 @@
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
+from functools import cached_property
+from logging import Logger
 from models.claim import ClaimModel
 from models.message import Action as MessageAction, MessageModel
 from models.reminder import ReminderModel
 from models.training import TrainingModel
+from pydantic import computed_field
 from pydantic_settings import BaseSettings
 from textwrap import dedent
-from typing import Any, List
+from typing import Any, List, Optional
 import json
 
 
@@ -52,7 +55,8 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Is polite, helpful, and professional
         - Keep the sentences short and simple
         - Rephrase the customer's questions as statements and answer them
-        - Use the documentation and training material as a reference to answer the customer's questions related to insurance or contract details
+        - Use additional context to enhance the conversation with useful details
+        - Use additional context as a reference to answer the customer's questions related to insurance or contract details
         - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris PARIS", "My name is John JOHN", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM")
         - Will answer the customer's questions if they are related to their contract, claim, or insurance
         - Won't answer if they don't know the answer
@@ -78,9 +82,6 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
 
         Reminders:
         {reminders}
-
-        Documentation and training material:
-        {trainings}
 
         Assistant requires data from the customer to fill the claim. Latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
     """
@@ -164,7 +165,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         from helpers.config import CONFIG
 
         # TODO: Parse the date from the end-user timezone, allowing LLM to be used in multiple countries
-        return dedent(
+        return self._return(
             self.default_system_tpl.format(
                 bot_company=CONFIG.workflow.bot_company,
                 bot_name=CONFIG.workflow.bot_name,
@@ -182,20 +183,14 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     ) -> str:
         from helpers.config import CONFIG
 
-        return dedent(
-            self.chat_system_tpl.format(
-                actions=", ".join([action.value for action in MessageAction]),
-                bot_company=CONFIG.workflow.bot_company,
-                claim=_pydantic_to_str(claim),
-                conversation_lang=CONFIG.workflow.conversation_lang,
-                reminders=_pydantic_to_str(reminders),
-                trainings=_pydantic_to_str(
-                    [
-                        training.dict(include={"content", "title"})
-                        for training in trainings
-                    ]
-                ),  # Limit size of the training data to avoid a slow inference
-            )
+        return self._return(
+            self.chat_system_tpl,
+            trainings=trainings,
+            actions=", ".join([action.value for action in MessageAction]),
+            bot_company=CONFIG.workflow.bot_company,
+            claim=_pydantic_to_str(claim),
+            conversation_lang=CONFIG.workflow.conversation_lang,
+            reminders=_pydantic_to_str(reminders),
         )
 
     def sms_summary_system(
@@ -206,13 +201,12 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     ) -> str:
         from helpers.config import CONFIG
 
-        return dedent(
-            self.sms_summary_system_tpl.format(
-                claim=_pydantic_to_str(claim),
-                conversation_lang=CONFIG.workflow.conversation_lang,
-                messages=_pydantic_to_str(messages),
-                reminders=_pydantic_to_str(reminders),
-            )
+        return self._return(
+            self.sms_summary_system_tpl,
+            claim=_pydantic_to_str(claim),
+            conversation_lang=CONFIG.workflow.conversation_lang,
+            messages=_pydantic_to_str(messages),
+            reminders=_pydantic_to_str(reminders),
         )
 
     def synthesis_short_system(
@@ -223,13 +217,12 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     ) -> str:
         from helpers.config import CONFIG
 
-        return dedent(
-            self.synthesis_short_system_tpl.format(
-                claim=_pydantic_to_str(claim),
-                conversation_lang=CONFIG.workflow.conversation_lang,
-                messages=_pydantic_to_str(messages),
-                reminders=_pydantic_to_str(reminders),
-            )
+        return self._return(
+            self.synthesis_short_system_tpl,
+            claim=_pydantic_to_str(claim),
+            conversation_lang=CONFIG.workflow.conversation_lang,
+            messages=_pydantic_to_str(messages),
+            reminders=_pydantic_to_str(reminders),
         )
 
     def synthesis_long_system(
@@ -240,14 +233,35 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     ) -> str:
         from helpers.config import CONFIG
 
-        return dedent(
-            self.synthesis_long_system_tpl.format(
-                claim=_pydantic_to_str(claim),
-                conversation_lang=CONFIG.workflow.conversation_lang,
-                messages=_pydantic_to_str(messages),
-                reminders=_pydantic_to_str(reminders),
-            )
+        return self._return(
+            self.synthesis_long_system_tpl,
+            claim=_pydantic_to_str(claim),
+            conversation_lang=CONFIG.workflow.conversation_lang,
+            messages=_pydantic_to_str(messages),
+            reminders=_pydantic_to_str(reminders),
         )
+
+    def _return(
+        self, prompt_tpl: str, trainings: Optional[List[TrainingModel]] = None, **kwargs
+    ) -> str:
+        return dedent(
+            f"""
+            {dedent(prompt_tpl.format(**kwargs))}
+
+            Additional context:
+            {_pydantic_to_str([
+                training.model_dump(include={"content", "title"})
+                for training in trainings or []
+            ])}
+        """
+        )
+
+    @computed_field
+    @cached_property
+    def _logger(self) -> Logger:
+        from helpers.logging import build_logger
+
+        return build_logger(__name__)
 
 
 class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
@@ -278,52 +292,52 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
     )
 
     def calltransfer_failure(self) -> str:
-        return dedent(self.calltransfer_failure_tpl)
+        return self._return(self.calltransfer_failure_tpl)
 
     def connect_agent(self) -> str:
-        return dedent(self.connect_agent_tpl)
+        return self._return(self.connect_agent_tpl)
 
     def end_call_to_connect_agent(self) -> str:
-        return dedent(self.end_call_to_connect_agent_tpl)
+        return self._return(self.end_call_to_connect_agent_tpl)
 
     def error(self) -> str:
-        return dedent(self.error_tpl)
+        return self._return(self.error_tpl)
 
     def goodbye(self) -> str:
         from helpers.config import CONFIG
 
-        return dedent(
-            self.goodbye_tpl.format(
-                bot_company=CONFIG.workflow.bot_company,
-            )
+        return self._return(
+            self.goodbye_tpl,
+            bot_company=CONFIG.workflow.bot_company,
         )
 
     def hello(self) -> str:
         from helpers.config import CONFIG
 
-        return dedent(
-            self.hello_tpl.format(
-                bot_company=CONFIG.workflow.bot_company,
-                bot_name=CONFIG.workflow.bot_name,
-            )
+        return self._return(
+            self.hello_tpl,
+            bot_company=CONFIG.workflow.bot_company,
+            bot_name=CONFIG.workflow.bot_name,
         )
 
     def timeout_silence(self) -> str:
-        return dedent(self.timeout_silence_tpl)
+        return self._return(self.timeout_silence_tpl)
 
     def welcome_back(self) -> str:
         from helpers.config import CONFIG
 
-        return dedent(
-            self.welcome_back_tpl.format(
-                bot_company=CONFIG.workflow.bot_company,
-                bot_name=CONFIG.workflow.bot_name,
-                conversation_timeout_hour=CONFIG.workflow.conversation_timeout_hour,
-            )
+        return self._return(
+            self.welcome_back_tpl,
+            bot_company=CONFIG.workflow.bot_company,
+            bot_name=CONFIG.workflow.bot_name,
+            conversation_timeout_hour=CONFIG.workflow.conversation_timeout_hour,
         )
 
     def timeout_loading(self) -> str:
-        return dedent(self.timeout_loading_tpl)
+        return self._return(self.timeout_loading_tpl)
+
+    def _return(self, prompt_tpl: str, **kwargs) -> str:
+        return dedent(prompt_tpl.format(**kwargs))
 
 
 class PromptsModel(BaseSettings, env_prefix="prompts_"):
