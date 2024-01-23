@@ -7,6 +7,7 @@ from helpers.logging import build_logger
 from models.call import CallModel
 from persistence.istore import IStore
 from pydantic import ValidationError
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 from typing import AsyncGenerator, List, Optional
 from uuid import UUID
 import json
@@ -37,7 +38,7 @@ class SqliteStore(IStore):
                 try:
                     return CallModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.warn(f'Error parsing call, {e.message}')
+                    _logger.warn(f"Error parsing call, {e.message}")
         return None
 
     async def call_aset(self, call: CallModel) -> bool:
@@ -69,7 +70,7 @@ class SqliteStore(IStore):
                 try:
                     return CallModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.warn(f'Error parsing call, {e.message}')
+                    _logger.warn(f"Error parsing call, {e.message}")
         return None
 
     async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
@@ -87,7 +88,7 @@ class SqliteStore(IStore):
                 try:
                     calls.append(CallModel.model_validate_json(row[0]))
                 except ValidationError as e:
-                    _logger.warn(f'Error parsing call, {e.message}')
+                    _logger.warn(f"Error parsing call, {e.message}")
         return calls or None
 
     async def _init_db(self, db: SQLiteConnection):
@@ -113,6 +114,9 @@ class SqliteStore(IStore):
         # Write changes to disk
         await db.commit()
 
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30)
+    )
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SQLiteConnection, None]:
         # Create folder

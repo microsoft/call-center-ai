@@ -1,6 +1,7 @@
 from azure.cosmos import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from azure.identity import DefaultAzureCredential
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from fastapi.encoders import jsonable_encoder
 from helpers.config import CONFIG
@@ -9,7 +10,8 @@ from helpers.logging import build_logger
 from models.call import CallModel
 from persistence.istore import IStore
 from pydantic import ValidationError
-from typing import List, Optional
+from tenacity import retry, stop_after_attempt, wait_random_exponential
+from typing import AsyncGenerator, List, Optional
 from uuid import UUID
 
 
@@ -31,11 +33,12 @@ class CosmosStore(IStore):
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
         try:
-            items = self._db.query_items(
-                enable_cross_partition_query=True,
-                query="SELECT * FROM c WHERE c.id = @id",
-                parameters=[{"name": "@id", "value": str(call_id)}],
-            )
+            async with self._use_db() as db:
+                items = db.query_items(
+                    enable_cross_partition_query=True,
+                    query="SELECT * FROM c WHERE c.id = @id",
+                    parameters=[{"name": "@id", "value": str(call_id)}],
+                )
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e.message}")
             return None
@@ -62,20 +65,21 @@ class CosmosStore(IStore):
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
         try:
-            items = self._db.query_items(
-                max_item_count=1,
-                partition_key=phone_number,
-                query="SELECT * FROM c WHERE c.created_at < @date_limit ORDER BY c.created_at DESC",
-                parameters=[
-                    {
-                        "name": "@date_limit",
-                        "value": str(
-                            datetime.utcnow()
-                            + timedelta(hours=CONFIG.workflow.conversation_timeout_hour)
-                        ),
-                    }
-                ],
-            )
+            async with self._use_db() as db:
+                items = db.query_items(
+                    max_item_count=1,
+                    partition_key=phone_number,
+                    query="SELECT * FROM c WHERE c.created_at < @date_limit ORDER BY c.created_at DESC",
+                    parameters=[
+                        {
+                            "name": "@date_limit",
+                            "value": str(
+                                datetime.utcnow()
+                                + timedelta(hours=CONFIG.workflow.conversation_timeout_hour)
+                            ),
+                        }
+                    ],
+                )
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB: {e.message}")
             return None
@@ -92,10 +96,11 @@ class CosmosStore(IStore):
         _logger.debug(f"Loading all calls for {phone_number}")
         calls = []
         try:
-            items = self._db.query_items(
-                partition_key=phone_number,
-                query="SELECT * FROM c ORDER BY c.created_at DESC",
-            )
+            async with self._use_db() as db:
+                items = db.query_items(
+                    partition_key=phone_number,
+                    query="SELECT * FROM c ORDER BY c.created_at DESC",
+                )
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e.message}")
             return None
@@ -107,3 +112,10 @@ class CosmosStore(IStore):
             except ValidationError as e:
                 _logger.warn(f"Error parsing call, {e.message}")
         return calls or None
+
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30)
+    )
+    @asynccontextmanager
+    async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
+        yield self._db
