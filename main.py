@@ -507,7 +507,7 @@ async def handle_play(
     chunks = []
     chunk = ""
     for word in text.split("."):  # Split by sentence
-        to_add = f"{word}."
+        to_add = f"{word}. "
         if len(chunk) + len(to_add) >= 400:
             chunks.append(chunk)
             chunk = ""
