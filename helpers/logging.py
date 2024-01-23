@@ -1,14 +1,14 @@
 from helpers.config import CONFIG
-import logging
+from logging import Logger, getLogger, basicConfig
 
 
 LOGGING_APP_LEVEL = CONFIG.monitoring.logging.app_level.value
 LOGGING_SYS_LEVEL = CONFIG.monitoring.logging.sys_level.value
 
-logging.basicConfig(level=LOGGING_SYS_LEVEL)
+basicConfig(level=LOGGING_SYS_LEVEL)
 
 
-def build_logger(name: str) -> logging.Logger:
-    logger = logging.getLogger(name)
+def build_logger(name: str) -> Logger:
+    logger = getLogger(name)
     logger.setLevel(LOGGING_APP_LEVEL)
     return logger
