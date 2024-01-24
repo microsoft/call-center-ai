@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    {% block head %}
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>{% block title %}{% endblock %}</title>
+    {% endblock %}
+  </head>
+  <body class="lg:container overflow-x-hidden mx-auto lg:p-8 text-black dark:text-white bg-white dark:bg-neutral-900 text-sm">
+
+    <!-- Main content -->
+    <div class="flex flex-col lg:grid lg:grid-cols-6 gap-4">
+      {% block content %}{% endblock %}
+    </div>
+
+    <!-- Footer -->
+    <footer class="my-16 space-y-2 text-center text-neutral-600 dark:text-neutral-400">
+      {% block footer %}
+      <p>
+        Call center claim AI phone bot<br>
+        v{{ version }}
+      </p>
+      <div>
+        <a class="hover:underline" href="https://github.com/clemlesne/claim-ai-phone-bot">Created with ❤️ on GitHub</a>
+      </div>
+      {% endblock %}
+    </footer>
+  </body>
+</html>

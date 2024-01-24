@@ -30,6 +30,7 @@ from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
 from tenacity import retry, stop_after_attempt, wait_random_exponential
+from urllib.parse import quote_plus
 import asyncio
 import html
 import re
@@ -50,11 +51,15 @@ import json
 _logger = build_logger(__name__)
 _logger.info(f"claim-ai v{CONFIG.version}")
 
+# Jinja templates
 jinja = Environment(
     autoescape=select_autoescape(),
     enable_async=True,
     loader=FileSystemLoader("public_website"),
 )
+jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
+
+# Azure OpenAI
 _logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")
 oai_gpt = AsyncAzureOpenAI(
     api_version="2023-12-01-preview",
@@ -70,6 +75,8 @@ oai_gpt = AsyncAzureOpenAI(
         else None
     ),
 )
+
+# Azure Communication Services
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
 _logger.info(f"Using phone number {str(CONFIG.communication_service.phone_number)}")
 # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
@@ -82,12 +89,16 @@ call_automation_client = CallAutomationClient(
 sms_client = SmsClient(
     credential=DefaultAzureCredential(), endpoint=CONFIG.communication_service.endpoint
 )
+
+# Persistence
 db = (
     SqliteStore(CONFIG.database.sqlite)
     if CONFIG.database.mode == DatabaseMode.SQLITE
     else CosmosStore(CONFIG.database.cosmos_db)
 )
 search = AiSearchSearch(CONFIG.ai_search)
+
+# FastAPI
 _logger.info(f'Using root path "{CONFIG.api.root_path}"')
 api = FastAPI(
     contact={
@@ -124,23 +135,41 @@ async def health_liveness_get() -> None:
 
 
 @api.get(
-    "/call/report/{call_id}",
-    description="Display the call report in a web page.",
+    "/report/{phone_number}",
+    description="Display the history of calls in a web page.",
 )
-async def call_report_get(call_id: UUID) -> HTMLResponse:
-    call = await db.call_aget(call_id)
-    if not call:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Call {call_id} not found",
-        )
+async def report_history_get(phone_number: str) -> HTMLResponse:
+    calls = await db.call_asearch_all(phone_number) or []
 
-    template = jinja.get_template("report.html")
+    template = jinja.get_template("history.html.jinja")
     render = await template.render_async(
         bot_company=CONFIG.workflow.bot_company,
         bot_name=CONFIG.workflow.bot_name,
+        calls=calls,
+        phone_number=phone_number,
         version=CONFIG.version,
+    )
+    return HTMLResponse(content=render)
+
+
+@api.get(
+    "/report/{phone_number}/{call_id}",
+    description="Display the call report in a web page.",
+)
+async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
+    call = await db.call_aget(call_id)
+    if not call or call.phone_number != phone_number:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call {call_id} for phone number {phone_number} not found",
+        )
+
+    template = jinja.get_template("report.html.jinja")
+    render = await template.render_async(
+        bot_company=CONFIG.workflow.bot_company,
+        bot_name=CONFIG.workflow.bot_name,
         call=call,
+        version=CONFIG.version,
     )
     return HTMLResponse(content=render)
 
@@ -507,7 +536,7 @@ async def handle_play(
     chunks = []
     chunk = ""
     for word in text.split("."):  # Split by sentence
-        to_add = f"{word}."
+        to_add = f"{word}. "
         if len(chunk) + len(to_add) >= 400:
             chunks.append(chunk)
             chunk = ""
