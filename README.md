@@ -63,7 +63,7 @@ Extract of the data stored during the call:
 
 ### User report after the call
 
-A report is available at `https://[your_domain]/call/report/[call_id]`. It shows the conversation history, claim data and reminders.
+A report is available at `https://[your_domain]/report/[phone_number]` (like `http://localhost:8080/report/%2B133658471534`). It shows the conversation history, claim data and reminders.
 
 ![User report](./docs/user_report.jpg)
 
