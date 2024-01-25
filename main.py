@@ -1,4 +1,14 @@
-from typing import Any, AsyncGenerator, Callable, Coroutine, List, Optional, Tuple
+# First imports, to make sure the following logs are first
+from helpers.logging import build_logger
+from helpers.config import CONFIG
+
+
+_logger = build_logger(__name__)
+_logger.info(f"claim-ai v{CONFIG.version}")
+
+
+# General imports
+from typing import Any, Callable, Coroutine, List, Optional, Tuple
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -17,9 +27,7 @@ from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
-from helpers.config import CONFIG
 from helpers.config_models.database import Mode as DatabaseMode
-from helpers.logging import build_logger
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
@@ -47,9 +55,6 @@ from openai import _types as openaiTypes
 from uuid import UUID
 import json
 
-
-_logger = build_logger(__name__)
-_logger.info(f"claim-ai v{CONFIG.version}")
 
 # Jinja templates
 jinja = Environment(
