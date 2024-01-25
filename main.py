@@ -800,8 +800,7 @@ async def gpt_chat(
             tools=tools,
         ):
             if delta.content is None:
-                if delta.tool_calls:
-                    piece = delta.tool_calls[0]
+                for piece in delta.tool_calls or []:
                     tool_calls[piece.index] = tool_calls.get(
                         piece.index,
                         {
@@ -823,7 +822,6 @@ async def gpt_chat(
             else:
                 # Store whole content
                 full_content += delta.content
-                # Batch user return by sentence
                 buffer_content += delta.content
                 # Remove tool calls from buffer content, if any
                 buffer_content = _remove_message_actions(buffer_content)
