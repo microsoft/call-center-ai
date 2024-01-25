@@ -555,7 +555,7 @@ async def handle_play(
         _logger.debug(f"Call hung up before playing ({call.call_id})")
 
 
-async def gpt_completion(system: str, call: CallModel) -> str:
+async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
     messages = [
@@ -574,7 +574,10 @@ async def gpt_completion(system: str, call: CallModel) -> str:
 
     content = None
     try:
-        res = await _gpt_completion(messages=messages)
+        res = await _gpt_completion(
+            max_tokens=max_tokens,
+            messages=messages,
+        )
         content = res.choices[0].message.content
 
     except Exception:
@@ -780,6 +783,7 @@ async def gpt_chat(
 
     try:
         res = await _gpt_completion(
+            max_tokens=300,
             messages=messages,
             tools=tools,
         )
@@ -1024,10 +1028,11 @@ async def post_call_sms(call: CallModel) -> None:
     Send an SMS report to the customer.
     """
     content = await gpt_completion(
-        CONFIG.prompts.llm.sms_summary_system(
+        system=CONFIG.prompts.llm.sms_summary_system(
             call.claim, call.messages, call.reminders
         ),
-        call,
+        call=call,
+        max_tokens=300,
     )
     _logger.info(f"SMS report ({call.call_id}): {content}")
 
@@ -1100,16 +1105,18 @@ async def post_call_synthesis(call: CallModel) -> None:
 
     short, long = await asyncio.gather(
         gpt_completion(
-            CONFIG.prompts.llm.synthesis_short_system(
+            system=CONFIG.prompts.llm.synthesis_short_system(
                 call.claim, call.messages, call.reminders
             ),
-            call,
+            call=call,
+            max_tokens=100,
         ),
         gpt_completion(
-            CONFIG.prompts.llm.synthesis_long_system(
+            system=CONFIG.prompts.llm.synthesis_long_system(
                 call.claim, call.messages, call.reminders
             ),
-            call,
+            call=call,
+            max_tokens=1000,
         ),
     )
     _logger.info(f"Short synthesis ({call.call_id}): {short}")
@@ -1125,8 +1132,8 @@ async def post_call_synthesis(call: CallModel) -> None:
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
 async def _gpt_completion(
     messages: List[dict[str, Any]],
+    max_tokens: int,
     tools: Optional[List[dict[str, Any]]] = None,
-    max_tokens: int = 1000,  # Communication Services limit is 400 characters for TTS, 400 tokens ~= 300 words
 ) -> ChatCompletion:
     return await oai_gpt.chat.completions.create(
         max_tokens=max_tokens,
