@@ -596,7 +596,7 @@ async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
 async def gpt_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
-    user_content_func: Callable[[str], Coroutine[Any, Any, None]],
+    user_callback: Callable[[str], Coroutine[Any, Any, None]],
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
 
@@ -800,8 +800,7 @@ async def gpt_chat(
             tools=tools,
         ):
             if delta.content is None:
-                if delta.tool_calls:
-                    piece = delta.tool_calls[0]
+                for piece in delta.tool_calls or []:
                     tool_calls[piece.index] = tool_calls.get(
                         piece.index,
                         {
@@ -823,7 +822,6 @@ async def gpt_chat(
             else:
                 # Store whole content
                 full_content += delta.content
-                # Batch user return by sentence
                 buffer_content += delta.content
                 # Remove tool calls from buffer content, if any
                 buffer_content = _remove_message_actions(buffer_content)
@@ -832,11 +830,11 @@ async def gpt_chat(
                 if separators and separators[0] in buffer_content:
                     to_return = re.split(SENTENCE_R, buffer_content)[0] + separators[0]
                     buffer_content = buffer_content[len(to_return) :]
-                    await user_content_func(to_return.strip())
+                    await user_callback(to_return.strip())
 
         if buffer_content:
             # Batch remaining user return
-            await user_content_func(buffer_content)
+            await user_callback(buffer_content)
 
         # Remove tool calls from full content, if any
         full_content = _remove_message_actions(full_content)
@@ -883,7 +881,7 @@ async def gpt_chat(
                     else:
                         local_content = parameters[customer_response_prop]
                         full_content += local_content + " "
-                        await user_content_func(local_content)
+                        await user_callback(local_content)
 
                     if not parameters["field"] in ClaimModel.editable_fields():
                         _logger.debug(
@@ -910,7 +908,7 @@ async def gpt_chat(
                     else:
                         local_content = parameters[customer_response_prop]
                         full_content += local_content + " "
-                        await user_content_func(local_content)
+                        await user_callback(local_content)
 
                     # Generate synthesis for the old claim
                     background_tasks.add_task(post_call_synthesis, call)
@@ -938,7 +936,7 @@ async def gpt_chat(
                     else:
                         local_content = parameters[customer_response_prop]
                         full_content += local_content + " "
-                        await user_content_func(local_content)
+                        await user_callback(local_content)
 
                     updated = False
                     for reminder in call.reminders:
