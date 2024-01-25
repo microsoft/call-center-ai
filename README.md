@@ -56,6 +56,7 @@ Extract of the data stored during the call:
 - [x] Follow a specific data schema for the claim
 - [x] Has access to a documentation database (few-shot training / RAG)
 - [x] Help the user to find the information needed to complete the claim
+- [x] Responses are streamed from the LLM to the user, to avoid long pauses
 - [x] Send a SMS report after the call
 - [x] Take back a conversation after a disengagement
 - [ ] Call back the user when needed

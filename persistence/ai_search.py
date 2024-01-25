@@ -1,5 +1,5 @@
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import HttpResponseError
+from azure.core.exceptions import HttpResponseError, ServiceRequestError
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 from contextlib import asynccontextmanager
@@ -9,7 +9,6 @@ from helpers.logging import build_logger
 from models.training import TrainingModel
 from persistence.isearch import ISearch
 from pydantic import ValidationError
-from tenacity import retry, stop_after_attempt, wait_random_exponential
 from typing import AsyncGenerator, List, Optional
 
 
@@ -61,12 +60,11 @@ class AiSearchSearch(ISearch):
                     except ValidationError as e:
                         _logger.warn(f"Error parsing training, {e.message}")
         except HttpResponseError as e:
+            _logger.error(f"Error requesting AI Search, {e.message}")
+        except ServiceRequestError as e:
             _logger.error(f"Error connecting to AI Search, {e.message}")
         return trainings or None
 
-    @retry(
-        stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30)
-    )
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SearchClient, None]:
         async with SearchClient(

@@ -1,5 +1,4 @@
-# General imports
-from typing import Any, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Callable, Coroutine, List, Optional, Tuple
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -41,8 +40,9 @@ from models.message import (
     ToolModel as MessageToolModel,
 )
 from models.claim import ClaimModel
-from openai import AsyncAzureOpenAI
-from openai.types.chat import ChatCompletion
+from openai import AsyncAzureOpenAI, AsyncStream
+from openai.types.chat import ChatCompletionMessage, ChatCompletionChunk
+from openai.types.chat.chat_completion_chunk import ChoiceDelta
 from openai import _types as openaiTypes
 from uuid import UUID
 import json
@@ -117,6 +117,8 @@ api = FastAPI(
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
+SENTENCE_R = r"[^\w\s\-',:;()]"
+MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
 
 
 class Context(str, Enum):
@@ -407,7 +409,20 @@ async def intelligence(
 
     Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after 15 seconds, play the timeout sound. If the intelligence is not processed after 30 seconds, stop the intelligence processing and play the error sound.
     """
-    chat_task = asyncio.create_task(gpt_chat(background_tasks, call))
+    has_started = False
+
+    async def gpt_callback(text: str) -> None:
+        nonlocal has_started
+        has_started = True
+
+        await handle_play(
+            call=call,
+            client=client,
+            store=False,
+            text=text,
+        )
+
+    chat_task = asyncio.create_task(gpt_chat(background_tasks, call, gpt_callback))
     soft_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
     )
@@ -435,24 +450,25 @@ async def intelligence(
                 chat_task.cancel()
                 soft_timeout_task.cancel()
                 break
-            if (
-                soft_timeout_task.done() and not soft_timeout_triggered
-            ):  # Speak when soft timeout is reached
-                _logger.warn(
-                    f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached ({call.call_id})"
-                )
-                soft_timeout_triggered = True
-                await handle_play(
-                    call=call,
-                    client=client,
-                    text=CONFIG.prompts.tts.timeout_loading(),
-                )
-            else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
-                await handle_media(
-                    call=call,
-                    client=client,
-                    sound_url=CONFIG.prompts.sounds.loading(),
-                )  # Play loading sound
+            if not has_started:  # Catch timeout if async loading is not started
+                if (
+                    soft_timeout_task.done() and not soft_timeout_triggered
+                ):  # Speak when soft timeout is reached
+                    _logger.warn(
+                        f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached ({call.call_id})"
+                    )
+                    soft_timeout_triggered = True
+                    await handle_play(
+                        call=call,
+                        client=client,
+                        text=CONFIG.prompts.tts.timeout_loading(),
+                    )
+                else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
+                    await handle_media(
+                        call=call,
+                        client=client,
+                        sound_url=CONFIG.prompts.sounds.loading(),
+                    )  # Play loading sound
             # Wait to not block the event loop and play too many sounds
             await asyncio.sleep(5)
     except Exception:
@@ -492,13 +508,6 @@ async def intelligence(
     ):
         # Save in DB for new claims and allowing demos to be more "real-time"
         await db.call_aset(call)
-        # Answer with intermediate response
-        await handle_play(
-            call=call,
-            client=client,
-            store=False,
-            text=chat_action.content,
-        )
         # Recursively call intelligence to continue the conversation
         call = await intelligence(background_tasks, call, client)
 
@@ -506,8 +515,6 @@ async def intelligence(
         await handle_recognize_text(
             call=call,
             client=client,
-            store=False,
-            text=chat_action.content,
         )
 
     return call
@@ -555,7 +562,7 @@ async def handle_play(
         _logger.debug(f"Call hung up before playing ({call.call_id})")
 
 
-async def gpt_completion(system: str, call: CallModel) -> str:
+async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
     messages = [
@@ -574,8 +581,11 @@ async def gpt_completion(system: str, call: CallModel) -> str:
 
     content = None
     try:
-        res = await _gpt_completion(messages=messages)
-        content = res.choices[0].message.content
+        res = await _gpt_completion_sync(
+            max_tokens=max_tokens,
+            messages=messages,
+        )
+        content = res.content
 
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
@@ -584,7 +594,9 @@ async def gpt_completion(system: str, call: CallModel) -> str:
 
 
 async def gpt_chat(
-    background_tasks: BackgroundTasks, call: CallModel
+    background_tasks: BackgroundTasks,
+    call: CallModel,
+    user_content_func: Callable[[str], Coroutine[Any, Any, None]],
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
 
@@ -778,36 +790,74 @@ async def gpt_chat(
     ]
     _logger.debug(f"Tools: {tools}")
 
+    full_content = ""
+    buffer_content = ""
+    tool_calls = {}
     try:
-        res = await _gpt_completion(
+        async for delta in _gpt_completion_stream(
+            max_tokens=300,
             messages=messages,
             tools=tools,
-        )
-        content = res.choices[0].message.content or ""
-        content = re.sub(
-            rf"(?:{'|'.join([action.value for action in MessageAction])}):",
-            "",
-            content,
-        ).strip()  # Remove action from content, AI often adds it by mistake event if explicitly asked not to
-        tool_calls = res.choices[0].message.tool_calls
+        ):
+            if delta.content is None:
+                if delta.tool_calls:
+                    piece = delta.tool_calls[0]
+                    tool_calls[piece.index] = tool_calls.get(
+                        piece.index,
+                        {
+                            "function": {"arguments": "", "name": ""},
+                            "id": None,
+                            "type": "function",
+                        },
+                    )
+                    if piece.id:
+                        tool_calls[piece.index]["id"] = piece.id
+                    if piece.function:
+                        if piece.function.name:
+                            tool_calls[piece.index]["function"][
+                                "name"
+                            ] = piece.function.name
+                        tool_calls[piece.index]["function"][
+                            "arguments"
+                        ] += piece.function.arguments
+            else:
+                # Store whole content
+                full_content += delta.content
+                # Batch user return by sentence
+                buffer_content += delta.content
+                # Remove tool calls from buffer content, if any
+                buffer_content = _remove_message_actions(buffer_content)
+                # Test if there ia a sentence in the buffer
+                separators = re.findall(SENTENCE_R, buffer_content)
+                if separators and separators[0] in buffer_content:
+                    to_return = re.split(SENTENCE_R, buffer_content)[0] + separators[0]
+                    buffer_content = buffer_content[len(to_return) :]
+                    await user_content_func(to_return.strip())
 
-        _logger.debug(f"Chat response: {content}")
+        if buffer_content:
+            # Batch remaining user return
+            await user_content_func(buffer_content)
+
+        # Remove tool calls from full content, if any
+        full_content = _remove_message_actions(full_content)
+
+        _logger.debug(f"Chat response: {full_content}")
         _logger.debug(f"Tool calls: {tool_calls}")
 
         intent = IndentAction.CONTINUE
         models = []
         if tool_calls:
             # TODO: Catch tool error individually
-            for tool_call in tool_calls:
-                name = tool_call.function.name
-                arguments = tool_call.function.arguments
+            for _, tool_call in tool_calls.items():
+                name = tool_call["function"]["name"]
+                arguments = tool_call["function"]["arguments"]
                 _logger.info(f"Tool call {name} with parameters {arguments}")
 
                 model = MessageToolModel(
                     content="",
                     function_arguments=arguments,
                     function_name=name,
-                    tool_id=tool_call.id,
+                    tool_id=tool_call["id"],
                 )
 
                 if name == IndentAction.TALK_TO_HUMAN.value:
@@ -831,7 +881,9 @@ async def gpt_chat(
                             f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
                         )
                     else:
-                        content += parameters[customer_response_prop] + " "
+                        local_content = parameters[customer_response_prop]
+                        full_content += local_content + " "
+                        await user_content_func(local_content)
 
                     if not parameters["field"] in ClaimModel.editable_fields():
                         _logger.debug(
@@ -856,7 +908,9 @@ async def gpt_chat(
                             f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
                         )
                     else:
-                        content += parameters[customer_response_prop] + " "
+                        local_content = parameters[customer_response_prop]
+                        full_content += local_content + " "
+                        await user_content_func(local_content)
 
                     # Generate synthesis for the old claim
                     background_tasks.add_task(post_call_synthesis, call)
@@ -882,7 +936,9 @@ async def gpt_chat(
                             f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
                         )
                     else:
-                        content += parameters[customer_response_prop] + " "
+                        local_content = parameters[customer_response_prop]
+                        full_content += local_content + " "
+                        await user_content_func(local_content)
 
                     updated = False
                     for reminder in call.reminders:
@@ -911,7 +967,7 @@ async def gpt_chat(
 
         call.messages.append(
             MessageModel(
-                content=content,
+                content=full_content,
                 persona=MessagePersona.ASSISTANT,
                 tool_calls=models,
             )
@@ -920,7 +976,7 @@ async def gpt_chat(
         return (
             call,
             ActionModel(
-                content=content,
+                content=full_content,
                 intent=intent,
             ),
         )
@@ -937,7 +993,7 @@ async def gpt_chat(
 async def handle_recognize_text(
     client: CallConnectionClient,
     call: CallModel,
-    text: str,
+    text: Optional[str] = None,
     store: bool = True,
 ) -> None:
     """
@@ -945,12 +1001,13 @@ async def handle_recognize_text(
 
     If store is True, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    await handle_play(
-        call=call,
-        client=client,
-        store=store,
-        text=text,
-    )
+    if text:
+        await handle_play(
+            call=call,
+            client=client,
+            store=store,
+            text=text,
+        )
 
     _logger.debug(f"Recognizing ({call.call_id})")
     await handle_recognize_media(
@@ -1024,10 +1081,11 @@ async def post_call_sms(call: CallModel) -> None:
     Send an SMS report to the customer.
     """
     content = await gpt_completion(
-        CONFIG.prompts.llm.sms_summary_system(
+        system=CONFIG.prompts.llm.sms_summary_system(
             call.claim, call.messages, call.reminders
         ),
-        call,
+        call=call,
+        max_tokens=300,
     )
     _logger.info(f"SMS report ({call.call_id}): {content}")
 
@@ -1100,16 +1158,18 @@ async def post_call_synthesis(call: CallModel) -> None:
 
     short, long = await asyncio.gather(
         gpt_completion(
-            CONFIG.prompts.llm.synthesis_short_system(
+            system=CONFIG.prompts.llm.synthesis_short_system(
                 call.claim, call.messages, call.reminders
             ),
-            call,
+            call=call,
+            max_tokens=100,
         ),
         gpt_completion(
-            CONFIG.prompts.llm.synthesis_long_system(
+            system=CONFIG.prompts.llm.synthesis_long_system(
                 call.claim, call.messages, call.reminders
             ),
-            call,
+            call=call,
+            max_tokens=1000,
         ),
     )
     _logger.info(f"Short synthesis ({call.call_id}): {short}")
@@ -1123,15 +1183,41 @@ async def post_call_synthesis(call: CallModel) -> None:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
-async def _gpt_completion(
+async def _gpt_completion_stream(
     messages: List[dict[str, Any]],
+    max_tokens: int,
     tools: Optional[List[dict[str, Any]]] = None,
-    max_tokens: int = 1000,  # Communication Services limit is 400 characters for TTS, 400 tokens ~= 300 words
-) -> ChatCompletion:
-    return await oai_gpt.chat.completions.create(
+) -> AsyncGenerator[ChoiceDelta, None]:
+    stream: AsyncStream[ChatCompletionChunk] = await oai_gpt.chat.completions.create(
+        max_tokens=max_tokens,
+        messages=messages,
+        model=CONFIG.openai.gpt_model,
+        stream=True,
+        temperature=0,  # Most focused and deterministic
+        tools=tools or openaiTypes.NOT_GIVEN,
+    )
+    async for chunck in stream:
+        yield chunck.choices[0].delta
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
+async def _gpt_completion_sync(
+    messages: List[dict[str, Any]],
+    max_tokens: int,
+    tools: Optional[List[dict[str, Any]]] = None,
+) -> ChatCompletionMessage:
+    res = await oai_gpt.chat.completions.create(
         max_tokens=max_tokens,
         messages=messages,
         model=CONFIG.openai.gpt_model,
         temperature=0,  # Most focused and deterministic
         tools=tools or openaiTypes.NOT_GIVEN,
     )
+    return res.choices[0].message
+
+
+def _remove_message_actions(text: str) -> str:
+    """
+    Remove action from content. AI often adds it by mistake event if explicitly asked not to.
+    """
+    return re.sub(MESSAGE_ACTION_R, "", text).strip()

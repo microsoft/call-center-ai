@@ -10,7 +10,6 @@ from helpers.logging import build_logger
 from models.call import CallModel
 from persistence.istore import IStore
 from pydantic import ValidationError
-from tenacity import retry, stop_after_attempt, wait_random_exponential
 from typing import AsyncGenerator, List, Optional
 from uuid import UUID
 
@@ -75,7 +74,9 @@ class CosmosStore(IStore):
                             "name": "@date_limit",
                             "value": str(
                                 datetime.utcnow()
-                                + timedelta(hours=CONFIG.workflow.conversation_timeout_hour)
+                                + timedelta(
+                                    hours=CONFIG.workflow.conversation_timeout_hour
+                                )
                             ),
                         }
                     ],
@@ -113,9 +114,6 @@ class CosmosStore(IStore):
                 _logger.warn(f"Error parsing call, {e.message}")
         return calls or None
 
-    @retry(
-        stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30)
-    )
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
         yield self._db
