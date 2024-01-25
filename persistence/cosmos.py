@@ -74,7 +74,9 @@ class CosmosStore(IStore):
                             "name": "@date_limit",
                             "value": str(
                                 datetime.utcnow()
-                                + timedelta(hours=CONFIG.workflow.conversation_timeout_hour)
+                                + timedelta(
+                                    hours=CONFIG.workflow.conversation_timeout_hour
+                                )
                             ),
                         }
                     ],
