@@ -9,7 +9,6 @@ from helpers.logging import build_logger
 from models.training import TrainingModel
 from persistence.isearch import ISearch
 from pydantic import ValidationError
-from tenacity import retry, stop_after_attempt, wait_random_exponential
 from typing import AsyncGenerator, List, Optional
 
 
@@ -64,9 +63,6 @@ class AiSearchSearch(ISearch):
             _logger.error(f"Error connecting to AI Search, {e.message}")
         return trainings or None
 
-    @retry(
-        stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30)
-    )
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SearchClient, None]:
         async with SearchClient(
