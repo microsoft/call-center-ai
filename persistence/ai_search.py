@@ -1,5 +1,5 @@
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import HttpResponseError
+from azure.core.exceptions import HttpResponseError, ServiceRequestError
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 from contextlib import asynccontextmanager
@@ -60,6 +60,8 @@ class AiSearchSearch(ISearch):
                     except ValidationError as e:
                         _logger.warn(f"Error parsing training, {e.message}")
         except HttpResponseError as e:
+            _logger.error(f"Error requesting AI Search, {e.message}")
+        except ServiceRequestError as e:
             _logger.error(f"Error connecting to AI Search, {e.message}")
         return trainings or None
 
