@@ -2,6 +2,7 @@ from helpers.config_models.ai_search import AiSearchModel
 from helpers.config_models.api import ApiModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_service import CommunicationServiceModel
+from helpers.config_models.content_safety import ContentSafetyModel
 from helpers.config_models.database import DatabaseModel
 from helpers.config_models.monitoring import MonitoringModel
 from helpers.config_models.openai import OpenAiModel
@@ -20,6 +21,7 @@ class RootModel(BaseSettings, env_prefix=""):
     api: ApiModel
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
+    content_safety: ContentSafetyModel
     database: DatabaseModel
     monitoring: MonitoringModel = (
         MonitoringModel()
