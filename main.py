@@ -23,7 +23,7 @@ from azure.core.exceptions import ClientAuthenticationError
 from azure.core.exceptions import ResourceNotFoundError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import DefaultAzureCredential
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -36,7 +36,6 @@ from models.synthesis import SynthesisModel
 from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
-from tenacity import retry, stop_after_attempt, wait_random_exponential
 from urllib.parse import quote_plus
 import asyncio
 import html
@@ -48,12 +47,9 @@ from models.message import (
     ToolModel as MessageToolModel,
 )
 from models.claim import ClaimModel
-from openai import AsyncAzureOpenAI, AsyncStream
-from openai.types.chat import ChatCompletionMessage, ChatCompletionChunk
-from openai.types.chat.chat_completion_chunk import ChoiceDelta
-from openai import _types as openaiTypes
 from uuid import UUID
 import json
+from helpers.llm import completion_stream, completion_sync, safety_check
 
 
 # Jinja templates
@@ -63,23 +59,6 @@ jinja = Environment(
     loader=FileSystemLoader("public_website"),
 )
 jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
-
-# Azure OpenAI
-_logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")
-oai_gpt = AsyncAzureOpenAI(
-    api_version="2023-12-01-preview",
-    azure_deployment=CONFIG.openai.gpt_deployment,
-    azure_endpoint=CONFIG.openai.endpoint,
-    # Authentication, either RBAC or API key
-    api_key=CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,
-    azure_ad_token_provider=(
-        get_bearer_token_provider(
-            DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
-        )
-        if not CONFIG.openai.api_key
-        else None
-    ),
-)
 
 # Azure Communication Services
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
@@ -418,8 +397,12 @@ async def intelligence(
 
     async def gpt_callback(text: str) -> None:
         nonlocal has_started
-        has_started = True
 
+        if not await safety_check(text):
+            _logger.warn(f"Unsafe text detected, not playing ({call.call_id})")
+            return
+
+        has_started = True
         await handle_play(
             call=call,
             client=client,
@@ -586,7 +569,7 @@ async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
 
     content = None
     try:
-        res = await _gpt_completion_sync(
+        res = await completion_sync(
             max_tokens=max_tokens,
             messages=messages,
         )
@@ -799,8 +782,8 @@ async def gpt_chat(
     buffer_content = ""
     tool_calls = {}
     try:
-        async for delta in _gpt_completion_stream(
-            max_tokens=300,
+        async for delta in completion_stream(
+            max_tokens=400,
             messages=messages,
             tools=tools,
         ):
@@ -1183,40 +1166,6 @@ async def post_call_synthesis(call: CallModel) -> None:
         short=short,
     )
     await db.call_aset(call)
-
-
-@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
-async def _gpt_completion_stream(
-    messages: List[dict[str, Any]],
-    max_tokens: int,
-    tools: Optional[List[dict[str, Any]]] = None,
-) -> AsyncGenerator[ChoiceDelta, None]:
-    stream: AsyncStream[ChatCompletionChunk] = await oai_gpt.chat.completions.create(
-        max_tokens=max_tokens,
-        messages=messages,
-        model=CONFIG.openai.gpt_model,
-        stream=True,
-        temperature=0,  # Most focused and deterministic
-        tools=tools or openaiTypes.NOT_GIVEN,
-    )
-    async for chunck in stream:
-        yield chunck.choices[0].delta
-
-
-@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
-async def _gpt_completion_sync(
-    messages: List[dict[str, Any]],
-    max_tokens: int,
-    tools: Optional[List[dict[str, Any]]] = None,
-) -> ChatCompletionMessage:
-    res = await oai_gpt.chat.completions.create(
-        max_tokens=max_tokens,
-        messages=messages,
-        model=CONFIG.openai.gpt_model,
-        temperature=0,  # Most focused and deterministic
-        tools=tools or openaiTypes.NOT_GIVEN,
-    )
-    return res.choices[0].message
 
 
 def _remove_message_actions(text: str) -> str:

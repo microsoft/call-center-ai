@@ -130,6 +130,14 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
               name: 'AI_SEARCH_ACCESS_KEY'
               value: search.listAdminKeys().primaryKey
             }
+            {
+              name: 'CONTENT_SAFETY_ENDPOINT'
+              value: cognitiveContentsafety.properties.endpoint
+            }
+            {
+              name: 'CONTENT_SAFETY_ACCESS_KEY'
+              value: cognitiveContentsafety.listKeys().key1
+            }
           ]
           resources: {
             cpu: 1
@@ -195,6 +203,23 @@ resource eventgridTopic 'Microsoft.EventGrid/systemTopics@2023-12-15-preview' = 
   properties: {
     source: communication.id
     topicType: 'Microsoft.Communication.CommunicationServices'
+  }
+}
+
+resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+  name: '${prefix}-contentsafety'
+  location: location
+  tags: tags
+  sku: {
+    name: 'F0'
+  }
+  kind: 'ContentSafety'
+  properties: {
+    customSubDomainName: '${prefix}-contentsafety'
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+    }
   }
 }
 
