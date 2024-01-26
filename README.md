@@ -125,6 +125,76 @@ graph LR
   user -- Call --> communication_service
 ```
 
+### Sequence diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor Customer
+    participant PSTN
+    participant Text to Speech
+    participant Speech to Text
+    actor Human agent
+    participant Event Grid
+    participant Communication Services
+    participant Content Safety
+    participant API
+    participant Cosmos DB
+    participant OpenAI GPT
+    participant AI Search
+
+    API->>Event Grid: Subscribe to events
+    Customer->>PSTN: Initiate a call
+    PSTN->>Communication Services: Forward call
+    Communication Services->>Event Grid: New call event
+    Event Grid->>API: Send event to event URL (HTTP webhook)
+    activate API
+    API->>Communication Services: Accept the call and give inbound URL
+    deactivate API
+    Communication Services->>Speech to Text: Transform speech to text
+
+    Communication Services->>API: Send text to the inbound URL
+    activate API
+    alt First call
+        API->>Communication Services: Send static SSML text
+    else Callback
+        API->>AI Search: Gather training data
+        API->>OpenAI GPT: Ask for a completion
+        OpenAI GPT-->>API: Answer (HTTP/2 SSE)
+        loop Over buffer
+            loop Over multiple tools
+                alt Is this a claim data update?
+                    API->>Content Safety: Ask for safety test
+                    alt Is the text safe?
+                        API->>Communication Services: Send dynamic SSML text
+                    end
+                    API->>Cosmos DB: Update claim data
+                else Does the user want the human agent?
+                    API->>Communication Services: Send static SSML text
+                    API->>Communication Services: Transfer to a human
+                    Communication Services->>Human agent: Call the phone number
+                else Should we end the call?
+                    API->>Communication Services: Send static SSML text
+                    API->>Communication Services: End the call
+                end
+            end
+            alt Is there a text?
+                alt Is there enough text to make a sentence?
+                    API->>Content Safety: Ask for safety test
+                    alt Is the text safe?
+                        API->>Communication Services: Send dynamic SSML text
+                    end
+                end
+            end
+        end
+        API->>Cosmos DB: Persist conversation
+    end
+    deactivate API
+    Communication Services->>PSTN: Send voice
+    PSTN->>Customer: Forward voice
+```
+
 ## Local installation
 
 ### Prerequisites
