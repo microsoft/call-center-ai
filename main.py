@@ -585,8 +585,18 @@ async def gpt_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
     user_callback: Callable[[str], Coroutine[Any, Any, None]],
+    retry_attempt: int = 0,
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
+
+    def _error_response() -> Tuple[CallModel, ActionModel]:
+        return (
+            call,
+            ActionModel(
+                content=CONFIG.prompts.tts.error(),
+                intent=IndentAction.CONTINUE,
+            ),
+        )
 
     # Query expansion from last messages
     trainings_tasks = await asyncio.gather(
@@ -830,6 +840,25 @@ async def gpt_chat(
         _logger.debug(f"Chat response: {full_content}")
         _logger.debug(f"Tool calls: {tool_calls}")
 
+        # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
+        # TODO: Tries to detect this error earlier
+        # See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653
+        if any(
+            tool_call["function"]["name"] == "multi_tool_use.parallel"
+            for _, tool_call in tool_calls.items()
+        ):
+            if retry_attempt > 3:
+                _logger.warn(
+                    f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
+                )
+                return _error_response()
+            _logger.warn(
+                f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
+            )
+            return await gpt_chat(
+                background_tasks, call, user_callback, retry_attempt + 1
+            )
+
         intent = IndentAction.CONTINUE
         models = []
         if tool_calls:
@@ -970,10 +999,7 @@ async def gpt_chat(
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
-    return (
-        call,
-        ActionModel(content=CONFIG.prompts.tts.error(), intent=IndentAction.CONTINUE),
-    )
+    return _error_response()
 
 
 async def handle_recognize_text(
