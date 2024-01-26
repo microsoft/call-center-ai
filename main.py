@@ -101,7 +101,7 @@ api = FastAPI(
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
-SENTENCE_R = r"[^\w\s\-',:;()]"
+SENTENCE_R = r"[^\w\s\-/',:;()]"
 MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
 
 
@@ -471,7 +471,7 @@ async def intelligence(
             content=CONFIG.prompts.tts.error(), intent=IndentAction.CONTINUE
         )
 
-    _logger.info(f"Chat ({call.call_id}): {chat_action}")
+    _logger.debug(f"Chat ({call.call_id}): {chat_action}")
 
     if chat_action.intent == IndentAction.TALK_TO_HUMAN:
         await handle_play(
@@ -526,6 +526,8 @@ async def handle_play(
         call.messages.append(
             MessageModel(content=text, persona=MessagePersona.ASSISTANT)
         )
+
+    _logger.info(f"Playing text ({call.call_id}): {text}")
 
     # Split text in chunks of max 400 characters, separated by a comma
     chunks = []
