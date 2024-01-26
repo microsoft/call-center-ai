@@ -1,5 +1,6 @@
 aiohttp==3.9.1  # Required for azure-search-documents
 aiosqlite==0.19.0
+azure-ai-contentsafety==1.0.0
 azure-communication-callautomation==1.1.0
 azure-communication-sms==1.0.1
 azure-cosmos==4.5.1

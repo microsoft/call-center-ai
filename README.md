@@ -52,6 +52,7 @@ Extract of the data stored during the call:
 - [x] Create by itself a todo list of tasks to complete the claim
 - [x] Customizable prompts
 - [x] Disengaging from a human agent when needed
+- [x] Filter out inappropriate content from the LLM, like profanity or concurrence company names
 - [x] Fine understanding of the customer request with GPT-4 Turbo
 - [x] Follow a specific data schema for the claim
 - [x] Has access to a documentation database (few-shot training / RAG)
@@ -96,10 +97,11 @@ graph LR
   user(["User"])
 
   subgraph "Claim AI"
-    api["API"]
     ai_search[("RAG\n(AI Search)")]
+    api["API"]
     communication_service_sms["SMS gateway\n(Communication Services)"]
     communication_service["Call gateway\n(Communication Services)"]
+    constent_safety["Moderation\n(Content Safety)"]
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
@@ -110,6 +112,7 @@ graph LR
   api -- Generate completion --> gpt
   api -- Save conversation --> db
   api -- Send SMS report --> communication_service_sms
+  api -- Test for profanity --> constent_safety
   api -- Transfer to agent --> communication_service
   api -. Watch .-> event_grid
 
@@ -120,6 +123,76 @@ graph LR
   communication_service_sms -- Send SMS --> user
 
   user -- Call --> communication_service
+```
+
+### Sequence diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor Customer
+    participant PSTN
+    participant Text to Speech
+    participant Speech to Text
+    actor Human agent
+    participant Event Grid
+    participant Communication Services
+    participant Content Safety
+    participant API
+    participant Cosmos DB
+    participant OpenAI GPT
+    participant AI Search
+
+    API->>Event Grid: Subscribe to events
+    Customer->>PSTN: Initiate a call
+    PSTN->>Communication Services: Forward call
+    Communication Services->>Event Grid: New call event
+    Event Grid->>API: Send event to event URL (HTTP webhook)
+    activate API
+    API->>Communication Services: Accept the call and give inbound URL
+    deactivate API
+    Communication Services->>Speech to Text: Transform speech to text
+
+    Communication Services->>API: Send text to the inbound URL
+    activate API
+    alt First call
+        API->>Communication Services: Send static SSML text
+    else Callback
+        API->>AI Search: Gather training data
+        API->>OpenAI GPT: Ask for a completion
+        OpenAI GPT-->>API: Answer (HTTP/2 SSE)
+        loop Over buffer
+            loop Over multiple tools
+                alt Is this a claim data update?
+                    API->>Content Safety: Ask for safety test
+                    alt Is the text safe?
+                        API->>Communication Services: Send dynamic SSML text
+                    end
+                    API->>Cosmos DB: Update claim data
+                else Does the user want the human agent?
+                    API->>Communication Services: Send static SSML text
+                    API->>Communication Services: Transfer to a human
+                    Communication Services->>Human agent: Call the phone number
+                else Should we end the call?
+                    API->>Communication Services: Send static SSML text
+                    API->>Communication Services: End the call
+                end
+            end
+            alt Is there a text?
+                alt Is there enough text to make a sentence?
+                    API->>Content Safety: Ask for safety test
+                    alt Is the text safe?
+                        API->>Communication Services: Send dynamic SSML text
+                    end
+                end
+            end
+        end
+        API->>Cosmos DB: Persist conversation
+    end
+    deactivate API
+    Communication Services->>PSTN: Send voice
+    PSTN->>Customer: Forward voice
 ```
 
 ## Local installation
@@ -170,6 +243,11 @@ ai_search:
   endpoint: https://xxx.search.windows.net
   index: trainings
   semantic_configuration: default
+
+content_safety:
+  access_key: xxx
+  blocklists: []
+  endpoint: https://xxx.cognitiveservices.azure.com
 ```
 
 If you want to use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
@@ -243,6 +321,9 @@ openai: {}
 ai_search:
   index: trainings
   semantic_configuration: default
+
+content_safety:
+  blocklists: []
 ```
 
 Steps to deploy:
