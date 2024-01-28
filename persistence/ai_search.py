@@ -58,7 +58,7 @@ class AiSearchSearch(ISearch):
                             )
                         )
                     except ValidationError as e:
-                        _logger.warn(f"Error parsing training, {e.message}")
+                        _logger.warn(f"Error parsing training: {e.errors()}")
         except HttpResponseError as e:
             _logger.error(f"Error requesting AI Search, {e.message}")
         except ServiceRequestError as e:
