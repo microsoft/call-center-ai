@@ -906,7 +906,7 @@ async def gpt_chat(
                         parameters = json.loads(arguments)
                     except Exception:
                         _logger.warn(
-                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                            f'LLM send back invalid JSON for "{arguments}", ignoring this tool call.'
                         )
                         continue
 
@@ -942,7 +942,7 @@ async def gpt_chat(
                         parameters = json.loads(arguments)
                     except Exception:
                         _logger.warn(
-                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                            f'LLM send back invalid JSON for "{arguments}", ignoring this tool call.'
                         )
                         continue
 
@@ -970,13 +970,13 @@ async def gpt_chat(
                         parameters = json.loads(arguments)
                     except Exception:
                         _logger.warn(
-                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                            f'LLM send back invalid JSON for "{arguments}", ignoring this tool call.'
                         )
                         continue
 
                     if not customer_response_prop in parameters:
                         _logger.warn(
-                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                            f'Missing "{customer_response_prop}" prop in "{arguments}", please fix this!'
                         )
                     else:
                         local_content = parameters[customer_response_prop]
@@ -990,7 +990,7 @@ async def gpt_chat(
                             reminder.due_date_time = parameters["due_date_time"]
                             reminder.owner = parameters["owner"]
                             model.content = (
-                                f"Reminder \"{parameters['title']}\" updated."
+                                f'Reminder "{parameters['title']}" updated.'
                             )
                             updated = True
                             break
@@ -1004,7 +1004,7 @@ async def gpt_chat(
                                 owner=parameters["owner"],
                             )
                         )
-                        model.content = f"Reminder \"{parameters['title']}\" created."
+                        model.content = f'Reminder "{parameters['title']}" created.'
 
                 models.append(model)
 
