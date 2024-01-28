@@ -33,6 +33,15 @@ from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionMessageParam,
+    ChatCompletionMessageToolCallParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionToolMessageParam,
+    ChatCompletionToolParam,
+    ChatCompletionUserMessageParam,
+)
 from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
@@ -103,6 +112,7 @@ CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
 SENTENCE_R = r"[^\w\s\-/',:;()]"
 MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
+FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
 
 class Context(str, Enum):
@@ -555,17 +565,17 @@ async def handle_play(
 async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
-    messages = [
-        {
-            "content": CONFIG.prompts.llm.default_system(
+    messages: List[ChatCompletionMessageParam] = [
+        ChatCompletionSystemMessageParam(
+            content=CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
-            "role": "system",
-        },
-        {
-            "content": system,
-            "role": "system",
-        },
+            role="system",
+        ),
+        ChatCompletionSystemMessageParam(
+            content=system,
+            role="system",
+        ),
     ]
     _logger.debug(f"Messages: {messages}")
 
@@ -613,71 +623,77 @@ async def gpt_chat(
     _logger.info(f"Enhancing GPT chat with {len(trainings)} trainings ({call.call_id})")
     _logger.debug(f"Trainings: {trainings}")
 
-    messages = [
-        {
-            "content": CONFIG.prompts.llm.default_system(
+    messages: List[ChatCompletionMessageParam] = [
+        ChatCompletionSystemMessageParam(
+            content=CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
-            "role": "system",
-        },
-        {
-            "content": CONFIG.prompts.llm.chat_system(
+            role="system",
+        ),
+        ChatCompletionSystemMessageParam(
+            content=CONFIG.prompts.llm.chat_system(
                 claim=call.claim,
                 reminders=call.reminders,
                 trainings=trainings,
             ),
-            "role": "system",
-        },
+            role="system",
+        ),
     ]
     for message in call.messages:
         if message.persona == MessagePersona.HUMAN:
             messages.append(
-                {
-                    "content": f"{message.action.value}: {message.content}",
-                    "role": "user",
-                }
+                ChatCompletionUserMessageParam(
+                    content=f"{message.action.value}: {message.content}",
+                    role="user",
+                )
             )
         elif message.persona == MessagePersona.ASSISTANT:
             if not message.tool_calls:
                 messages.append(
-                    {
-                        "content": f"{message.action.value}: {message.content}",
-                        "role": "assistant",
-                    }
+                    ChatCompletionAssistantMessageParam(
+                        content=f"{message.action.value}: {message.content}",
+                        role="assistant",
+                    )
                 )
             else:
                 messages.append(
-                    {
-                        "content": f"{message.action.value}: {message.content}",
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "id": tool_call.tool_id,
-                                "type": "function",
-                                "function": {
+                    ChatCompletionAssistantMessageParam(
+                        content=f"{message.action.value}: {message.content}",
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageToolCallParam(
+                                id=tool_call.tool_id,
+                                type="function",
+                                function={
                                     "arguments": tool_call.function_arguments,
-                                    "name": tool_call.function_name,
+                                    "name": "-".join(
+                                        re.sub(
+                                            FUNC_NAME_SANITIZER_R,
+                                            "-",
+                                            tool_call.function_name,
+                                        ).split("-")
+                                    ),  # Sanitize with dashes then deduplicate dashes, backward compatibility with old models
                                 },
-                            }
+                            )
                             for tool_call in message.tool_calls
                         ],
-                    }
+                    )
                 )
                 for tool_call in message.tool_calls:
                     messages.append(
-                        {
-                            "content": tool_call.content,
-                            "role": "tool",
-                            "tool_call_id": tool_call.tool_id,
-                        }
+                        ChatCompletionToolMessageParam(
+                            content=tool_call.content,
+                            role="tool",
+                            tool_call_id=tool_call.tool_id,
+                        )
                     )
     _logger.debug(f"Messages: {messages}")
 
     customer_response_prop = "customer_response"
-    tools = [
-        {
-            "type": "function",
-            "function": {
+    tools: List[ChatCompletionToolParam] = [
+        ChatCompletionToolParam(
+            type="function",
+            function={
                 "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
                 "name": IndentAction.TALK_TO_HUMAN.value,
                 "parameters": {
@@ -686,11 +702,11 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
-                "description": "Use this if the user wants to end the call, or if the conversation ends naturally. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
+                "description": "Use this if the user wants to end the call, or if the user said goodbye in the current call. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
                 "name": IndentAction.END_CALL.value,
                 "parameters": {
                     "properties": {},
@@ -698,16 +714,16 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
                 "description": "Use this if the user wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
                 "name": IndentAction.NEW_CLAIM.value,
                 "parameters": {
                     "properties": {
                         f"{customer_response_prop}": {
-                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                             "type": "string",
                         }
                     },
@@ -717,11 +733,11 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
-                "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update policyholder contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
+                "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update contact contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                 "name": IndentAction.UPDATED_CLAIM.value,
                 "parameters": {
                     "properties": {
@@ -735,7 +751,7 @@ async def gpt_chat(
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
-                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                             "type": "string",
                         },
                     },
@@ -747,10 +763,10 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
                 "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
                 "name": IndentAction.NEW_OR_UPDATED_REMINDER.value,
                 "parameters": {
@@ -768,7 +784,7 @@ async def gpt_chat(
                             "type": "string",
                         },
                         "owner": {
-                            "description": "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'policyholder', 'witness', 'police'.",
+                            "description": "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'contact', 'witness', 'police'.",
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
@@ -786,7 +802,7 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
+        ),
     ]
     _logger.debug(f"Tools: {tools}")
 

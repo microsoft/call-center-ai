@@ -12,7 +12,12 @@ from helpers.config import CONFIG
 from helpers.logging import build_logger
 from openai import _types as openaiTypes
 from openai import AsyncAzureOpenAI, AsyncStream
-from openai.types.chat import ChatCompletionMessage, ChatCompletionChunk
+from openai.types.chat import (
+    ChatCompletionChunk,
+    ChatCompletionMessage,
+    ChatCompletionMessageParam,
+    ChatCompletionToolParam,
+)
 from openai.types.chat.chat_completion_chunk import ChoiceDelta
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 from typing import Any, AsyncGenerator, List, Optional
@@ -45,9 +50,9 @@ _contentsafety = ContentSafetyClient(
 
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
 async def completion_stream(
-    messages: List[dict[str, Any]],
+    messages: List[ChatCompletionMessageParam],
     max_tokens: int,
-    tools: Optional[List[dict[str, Any]]] = None,
+    tools: Optional[List[ChatCompletionToolParam]] = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
     stream: AsyncStream[ChatCompletionChunk] = await _oai.chat.completions.create(
         max_tokens=max_tokens,
@@ -63,9 +68,9 @@ async def completion_stream(
 
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
 async def completion_sync(
-    messages: List[dict[str, Any]],
+    messages: List[ChatCompletionMessageParam],
     max_tokens: int,
-    tools: Optional[List[dict[str, Any]]] = None,
+    tools: Optional[List[ChatCompletionToolParam]] = None,
 ) -> ChatCompletionMessage:
     res = await _oai.chat.completions.create(
         max_tokens=max_tokens,
