@@ -1,6 +1,5 @@
-from azure.cosmos import CosmosClient, ContainerProxy
+from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
-from azure.identity import DefaultAzureCredential
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from fastapi.encoders import jsonable_encoder
@@ -15,47 +14,40 @@ from uuid import UUID
 
 
 _logger = build_logger(__name__)
-AZ_CREDENTIAL = DefaultAzureCredential()
 
 
 class CosmosStore(IStore):
-    _db: ContainerProxy
+    _config: CosmosDbModel
 
     def __init__(self, config: CosmosDbModel):
         _logger.info(f"Using CosmosDB {config.database}/{config.container}")
-        client = CosmosClient(
-            connection_timeout=5, credential=AZ_CREDENTIAL, url=config.endpoint
-        )
-        database = client.get_database_client(config.database)
-        self._db = database.get_container_client(config.container)
+        self._config = config
 
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
         try:
             async with self._use_db() as db:
                 items = db.query_items(
-                    enable_cross_partition_query=True,
-                    query="SELECT * FROM c WHERE c.id = @id",
+                    query="SELECT * FROM c WHERE STRINGEQUALS(c.id, @id)",
                     parameters=[{"name": "@id", "value": str(call_id)}],
                 )
+                raw = await anext(items)
+                try:
+                    return CallModel(**raw)
+                except ValidationError as e:
+                _logger.warn(f"Error parsing call, {e.message}")
+        except StopAsyncIteration:
+            return None
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e.message}")
-            return None
-        try:
-            raw = next(items)
-            try:
-                return CallModel(**raw)
-            except ValidationError as e:
-                _logger.warn(f"Error parsing call, {e.message}")
-        except StopIteration:
-            return None
 
     async def call_aset(self, call: CallModel) -> bool:
-        data = jsonable_encoder(call, exclude_none=True)
+        data = jsonable_encoder(call.model_dump(), exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
         _logger.debug(f"Saving call {call.call_id}: {data}")
         try:
-            self._db.upsert_item(body=data)
+            async with self._use_db() as db:
+                await db.upsert_item(body=data)
             return True
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB: {e.message}")
@@ -67,9 +59,12 @@ class CosmosStore(IStore):
             async with self._use_db() as db:
                 items = db.query_items(
                     max_item_count=1,
-                    partition_key=phone_number,
-                    query="SELECT * FROM c WHERE c.created_at < @date_limit ORDER BY c.created_at DESC",
+                    query="SELECT * FROM c WHERE (STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at < @date_limit ORDER BY c.created_at DESC",
                     parameters=[
+                        {
+                            "name": "@phone_number",
+                            "value": phone_number,
+                        },
                         {
                             "name": "@date_limit",
                             "value": str(
@@ -78,20 +73,18 @@ class CosmosStore(IStore):
                                     hours=CONFIG.workflow.conversation_timeout_hour
                                 )
                             ),
-                        }
+                        },
                     ],
                 )
+                raw = await anext(items)
+                try:
+                    return CallModel(**raw)
+                except ValidationError as e:
+                _logger.warn(f"Error parsing call, {e.message}")
+        except StopAsyncIteration:
+            return None
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB: {e.message}")
-            return None
-        try:
-            raw = next(items)
-            try:
-                return CallModel(**raw)
-            except ValidationError as e:
-                _logger.warn(f"Error parsing call, {e.message}")
-        except StopIteration:
-            return None
 
     async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
@@ -99,21 +92,31 @@ class CosmosStore(IStore):
         try:
             async with self._use_db() as db:
                 items = db.query_items(
-                    partition_key=phone_number,
-                    query="SELECT * FROM c ORDER BY c.created_at DESC",
+                    query="SELECT * FROM c WHERE STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true) ORDER BY c.created_at DESC",
+                    parameters=[
+                        {
+                            "name": "@phone_number",
+                            "value": phone_number,
+                        },
+                    ],
                 )
+                async for raw in items:
+                    if not raw:
+                        continue
+                    try:
+                        calls.append(CallModel(**raw))
+                    except ValidationError as e:
+                _logger.warn(f"Error parsing call, {e.message}")
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e.message}")
-            return None
-        for raw in items:
-            if not raw:
-                continue
-            try:
-                calls.append(CallModel(**raw))
-            except ValidationError as e:
-                _logger.warn(f"Error parsing call, {e.message}")
         return calls or None
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
-        yield self._db
+        async with CosmosClient(
+            connection_timeout=5,
+            credential=self._config.access_key.get_secret_value(),
+            url=self._config.endpoint,
+        ) as client:
+            database = client.get_database_client(self._config.database)
+            yield database.get_container_client(self._config.container)

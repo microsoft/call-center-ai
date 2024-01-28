@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import validator
+from pydantic import validator, SecretStr, Field
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -10,14 +10,24 @@ class Mode(str, Enum):
 
 
 class CosmosDbModel(BaseSettings, env_prefix="database_cosmos_db_"):
+    access_key: SecretStr
     container: str
     database: str
     endpoint: str
 
 
 class SqliteModel(BaseSettings, env_prefix="database_sqlite_"):
-    path: str = ".local.sqlite"
+    path: str = ".local"
+    schema_version: int = Field(default=3, frozen=True)
     table: str = "calls"
+
+    def full_path(self) -> str:
+        """
+        Returns the full path to the sqlite database file.
+
+        Formatted as: `{path}-v{schema_version}.sqlite`.
+        """
+        return f"{self.path}-v{self.schema_version}.sqlite"
 
 
 class DatabaseModel(BaseSettings, env_prefix="database_"):

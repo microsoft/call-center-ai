@@ -209,6 +209,7 @@ api:
 database:
   # mode: cosmos_db
   # cosmos_db:
+  #   access_key: xxx
   #   container: calls
   #   database: claim-ai
   #   endpoint: https://xxx.documents.azure.com:443

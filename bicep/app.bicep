@@ -87,6 +87,10 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
               value: 'cosmos_db'
             }
             {
+              name: 'DATABASE_COSMOS_DB_ACCESS_KEY'
+              value: cosmos.listKeys().primaryMasterKey
+            }
+            {
               name: 'DATABASE_COSMOS_DB_ENDPOINT'
               value: cosmos.properties.documentEndpoint
             }
@@ -373,37 +377,6 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15
   }
 }
 
-resource roleSqlContrib 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions@2023-11-15' = {
-  parent: cosmos
-  name: guid('sql-role-definition-', deployment().name, 'roleSqlContrib')
-  properties: {
-    roleName: 'roleSqlContrib'
-    type: 'CustomRole'
-    assignableScopes: [
-      cosmos.id
-    ]
-    permissions: [
-      {
-        dataActions: [
-          'Microsoft.DocumentDB/databaseAccounts/readMetadata'
-          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/*'
-          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/executeQuery'
-        ]
-      }
-    ]
-  }
-}
-
-resource appContribSql 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2021-04-15' = {
-  parent: cosmos
-  name: guid(roleSqlContrib.id, deployment().name, 'appContribSql')
-  properties: {
-    principalId: containerApp.identity.principalId
-    roleDefinitionId: roleSqlContrib.id
-    scope: cosmos.id
-  }
-}
-
 resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-11-15' = {
   parent: database
   name: 'calls'
@@ -419,6 +392,16 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
               {
                 dataType: 'String'
                 kind: 'Range'
+                precision: -1
+              }
+            ]
+          }
+          {
+            path: '/claim/policyholder_phone/?'
+            indexes: [
+              {
+                dataType: 'String'
+                kind: 'Hash'
                 precision: -1
               }
             ]
