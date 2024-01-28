@@ -26,7 +26,7 @@ Extract of the data stored during the call:
     "incident_date_time": "2024-01-11T19:33:41",
     "incident_description": "The vehicle began to travel with a burning smell and the driver pulled over to the side of the freeway.",
     "policy_number": "B01371946",
-    "policyholder_contact_info": "[number masked for the demo]",
+    "policyholder_phone": "[number masked for the demo]",
     "policyholder_name": "Clémence Lesne",
     "vehicle_info": "Ford Fiesta 2003"
   },
