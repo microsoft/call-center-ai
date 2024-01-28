@@ -111,7 +111,7 @@ api = FastAPI(
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
-SENTENCE_R = r"[^\w\s\-/',:;()]"
+SENTENCE_R = r"[^\w\s+\-/'\",:;()]"
 MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
