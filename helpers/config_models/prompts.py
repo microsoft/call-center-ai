@@ -6,15 +6,26 @@ from models.claim import ClaimModel
 from models.message import Action as MessageAction, MessageModel
 from models.reminder import ReminderModel
 from models.training import TrainingModel
-from pydantic import computed_field
+from pydantic import computed_field, BaseModel
 from pydantic_settings import BaseSettings
 from textwrap import dedent
-from typing import Any, List, Optional
+from typing import List, Optional, Union
 import json
 
 
-def _pydantic_to_str(any: Any) -> str:
-    return json.dumps(jsonable_encoder(any))
+def _pydantic_to_str(model: Optional[Union[BaseModel, List[BaseModel]]]) -> str:
+    """
+    Convert a Pydantic model to a JSON string.
+    """
+    if not model:
+        return ""
+    return json.dumps(
+        jsonable_encoder(
+            model.model_dump()
+            if isinstance(model, BaseModel)
+            else [m.model_dump() for m in model]
+        )
+    )
 
 
 class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
@@ -250,10 +261,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             {dedent(prompt_tpl.format(**kwargs))}
 
             Additional context:
-            {_pydantic_to_str([
-                training.model_dump(include={"content", "title"})
-                for training in trainings or []
-            ])}
+            {_pydantic_to_str(trainings)}
         """
         )
 
