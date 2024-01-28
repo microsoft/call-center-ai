@@ -56,6 +56,7 @@ from models.message import (
     ToolModel as MessageToolModel,
 )
 from models.claim import ClaimModel
+from pydantic import ValidationError
 from uuid import UUID
 import json
 from helpers.llm import completion_stream, completion_sync, safety_check
@@ -918,13 +919,22 @@ async def gpt_chat(
                         full_content += local_content + " "
                         await user_callback(local_content)
 
+                    content = None
                     if not parameters["field"] in ClaimModel.editable_fields():
-                        _logger.debug(
-                            f"AI model tried to update a non-editable field {parameters['field']}"
-                        )
+                        content = f'Failed to update a non-editable field "{parameters['field']}".'
                     else:
-                        setattr(call.claim, parameters["field"], parameters["value"])
-                        model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
+                        try:
+                            # Define the field
+                            setattr(
+                                call.claim, parameters["field"], parameters["value"]
+                            )
+                            # Trigger a re-validation to spot errors before saving
+                            ClaimModel.model_validate(call.claim)
+                        except ValidationError as e:
+                            content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
+                    if not content:
+                        content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
+                    model.content = content
 
                 elif name == IndentAction.NEW_CLAIM.value:
                     intent = IndentAction.NEW_CLAIM
