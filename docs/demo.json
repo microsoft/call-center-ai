@@ -11,7 +11,7 @@
     "medical_records": null,
     "police_report_number": null,
     "policy_number": "B01371946",
-    "policyholder_contact_info": "[number masked for the demo]",
+    "policyholder_phone": "[number masked for the demo]",
     "policyholder_name": "Clémence Lesne",
     "pre_existing_damage_description": null,
     "property_damage_description": null,
@@ -134,8 +134,8 @@
       "persona": "assistant",
       "tool_calls": [
         {
-          "content": "Updated claim field \"policyholder_contact_info\" with value \"[number masked for the demo]\".",
-          "function_arguments": "{\"field\":\"policyholder_contact_info\",\"value\":\"[number masked for the demo]\",\"customer_response\":\"Je confirme que votre num\\u00e9ro de t\\u00e9l\\u00e9phone est celui qui s'affiche \\u00e0 l'\\u00e9cran, [number masked for the demo], et je vais l'ajouter \\u00e0 votre dossier.\"}",
+          "content": "Updated claim field \"policyholder_phone\" with value \"[number masked for the demo]\".",
+          "function_arguments": "{\"field\":\"policyholder_phone\",\"value\":\"[number masked for the demo]\",\"customer_response\":\"Je confirme que votre num\\u00e9ro de t\\u00e9l\\u00e9phone est celui qui s'affiche \\u00e0 l'\\u00e9cran, [number masked for the demo], et je vais l'ajouter \\u00e0 votre dossier.\"}",
           "function_name": "updated_claim",
           "id": "call_1OOvuR291YXDqfuYV89e3sxD"
         }

@@ -3,18 +3,36 @@ from fastapi.encoders import jsonable_encoder
 from functools import cached_property
 from logging import Logger
 from models.claim import ClaimModel
-from models.message import Action as MessageAction, MessageModel
+from models.message import (
+    Action as MessageAction,
+    MessageModel,
+    Persona as MessagePersona,
+)
 from models.reminder import ReminderModel
 from models.training import TrainingModel
-from pydantic import computed_field
+from pydantic import computed_field, BaseModel
 from pydantic_settings import BaseSettings
 from textwrap import dedent
-from typing import Any, List, Optional
+from typing import List, Optional, Union, Set
 import json
 
 
-def _pydantic_to_str(any: Any) -> str:
-    return json.dumps(jsonable_encoder(any))
+def _pydantic_to_str(
+    model: Optional[Union[BaseModel, List[BaseModel]]],
+    exclude: Optional[Set[str]] = None,
+) -> str:
+    """
+    Convert a Pydantic model to a JSON string.
+    """
+    if not model:
+        return ""
+    return json.dumps(
+        jsonable_encoder(
+            model.model_dump(exclude=exclude)
+            if isinstance(model, BaseModel)
+            else [m.model_dump(exclude=exclude) for m in model]
+        )
+    )
 
 
 class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
@@ -150,6 +168,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Prefer including details about the incident (e.g. what, when, where, how)
         - Say "you" to refer to the customer, and "I" to refer to the assistant
         - Take into consideration all the conversation history, from the beginning
+        - Use Markdown syntax to format the message with paragraphs, bold text, and URL
         - Won't make any assumptions
 
         Claim status:
@@ -160,6 +179,46 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
 
         Conversation history:
         {messages}
+    """
+    citations_tpl: str = """
+        Assitant will add Markdown citations to the text. Citations are used to add additional context to the text, without cluttering the content itself.
+
+        Assitant:
+        - Add as many citations as needed to the text to make it fact-checkable
+        - Only use exact words from the text as citations
+        - Treats a citation as a word or a group of words
+        - Use claim, reminders, and messages extracts as citations
+        - Won't make any assumptions
+        - Write citations as Markdown abbreviations at the end of the text (e.g. "*[words from the text]: extract from the conversation")
+
+        Claim status:
+        {claim}
+
+        Reminders:
+        {reminders}
+
+        Conversation history:
+        {messages}
+
+        Response format:
+        [source text]\\n
+        *[extract from text]: "citation from claim, reminders, or messages"
+
+        Example #1:
+        The car accident of yesterday.\\n
+        *[of yesterday]: "That was yesterday"
+
+        Example #2:
+        # Holes in the roof of the garden shed.\\n
+        *[in the roof]: "The holes are in the roof"
+
+        Example #2:
+        You have reported a claim following a fall in the parking lot. A reminder has been created to follow up on your medical appointment scheduled for the day after tomorrow.\\n
+        *[the parking lot]: "I stumbled into the supermarket parking lot"
+        *[your medical appointment]: "I called my family doctor, I have an appointment for the day after tomorrow."
+
+        Text:
+        {text}
     """
 
     def default_system(self, phone_number: str) -> str:
@@ -206,7 +265,14 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.sms_summary_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(messages),
+            messages=_pydantic_to_str(
+                [
+                    message
+                    for message in messages
+                    if message.persona is not MessagePersona.TOOL
+                ],
+                exclude={"tool_calls"},
+            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
             reminders=_pydantic_to_str(reminders),
         )
 
@@ -222,7 +288,14 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.synthesis_short_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(messages),
+            messages=_pydantic_to_str(
+                [
+                    message
+                    for message in messages
+                    if message.persona is not MessagePersona.TOOL
+                ],
+                exclude={"tool_calls"},
+            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
             reminders=_pydantic_to_str(reminders),
         )
 
@@ -238,8 +311,37 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.synthesis_long_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(messages),
+            messages=_pydantic_to_str(
+                [
+                    message
+                    for message in messages
+                    if message.persona is not MessagePersona.TOOL
+                ],
+                exclude={"tool_calls"},
+            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
             reminders=_pydantic_to_str(reminders),
+        )
+
+    def citations(
+        self,
+        claim: ClaimModel,
+        messages: List[MessageModel],
+        reminders: List[ReminderModel],
+        text: str,
+    ) -> str:
+        return self._return(
+            self.citations_tpl,
+            claim=_pydantic_to_str(claim),
+            messages=_pydantic_to_str(
+                [
+                    message
+                    for message in messages
+                    if message.persona is not MessagePersona.TOOL
+                ],
+                exclude={"tool_calls"},
+            ),  # Filter out tool messages, to avoid LLM to cite itself
+            reminders=_pydantic_to_str(reminders),
+            text=text,
         )
 
     def _return(
@@ -250,10 +352,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             {dedent(prompt_tpl.format(**kwargs))}
 
             Additional context:
-            {_pydantic_to_str([
-                training.model_dump(include={"content", "title"})
-                for training in trainings or []
-            ])}
+            {_pydantic_to_str(trainings)}
         """
         )
 

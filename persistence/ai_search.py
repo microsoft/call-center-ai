@@ -58,7 +58,7 @@ class AiSearchSearch(ISearch):
                             )
                         )
                     except ValidationError as e:
-                        _logger.warn(f"Error parsing training, {e.message}")
+                        _logger.warn(f"Error parsing training: {e.errors()}")
         except HttpResponseError as e:
             _logger.error(f"Error requesting AI Search, {e.message}")
         except ServiceRequestError as e:
@@ -67,9 +67,10 @@ class AiSearchSearch(ISearch):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SearchClient, None]:
-        async with SearchClient(
+        db = SearchClient(
             credential=AzureKeyCredential(self._config.access_key.get_secret_value()),
             endpoint=self._config.endpoint,
             index_name=self._config.index,
-        ) as db:
-            yield db
+        )
+        yield db
+        await db.close()

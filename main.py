@@ -20,7 +20,7 @@ from azure.communication.callautomation import (
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ClientAuthenticationError
-from azure.core.exceptions import ResourceNotFoundError
+from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential
@@ -33,6 +33,15 @@ from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionMessageParam,
+    ChatCompletionMessageToolCallParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionToolMessageParam,
+    ChatCompletionToolParam,
+    ChatCompletionUserMessageParam,
+)
 from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
@@ -46,19 +55,24 @@ from models.message import (
     Persona as MessagePersona,
     ToolModel as MessageToolModel,
 )
+from contextlib import asynccontextmanager
+from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close
 from models.claim import ClaimModel
+from pydantic import ValidationError
 from uuid import UUID
 import json
-from helpers.llm import completion_stream, completion_sync, safety_check
+import mistune
 
 
-# Jinja templates
+# Jinja configuration
 jinja = Environment(
     autoescape=select_autoescape(),
     enable_async=True,
     loader=FileSystemLoader("public_website"),
 )
+# Jinja custom functions
 jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
+jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else "" # type: ignore
 
 # Azure Communication Services
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
@@ -82,6 +96,13 @@ db = (
 )
 search = AiSearchSearch(CONFIG.ai_search)
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await llm_close()
+
+
 # FastAPI
 _logger.info(f'Using root path "{CONFIG.api.root_path}"')
 api = FastAPI(
@@ -93,6 +114,7 @@ api = FastAPI(
         "name": "Apache-2.0",
         "url": "https://github.com/clemlesne/claim-ai-phone-bot/blob/master/LICENCE",
     },
+    lifespan=lifespan,
     root_path=CONFIG.api.root_path,
     title="claim-ai-phone-bot",
     version=CONFIG.version,
@@ -101,8 +123,9 @@ api = FastAPI(
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
-SENTENCE_R = r"[^\w\s\-/',:;()]"
+SENTENCE_R = r"[^\w\s+\-/'\",:;()@]"
 MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
+FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
 
 class Context(str, Enum):
@@ -550,22 +573,27 @@ async def handle_play(
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
 
 async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
-    messages = [
-        {
-            "content": CONFIG.prompts.llm.default_system(
+    messages: List[ChatCompletionMessageParam] = [
+        ChatCompletionSystemMessageParam(
+            content=CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
-            "role": "system",
-        },
-        {
-            "content": system,
-            "role": "system",
-        },
+            role="system",
+        ),
+        ChatCompletionSystemMessageParam(
+            content=system,
+            role="system",
+        ),
     ]
     _logger.debug(f"Messages: {messages}")
 
@@ -613,71 +641,77 @@ async def gpt_chat(
     _logger.info(f"Enhancing GPT chat with {len(trainings)} trainings ({call.call_id})")
     _logger.debug(f"Trainings: {trainings}")
 
-    messages = [
-        {
-            "content": CONFIG.prompts.llm.default_system(
+    messages: List[ChatCompletionMessageParam] = [
+        ChatCompletionSystemMessageParam(
+            content=CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
-            "role": "system",
-        },
-        {
-            "content": CONFIG.prompts.llm.chat_system(
+            role="system",
+        ),
+        ChatCompletionSystemMessageParam(
+            content=CONFIG.prompts.llm.chat_system(
                 claim=call.claim,
                 reminders=call.reminders,
                 trainings=trainings,
             ),
-            "role": "system",
-        },
+            role="system",
+        ),
     ]
     for message in call.messages:
         if message.persona == MessagePersona.HUMAN:
             messages.append(
-                {
-                    "content": f"{message.action.value}: {message.content}",
-                    "role": "user",
-                }
+                ChatCompletionUserMessageParam(
+                    content=f"{message.action.value}: {message.content}",
+                    role="user",
+                )
             )
         elif message.persona == MessagePersona.ASSISTANT:
             if not message.tool_calls:
                 messages.append(
-                    {
-                        "content": f"{message.action.value}: {message.content}",
-                        "role": "assistant",
-                    }
+                    ChatCompletionAssistantMessageParam(
+                        content=f"{message.action.value}: {message.content}",
+                        role="assistant",
+                    )
                 )
             else:
                 messages.append(
-                    {
-                        "content": f"{message.action.value}: {message.content}",
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "id": tool_call.tool_id,
-                                "type": "function",
-                                "function": {
+                    ChatCompletionAssistantMessageParam(
+                        content=f"{message.action.value}: {message.content}",
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageToolCallParam(
+                                id=tool_call.tool_id,
+                                type="function",
+                                function={
                                     "arguments": tool_call.function_arguments,
-                                    "name": tool_call.function_name,
+                                    "name": "-".join(
+                                        re.sub(
+                                            FUNC_NAME_SANITIZER_R,
+                                            "-",
+                                            tool_call.function_name,
+                                        ).split("-")
+                                    ),  # Sanitize with dashes then deduplicate dashes, backward compatibility with old models
                                 },
-                            }
+                            )
                             for tool_call in message.tool_calls
                         ],
-                    }
+                    )
                 )
                 for tool_call in message.tool_calls:
                     messages.append(
-                        {
-                            "content": tool_call.content,
-                            "role": "tool",
-                            "tool_call_id": tool_call.tool_id,
-                        }
+                        ChatCompletionToolMessageParam(
+                            content=tool_call.content,
+                            role="tool",
+                            tool_call_id=tool_call.tool_id,
+                        )
                     )
     _logger.debug(f"Messages: {messages}")
 
     customer_response_prop = "customer_response"
-    tools = [
-        {
-            "type": "function",
-            "function": {
+    tools: List[ChatCompletionToolParam] = [
+        ChatCompletionToolParam(
+            type="function",
+            function={
                 "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
                 "name": IndentAction.TALK_TO_HUMAN.value,
                 "parameters": {
@@ -686,11 +720,11 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
-                "description": "Use this if the user wants to end the call, or if the conversation ends naturally. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
+                "description": "Use this if the user wants to end the call, or if the user said goodbye in the current call. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
                 "name": IndentAction.END_CALL.value,
                 "parameters": {
                     "properties": {},
@@ -698,16 +732,16 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
                 "description": "Use this if the user wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
                 "name": IndentAction.NEW_CLAIM.value,
                 "parameters": {
                     "properties": {
                         f"{customer_response_prop}": {
-                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                             "type": "string",
                         }
                     },
@@ -717,11 +751,11 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
-                "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update policyholder contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
+                "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update contact contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                 "name": IndentAction.UPDATED_CLAIM.value,
                 "parameters": {
                     "properties": {
@@ -735,7 +769,7 @@ async def gpt_chat(
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
-                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the policyholder contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+                            "description": "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                             "type": "string",
                         },
                     },
@@ -747,10 +781,10 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
-        {
-            "type": "function",
-            "function": {
+        ),
+        ChatCompletionToolParam(
+            type="function",
+            function={
                 "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
                 "name": IndentAction.NEW_OR_UPDATED_REMINDER.value,
                 "parameters": {
@@ -768,7 +802,7 @@ async def gpt_chat(
                             "type": "string",
                         },
                         "owner": {
-                            "description": "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'policyholder', 'witness', 'police'.",
+                            "description": "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'contact', 'witness', 'police'.",
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
@@ -786,7 +820,7 @@ async def gpt_chat(
                     "type": "object",
                 },
             },
-        },
+        ),
     ]
     _logger.debug(f"Tools: {tools}")
 
@@ -889,7 +923,7 @@ async def gpt_chat(
                         parameters = json.loads(arguments)
                     except Exception:
                         _logger.warn(
-                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                            f'LLM send back invalid JSON for "{arguments}", ignoring this tool call.'
                         )
                         continue
 
@@ -902,13 +936,22 @@ async def gpt_chat(
                         full_content += local_content + " "
                         await user_callback(local_content)
 
+                    content = None
                     if not parameters["field"] in ClaimModel.editable_fields():
-                        _logger.debug(
-                            f"AI model tried to update a non-editable field {parameters['field']}"
-                        )
+                        content = f'Failed to update a non-editable field "{parameters['field']}".'
                     else:
-                        setattr(call.claim, parameters["field"], parameters["value"])
-                        model.content = f"Updated claim field \"{parameters['field']}\" with value \"{parameters['value']}\"."
+                        try:
+                            # Define the field
+                            setattr(
+                                call.claim, parameters["field"], parameters["value"]
+                            )
+                            # Trigger a re-validation to spot errors before saving
+                            ClaimModel.model_validate(call.claim)
+                        except ValidationError as e:
+                            content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
+                    if not content:
+                        content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
+                    model.content = content
 
                 elif name == IndentAction.NEW_CLAIM.value:
                     intent = IndentAction.NEW_CLAIM
@@ -916,7 +959,7 @@ async def gpt_chat(
                         parameters = json.loads(arguments)
                     except Exception:
                         _logger.warn(
-                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                            f'LLM send back invalid JSON for "{arguments}", ignoring this tool call.'
                         )
                         continue
 
@@ -944,13 +987,13 @@ async def gpt_chat(
                         parameters = json.loads(arguments)
                     except Exception:
                         _logger.warn(
-                            f"LLM send back invalid JSON for {arguments}, ignoring this tool call"
+                            f'LLM send back invalid JSON for "{arguments}", ignoring this tool call.'
                         )
                         continue
 
                     if not customer_response_prop in parameters:
                         _logger.warn(
-                            f"Missing {customer_response_prop} prop in {arguments}, please fix this!"
+                            f'Missing "{customer_response_prop}" prop in "{arguments}", please fix this!'
                         )
                     else:
                         local_content = parameters[customer_response_prop]
@@ -964,7 +1007,7 @@ async def gpt_chat(
                             reminder.due_date_time = parameters["due_date_time"]
                             reminder.owner = parameters["owner"]
                             model.content = (
-                                f"Reminder \"{parameters['title']}\" updated."
+                                f'Reminder "{parameters['title']}" updated.'
                             )
                             updated = True
                             break
@@ -978,7 +1021,7 @@ async def gpt_chat(
                                 owner=parameters["owner"],
                             )
                         )
-                        model.content = f"Reminder \"{parameters['title']}\" created."
+                        model.content = f'Reminder "{parameters['title']}" created.'
 
                 models.append(model)
 
@@ -1051,6 +1094,11 @@ async def handle_recognize_media(
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
 
 async def handle_media(
@@ -1066,6 +1114,11 @@ async def handle_media(
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
 
 async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
@@ -1074,6 +1127,11 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
         _logger.debug(f"Call already hung up ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
     call.messages.append(
         MessageModel(
@@ -1096,7 +1154,9 @@ async def post_call_sms(call: CallModel) -> None:
     """
     content = await gpt_completion(
         system=CONFIG.prompts.llm.sms_summary_system(
-            call.claim, call.messages, call.reminders
+            claim=call.claim,
+            messages=call.messages,
+            reminders=call.reminders,
         ),
         call=call,
         max_tokens=300,
@@ -1173,14 +1233,27 @@ async def post_call_synthesis(call: CallModel) -> None:
     short, long = await asyncio.gather(
         gpt_completion(
             system=CONFIG.prompts.llm.synthesis_short_system(
-                call.claim, call.messages, call.reminders
+                claim=call.claim,
+                messages=call.messages,
+                reminders=call.reminders,
             ),
             call=call,
             max_tokens=100,
         ),
         gpt_completion(
-            system=CONFIG.prompts.llm.synthesis_long_system(
-                call.claim, call.messages, call.reminders
+            system=CONFIG.prompts.llm.citations(
+                claim=call.claim,
+                messages=call.messages,
+                reminders=call.reminders,
+                text=await gpt_completion(
+                    system=CONFIG.prompts.llm.synthesis_long_system(
+                        claim=call.claim,
+                        messages=call.messages,
+                        reminders=call.reminders,
+                    ),
+                    call=call,
+                    max_tokens=1000,
+                ),
             ),
             call=call,
             max_tokens=1000,

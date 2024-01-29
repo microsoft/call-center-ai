@@ -13,6 +13,8 @@ Historique des appels pour {{ phone_number }}
     <div>
       <a class="hover:underline" href="/report/{{ call.phone_number | quote_plus }}/{{ call.call_id | quote_plus }}"><span class="font-mono">#{{ call.claim.claim_id }}</span> ({{ call.created_at.strftime('%d %b %Y %H:%M') }})</a>
     </div>
+    {% else %}
+    <p class="text-neutral-600 dark:text-neutral-400">Aucun appel pour l'instant.</p>
     {% endfor %}
   </div>
 </div>
