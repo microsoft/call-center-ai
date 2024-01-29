@@ -20,7 +20,7 @@ from azure.communication.callautomation import (
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ClientAuthenticationError
-from azure.core.exceptions import ResourceNotFoundError
+from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential
@@ -573,6 +573,11 @@ async def handle_play(
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
 
 async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
@@ -1089,6 +1094,11 @@ async def handle_recognize_media(
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
 
 async def handle_media(
@@ -1104,6 +1114,11 @@ async def handle_media(
         )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
 
 async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
@@ -1112,6 +1127,11 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
         client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
         _logger.debug(f"Call already hung up ({call.call_id})")
+    except HttpResponseError as e:
+        if e.status_code == 8528:
+            _logger.debug(f"Call hung up before playing ({call.call_id})")
+        else:
+            raise e
 
     call.messages.append(
         MessageModel(
