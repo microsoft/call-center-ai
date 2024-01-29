@@ -59,16 +59,18 @@ from models.claim import ClaimModel
 from pydantic import ValidationError
 from uuid import UUID
 import json
-from helpers.llm import completion_stream, completion_sync, safety_check
+import mistune
 
 
-# Jinja templates
+# Jinja configuration
 jinja = Environment(
     autoescape=select_autoescape(),
     enable_async=True,
     loader=FileSystemLoader("public_website"),
 )
+# Jinja custom functions
 jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
+jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else "" # type: ignore
 
 # Azure Communication Services
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
@@ -1205,8 +1207,19 @@ async def post_call_synthesis(call: CallModel) -> None:
             max_tokens=100,
         ),
         gpt_completion(
-            system=CONFIG.prompts.llm.synthesis_long_system(
-                call.claim, call.messages, call.reminders
+            system=CONFIG.prompts.llm.citations(
+                claim=call.claim,
+                messages=call.messages,
+                reminders=call.reminders,
+                text=await gpt_completion(
+                    system=CONFIG.prompts.llm.synthesis_long_system(
+                        claim=call.claim,
+                        messages=call.messages,
+                        reminders=call.reminders,
+                    ),
+                    call=call,
+                    max_tokens=1000,
+                ),
             ),
             call=call,
             max_tokens=1000,
