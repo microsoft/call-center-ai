@@ -1154,7 +1154,9 @@ async def post_call_sms(call: CallModel) -> None:
     """
     content = await gpt_completion(
         system=CONFIG.prompts.llm.sms_summary_system(
-            call.claim, call.messages, call.reminders
+            claim=call.claim,
+            messages=call.messages,
+            reminders=call.reminders,
         ),
         call=call,
         max_tokens=300,
@@ -1231,7 +1233,9 @@ async def post_call_synthesis(call: CallModel) -> None:
     short, long = await asyncio.gather(
         gpt_completion(
             system=CONFIG.prompts.llm.synthesis_short_system(
-                call.claim, call.messages, call.reminders
+                claim=call.claim,
+                messages=call.messages,
+                reminders=call.reminders,
             ),
             call=call,
             max_tokens=100,
