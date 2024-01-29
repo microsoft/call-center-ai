@@ -67,9 +67,10 @@ class AiSearchSearch(ISearch):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SearchClient, None]:
-        async with SearchClient(
+        db = SearchClient(
             credential=AzureKeyCredential(self._config.access_key.get_secret_value()),
             endpoint=self._config.endpoint,
             index_name=self._config.index,
-        ) as db:
-            yield db
+        )
+        yield db
+        await db.close()

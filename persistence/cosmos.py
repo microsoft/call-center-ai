@@ -113,10 +113,11 @@ class CosmosStore(IStore):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
-        async with CosmosClient(
+        client = CosmosClient(
             connection_timeout=5,
             credential=self._config.access_key.get_secret_value(),
             url=self._config.endpoint,
-        ) as client:
-            database = client.get_database_client(self._config.database)
-            yield database.get_container_client(self._config.container)
+        )
+        database = client.get_database_client(self._config.database)
+        yield database.get_container_client(self._config.container)
+        await client.close()

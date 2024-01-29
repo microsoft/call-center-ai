@@ -18,6 +18,7 @@ from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionToolParam,
 )
+import asyncio
 from openai.types.chat.chat_completion_chunk import ChoiceDelta
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 from typing import Any, AsyncGenerator, List, Optional
@@ -121,6 +122,13 @@ async def safety_check(text: str) -> bool:
     _logger.debug(f'Text safety "{safety}" for text: {text}')
 
     return safety
+
+
+async def close() -> None:
+    """
+    Safely close the OpenAI and Content Safety clients.
+    """
+    await asyncio.gather(_oai.close(), _contentsafety.close())
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
