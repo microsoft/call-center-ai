@@ -181,7 +181,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         Conversation history:
         {messages}
     """
-    citations_tpl: str = """
+    citations_system_tpl: str = """
         Assitant will add Markdown citations to the text. Citations are used to add additional context to the text, without cluttering the content itself.
 
         Assitant:
@@ -361,7 +361,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             reminders=_pydantic_to_str(reminders),
         )
 
-    def citations(
+    def citations_system(
         self,
         claim: ClaimModel,
         messages: List[MessageModel],
@@ -369,7 +369,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         text: str,
     ) -> str:
         return self._return(
-            self.citations_tpl,
+            self.citations_system_tpl,
             claim=_pydantic_to_str(claim),
             messages=_pydantic_to_str(
                 [

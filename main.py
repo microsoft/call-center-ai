@@ -1246,7 +1246,7 @@ async def post_call_synthesis(call: CallModel) -> None:
             max_tokens=100,
         ),
         gpt_completion(
-            system=CONFIG.prompts.llm.citations(
+            system=CONFIG.prompts.llm.citations_system(
                 claim=call.claim,
                 messages=call.messages,
                 reminders=call.reminders,
