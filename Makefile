@@ -3,7 +3,7 @@ docker := docker
 version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
 tunnel_name := claim-ai-phone-bot-$(shell hostname | tr '[:upper:]' '[:lower:]')
-tunnel_url := $(shell devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*')
+tunnel_url ?= $(shell devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
