@@ -262,7 +262,7 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     name: 'Standard'
   }
   properties: {
-    raiPolicyName: contentfilter.name
+    // raiPolicyName: contentfilter.name
     model: {
       format: 'OpenAI'
       name: gptModel
@@ -271,64 +271,64 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   }
 }
 
-resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2023-06-01-preview' = {
-  parent: cognitiveOpenai
-  name: 'gpt'
-  properties: {
-    basePolicyName: 'Microsoft.Default'
-    mode: 'Default'
-    contentFilters: [
-      {
-        blocking: false
-        enabled: false
-        name: 'hate'
-        source: 'Prompt'
-      }
-      {
-        blocking: false
-        enabled: false
-        name: 'sexual'
-        source: 'Prompt'
-      }
-      {
-        blocking: false
-        enabled: false
-        name: 'selfharm'
-        source: 'Prompt'
-      }
-      {
-        blocking: false
-        enabled: false
-        name: 'violence'
-        source: 'Prompt'
-      }
-      {
-        blocking: false
-        enabled: false
-        name: 'hate'
-        source: 'Completion'
-      }
-      {
-        blocking: false
-        enabled: false
-        name: 'sexual'
-        source: 'Completion'
-      }
-      {
-        blocking: false
-        enabled: false
-        name: 'selfharm'
-        source: 'Completion'
-      }
-      {
-        blocking: false
-        enabled: false
-        name: 'violence'
-        source: 'Completion'
-      }
-    ]
-  }
-}
+// resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2023-06-01-preview' = {
+//   parent: cognitiveOpenai
+//   name: 'gpt'
+//   properties: {
+//     basePolicyName: 'Microsoft.Default'
+//     mode: 'Default'
+//     contentFilters: [
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'hate'
+//         source: 'Prompt'
+//       }
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'sexual'
+//         source: 'Prompt'
+//       }
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'selfharm'
+//         source: 'Prompt'
+//       }
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'violence'
+//         source: 'Prompt'
+//       }
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'hate'
+//         source: 'Completion'
+//       }
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'sexual'
+//         source: 'Completion'
+//       }
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'selfharm'
+//         source: 'Completion'
+//       }
+//       {
+//         blocking: false
+//         enabled: false
+//         name: 'violence'
+//         source: 'Completion'
+//       }
+//     ]
+//   }
+// }
 
 resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
@@ -338,7 +338,7 @@ resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     name: 'Standard'
   }
   properties: {
-    raiPolicyName: contentfilter.name
+    // raiPolicyName: contentfilter.name
     model: {
       format: 'OpenAI'
       name: adaModel
