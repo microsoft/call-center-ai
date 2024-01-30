@@ -304,14 +304,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.sms_summary_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(
-                [
-                    message
-                    for message in messages
-                    if message.persona is not MessagePersona.TOOL
-                ],
-                exclude={"tool_calls"},
-            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
+            messages=_pydantic_to_str(messages),
             reminders=_pydantic_to_str(reminders),
         )
 
@@ -327,14 +320,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.synthesis_short_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(
-                [
-                    message
-                    for message in messages
-                    if message.persona is not MessagePersona.TOOL
-                ],
-                exclude={"tool_calls"},
-            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
+            messages=_pydantic_to_str(messages),
             reminders=_pydantic_to_str(reminders),
         )
 
@@ -350,14 +336,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.synthesis_long_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(
-                [
-                    message
-                    for message in messages
-                    if message.persona is not MessagePersona.TOOL
-                ],
-                exclude={"tool_calls"},
-            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
+            messages=_pydantic_to_str(messages),
             reminders=_pydantic_to_str(reminders),
         )
 
