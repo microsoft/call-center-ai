@@ -21,6 +21,9 @@ install:
 	@echo "➡️ Installing Python dev dependencies..."
 	python3 -m pip install -r requirements-dev.txt
 
+	@echo "➡️ Testing Docker installation..."
+	$(docker) --version || echo "🚨 Docker is not installed."
+
 upgrade:
 	@echo "➡️ Upgrading pip..."
 	python3 -m pip install --upgrade pip
