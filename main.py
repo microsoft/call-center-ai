@@ -1100,7 +1100,7 @@ async def handle_recognize_text(
     """
     Play a text to a call participant and start recognizing the response.
 
-    If store is True, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
+    If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
     if text:
         await handle_play(
@@ -1118,6 +1118,7 @@ async def handle_recognize_text(
     )
 
 
+# TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
 async def handle_recognize_media(
     client: CallConnectionClient,
     call: CallModel,
@@ -1125,8 +1126,6 @@ async def handle_recognize_media(
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
-
-    TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
     """
     try:
         client.start_recognizing_media(
