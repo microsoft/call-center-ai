@@ -434,6 +434,6 @@ resource search 'Microsoft.Search/searchServices@2023-11-01' = {
     type: 'SystemAssigned'
   }
   properties: {
-    semanticSearch: 'free'
+    semanticSearch: 'standard'
   }
 }
