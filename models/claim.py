@@ -47,12 +47,12 @@ class ClaimModel(BaseModel):
 
     @field_validator("policyholder_email")
     @classmethod
-    def _policyholder_email_validator(cls, email: str) -> str:
-        if not re.match(EMAIL_PARSER_R, email):
+    def _policyholder_email_validator(cls, policyholder_email: str) -> str:
+        if policyholder_email and not re.match(EMAIL_PARSER_R, policyholder_email):
             raise ValueError(
                 'Invalid email address, please use a valid email (e.g. "my.name@domain.com").'
             )
-        return email
+        return policyholder_email
 
     @staticmethod
     def editable_fields() -> Set[str]:
