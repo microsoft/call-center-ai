@@ -38,7 +38,7 @@ Déclaration de sinistre {{ call.claim.claim_id }}
 
     <!-- Agent and customer -->
     <div class="overflow-hidden space-y-6">
-      {% for message in call.messages %}
+      {% for message in call.messages | sort(attribute='created_at') %}
       {% set name = bot_name if message.persona == 'assistant' else call.claim.policyholder_name %}
       <div class="flex flex-row">
         <div class="basis-6 relative self-stretch">
@@ -100,8 +100,7 @@ Déclaration de sinistre {{ call.claim.claim_id }}
     <p class="text-neutral-600 dark:text-neutral-400">Aucun rappel pour l'instant.</p>
     {% else %}
     <div class="space-y-6">
-      <!-- TODO: Sort reminders by due date -->
-      {% for reminder in call.reminders %}
+      {% for reminder in call.reminders | sort(attribute='due_date_time') %}
       <div>
         <div class="text-xs">
           {{ reminder.owner | title }}&nbsp;<span class="text-neutral-600 dark:text-neutral-400">({{ reminder.due_date_time }})</span>
