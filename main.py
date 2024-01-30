@@ -567,7 +567,7 @@ async def handle_play(
 
     try:
         for chunk in chunks:
-            _logger.debug(f"Playing chunk ({call.call_id}): {chunk}")
+            _logger.debug(f"Playing chunk: {chunk}")
             client.play_media(
                 operation_context=context,
                 play_source=audio_from_text(chunk),
@@ -575,7 +575,7 @@ async def handle_play(
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
@@ -615,7 +615,7 @@ async def gpt_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
     user_callback: Callable[[str], Coroutine[Any, Any, None]],
-    retry_attempt: int = 0,
+    _retry_attempt: int = 0,
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
 
@@ -883,7 +883,8 @@ async def gpt_chat(
             tool_call["function"]["name"] == "multi_tool_use.parallel"
             for _, tool_call in tool_calls.items()
         ):
-            if retry_attempt > 3:
+            _logger.debug(f"Invalid tool schema: {tool_calls}")
+            if _retry_attempt > 3:
                 _logger.warn(
                     f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
                 )
@@ -892,7 +893,7 @@ async def gpt_chat(
                 f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
             )
             return await gpt_chat(
-                background_tasks, call, user_callback, retry_attempt + 1
+                background_tasks, call, user_callback, _retry_attempt + 1
             )
 
         intent = IndentAction.CONTINUE
@@ -1097,7 +1098,7 @@ async def handle_recognize_media(
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
@@ -1117,7 +1118,7 @@ async def handle_media(
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
@@ -1130,7 +1131,7 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
     except ResourceNotFoundError:
         _logger.debug(f"Call already hung up ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
@@ -1185,6 +1186,7 @@ async def post_call_sms(call: CallModel) -> None:
                     persona=MessagePersona.ASSISTANT,
                 )
             )
+            await db.call_aset(call)
         else:
             _logger.warn(
                 f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.call_id})"
