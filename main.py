@@ -8,7 +8,7 @@ _logger.info(f"claim-ai v{CONFIG.version}")
 
 
 # General imports
-from typing import Any, Callable, Coroutine, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, List, Optional, Tuple, Type
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -35,6 +35,7 @@ from models.next import Action as NextAction
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
+from openai import APIError
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageParam,
@@ -58,7 +59,7 @@ from models.message import (
     ToolModel as MessageToolModel,
 )
 from contextlib import asynccontextmanager
-from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close
+from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close, completion_model_sync, ModelType, SafetyCheckError
 from models.claim import ClaimModel
 from pydantic import ValidationError
 from uuid import UUID
@@ -583,9 +584,60 @@ async def handle_play(
             raise e
 
 
-async def gpt_completion(system: str, call: CallModel, max_tokens: int, json_output: bool = False) -> str:
+async def gpt_completion(system: Optional[str], call: CallModel) -> Optional[str]:
+    """
+    Run GPT completion from a system prompt and a Call model.
+
+    If the system prompt is None, no completion will be run and None will be returned. Otherwise, the response of the LLM will be returned.
+    """
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
+    if not system:
+        return None
+
+    messages = _oai_completion_messages(system, call)
+    content = None
+
+    try:
+        content = await completion_sync(
+            max_tokens=1000,
+            messages=messages,
+        )
+    except APIError:
+        _logger.warn(f"OpenAI API call error", exc_info=True)
+    except SafetyCheckError:
+        _logger.warn(f"Safety check error", exc_info=True)
+
+    return content
+
+
+async def gpt_model(system: Optional[str], call: CallModel, model: Type[ModelType]) -> Optional[ModelType]:
+    """
+    Run GPT completion from a system prompt, a Call model, and an expected model type as a return.
+
+    The logic will try its best to return a model of the expected type, but it is not guaranteed. It it fails, `None` will be returned.
+    """
+    _logger.debug(f"Running GPT model ({call.call_id})")
+
+    if not system:
+        return None
+
+    messages = _oai_completion_messages(system, call)
+    res = None
+
+    try:
+        res = await completion_model_sync(
+            max_tokens=1000,
+            messages=messages,
+            model=model,
+        )
+    except APIError:
+        _logger.warn(f"OpenAI API call error", exc_info=True)
+
+    return res
+
+
+def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletionMessageParam]:
     messages: List[ChatCompletionMessageParam] = [
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.default_system(
@@ -599,18 +651,7 @@ async def gpt_completion(system: str, call: CallModel, max_tokens: int, json_out
         ),
     ]
     _logger.debug(f"Messages: {messages}")
-
-    content = None
-    try:
-        content = await completion_sync(
-            json_output=json_output,
-            max_tokens=max_tokens,
-            messages=messages,
-        )
-    except Exception:
-        _logger.warn(f"OpenAI API call error", exc_info=True)
-
-    return content or ""
+    return messages
 
 
 async def gpt_chat(
@@ -1044,7 +1085,7 @@ async def gpt_chat(
             ),
         )
 
-    except Exception:
+    except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
     return _error_response()
@@ -1163,10 +1204,13 @@ async def post_call_sms(call: CallModel) -> None:
             reminders=call.reminders,
         ),
         call=call,
-        max_tokens=300,
     )
-    _logger.info(f"SMS report ({call.call_id}): {content}")
 
+    if not content:
+        _logger.warn(f"Error generating SMS report ({call.call_id})")
+        return
+
+    _logger.info(f"SMS report ({call.call_id}): {content}")
     try:
         responses = sms_client.send(
             from_=str(CONFIG.communication_service.phone_number),
@@ -1237,33 +1281,35 @@ async def post_call_synthesis(call: CallModel) -> None:
 
     short, long = await asyncio.gather(
         gpt_completion(
+            call=call,
             system=CONFIG.prompts.llm.synthesis_short_system(
                 claim=call.claim,
                 messages=call.messages,
                 reminders=call.reminders,
             ),
-            call=call,
-            max_tokens=100,
         ),
         gpt_completion(
+            call=call,
             system=CONFIG.prompts.llm.citations_system(
                 claim=call.claim,
                 messages=call.messages,
                 reminders=call.reminders,
                 text=await gpt_completion(
+                    call=call,
                     system=CONFIG.prompts.llm.synthesis_long_system(
                         claim=call.claim,
                         messages=call.messages,
                         reminders=call.reminders,
                     ),
-                    call=call,
-                    max_tokens=1000,
                 ),
             ),
-            call=call,
-            max_tokens=1000,
         ),
     )
+
+    if not short or not long:
+        _logger.warn(f"Error generating synthesis ({call.call_id})")
+        return
+
     _logger.info(f"Short synthesis ({call.call_id}): {short}")
     _logger.info(f"Long synthesis ({call.call_id}): {long}")
 
@@ -1274,31 +1320,22 @@ async def post_call_synthesis(call: CallModel) -> None:
     await db.call_aset(call)
 
 
-# TODO: Param _retry_attempt may be replaced by the @retry decorator
-async def post_call_next(call: CallModel, _retry_attempt: int = 0) -> None:
+async def post_call_next(call: CallModel) -> None:
     """
     Generate next action for the call.
     """
-    content = await gpt_completion(
+    next = await gpt_model(
+        call=call,
+        model=NextModel,
         system=CONFIG.prompts.llm.next_system(
             claim=call.claim,
             messages=call.messages,
             reminders=call.reminders,
         ),
-        call=call,
-        json_output=True,
-        max_tokens=1000,
     )
 
-    try:
-        next = NextModel.model_validate_json(content)
-    except ValidationError:
-        _logger.debug(f"Invalid next action: {content}")
-        if _retry_attempt > 3:
-            _logger.warn("LLM send back invalid next action, retry limit reached")
-            return
-        _logger.warn("LLM send back invalid next action, retrying")
-        await post_call_next(call, _retry_attempt + 1)
+    if not next:
+        _logger.warn(f"Error generating next action ({call.call_id})")
         return
 
     _logger.info(f"Next action ({call.call_id}): {next}")

@@ -346,8 +346,16 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         claim: ClaimModel,
         messages: List[MessageModel],
         reminders: List[ReminderModel],
-        text: str,
-    ) -> str:
+        text: Optional[str],
+    ) -> Optional[str]:
+        """
+        Return the formatted prompt. Prompt is used to add citations to the text, without cluttering the content itself.
+
+        The citations system is only used if `text` param is not empty, otherwise `None` is returned.
+        """
+        if not text:
+            return None
+
         return self._return(
             self.citations_system_tpl,
             claim=_pydantic_to_str(claim),
