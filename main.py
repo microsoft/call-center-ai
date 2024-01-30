@@ -31,6 +31,7 @@ from helpers.config_models.database import Mode as DatabaseMode
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
+from models.next import Action as NextAction
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
@@ -179,6 +180,7 @@ async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
         bot_company=CONFIG.workflow.bot_company,
         bot_name=CONFIG.workflow.bot_name,
         call=call,
+        next_actions=[action for action in NextAction],
         version=CONFIG.version,
     )
     return HTMLResponse(content=render)
