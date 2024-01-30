@@ -1,6 +1,7 @@
 from datetime import datetime
 from models.claim import ClaimModel
 from models.message import MessageModel
+from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from pydantic import BaseModel, Field
@@ -15,6 +16,7 @@ class CallModel(BaseModel):
     # Editable fields
     claim: ClaimModel = Field(default_factory=ClaimModel)
     messages: List[MessageModel] = []
+    next: Optional[NextModel] = None
     phone_number: str
     recognition_retry: int = Field(default=0)
     reminders: List[ReminderModel] = []

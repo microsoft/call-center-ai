@@ -8,6 +8,7 @@ from models.message import (
     MessageModel,
     Persona as MessagePersona,
 )
+from models.next import Action as NextAction
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import computed_field, BaseModel
@@ -220,6 +221,44 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         Text:
         {text}
     """
+    next_system_tpl: str = """
+        Assitant will choose the next action from the company sales team point of view. Answer is a JSON object with the action to take and the justification for this action.
+
+        Assitant:
+        - Take as first priority the customer satisfaction
+        - Won't make any assumptions
+        - Write no more than a few sentences as justification
+
+        Available actions:
+        {actions}
+
+        Claim status:
+        {claim}
+
+        Reminders:
+        {reminders}
+
+        Conversation history:
+        {messages}
+
+        Response format:
+        {{
+            "action": "[action]",
+            "justification": "[justification]"
+        }}
+
+        Example #1:
+        {{
+            "action": "in_depth_study",
+            "justification": "The customer has a lot of questions about the insurance policy. They are not sure if they are covered for the incident. Contract seems to not be clear about this situation."
+        }}
+
+        Example #2:
+        {{
+            "action": "commercial_offer",
+            "justification": "The company planned the customer taxi ride from the wrong address. The customer is not happy about this situation."
+        }}
+    """
 
     def default_system(self, phone_number: str) -> str:
         from helpers.config import CONFIG
@@ -342,6 +381,20 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             ),  # Filter out tool messages, to avoid LLM to cite itself
             reminders=_pydantic_to_str(reminders),
             text=text,
+        )
+
+    def next_system(
+        self,
+        claim: ClaimModel,
+        messages: List[MessageModel],
+        reminders: List[ReminderModel],
+    ) -> str:
+        return self._return(
+            self.next_system_tpl,
+            actions=", ".join([action.value for action in NextAction]),
+            claim=_pydantic_to_str(claim),
+            messages=_pydantic_to_str(messages),
+            reminders=_pydantic_to_str(reminders),
         )
 
     def _return(

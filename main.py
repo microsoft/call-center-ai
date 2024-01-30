@@ -31,6 +31,7 @@ from helpers.config_models.database import Mode as DatabaseMode
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
+from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from openai.types.chat import (
@@ -580,7 +581,7 @@ async def handle_play(
             raise e
 
 
-async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
+async def gpt_completion(system: str, call: CallModel, max_tokens: int, json_output: bool = False) -> str:
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
     messages: List[ChatCompletionMessageParam] = [
@@ -599,12 +600,11 @@ async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
 
     content = None
     try:
-        res = await completion_sync(
+        content = await completion_sync(
+            json_output=json_output,
             max_tokens=max_tokens,
             messages=messages,
         )
-        content = res.content
-
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
@@ -972,7 +972,9 @@ async def gpt_chat(
                         full_content += local_content + " "
                         await user_callback(local_content)
 
-                    # Generate synthesis for the old claim
+                    # Generate next action
+                    background_tasks.add_task(post_call_next, call)
+                    # Generate synthesis
                     background_tasks.add_task(post_call_synthesis, call)
 
                     # Add context of the last message, if not, LLM messed up and loop on this action
@@ -1143,6 +1145,7 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
 
     # Start post-call intelligence
     await asyncio.gather(
+        post_call_next(call),
         post_call_sms(call),
         post_call_synthesis(call),
     )
@@ -1266,6 +1269,38 @@ async def post_call_synthesis(call: CallModel) -> None:
         long=long,
         short=short,
     )
+    await db.call_aset(call)
+
+
+# TODO: Param _retry_attempt may be replaced by the @retry decorator
+async def post_call_next(call: CallModel, _retry_attempt: int = 0) -> None:
+    """
+    Generate next action for the call.
+    """
+    content = await gpt_completion(
+        system=CONFIG.prompts.llm.next_system(
+            claim=call.claim,
+            messages=call.messages,
+            reminders=call.reminders,
+        ),
+        call=call,
+        json_output=True,
+        max_tokens=1000,
+    )
+
+    try:
+        next = NextModel.model_validate_json(content)
+    except ValidationError:
+        _logger.debug(f"Invalid next action: {content}")
+        if _retry_attempt > 3:
+            _logger.warn("LLM send back invalid next action, retry limit reached")
+            return
+        _logger.warn("LLM send back invalid next action, retrying")
+        await post_call_next(call, _retry_attempt + 1)
+        return
+
+    _logger.info(f"Next action ({call.call_id}): {next}")
+    call.next = next
     await db.call_aset(call)
 
 

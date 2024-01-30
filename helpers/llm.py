@@ -10,18 +10,16 @@ from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from openai import _types as openaiTypes
 from openai import AsyncAzureOpenAI, AsyncStream
 from openai.types.chat import (
     ChatCompletionChunk,
-    ChatCompletionMessage,
     ChatCompletionMessageParam,
     ChatCompletionToolParam,
 )
-import asyncio
 from openai.types.chat.chat_completion_chunk import ChoiceDelta
 from tenacity import retry, stop_after_attempt, wait_random_exponential
-from typing import Any, AsyncGenerator, List, Optional
+from typing import Any, AsyncGenerator, List, Optional, Union
+import asyncio
 
 
 _logger = build_logger(__name__)
@@ -55,13 +53,18 @@ async def completion_stream(
     max_tokens: int,
     tools: Optional[List[ChatCompletionToolParam]] = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
+    extra = {}
+
+    if tools:
+        extra["tools"] = tools
+
     stream: AsyncStream[ChatCompletionChunk] = await _oai.chat.completions.create(
         max_tokens=max_tokens,
         messages=messages,
         model=CONFIG.openai.gpt_model,
         stream=True,
         temperature=0,  # Most focused and deterministic
-        tools=tools or openaiTypes.NOT_GIVEN,
+        **extra,
     )
     async for chunck in stream:
         yield chunck.choices[0].delta
@@ -71,16 +74,21 @@ async def completion_stream(
 async def completion_sync(
     messages: List[ChatCompletionMessageParam],
     max_tokens: int,
-    tools: Optional[List[ChatCompletionToolParam]] = None,
-) -> ChatCompletionMessage:
+    json_output: bool = False,
+) -> str:
+    extra = {}
+
+    if json_output:
+        extra["response_format"] = {"type": "json_object"}
+
     res = await _oai.chat.completions.create(
         max_tokens=max_tokens,
         messages=messages,
         model=CONFIG.openai.gpt_model,
         temperature=0,  # Most focused and deterministic
-        tools=tools or openaiTypes.NOT_GIVEN,
+        **extra,
     )
-    return res.choices[0].message
+    return res.choices[0].message.content
 
 
 async def safety_check(text: str) -> bool:
