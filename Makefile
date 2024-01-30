@@ -3,7 +3,7 @@ docker := docker
 version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
 tunnel_name := claim-ai-phone-bot-$(shell hostname | tr '[:upper:]' '[:lower:]')
-tunnel_url := $(shell devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*')
+tunnel_url ?= $(shell devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
@@ -15,15 +15,24 @@ install:
 	@echo "➡️ Installing Dev Tunnels CLI..."
 	devtunnel --version || brew install --cask devtunnel
 
-	@echo "➡️ Installing Python dependencies..."
+	@echo "➡️ Installing Python app dependencies..."
 	python3 -m pip install -r requirements.txt
+
+	@echo "➡️ Installing Python dev dependencies..."
+	python3 -m pip install -r requirements-dev.txt
+
+	@echo "➡️ Testing Docker installation..."
+	$(docker) --version || echo "🚨 Docker is not installed."
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
 	python3 -m pip install --upgrade pip
 
-	@echo "➡️ Upgrading Python dependencies..."
-	pur -r requirements.txt
+	@echo "➡️ Upgrading Python app dependencies..."
+	python3 -m pur -r requirements.txt
+
+	@echo "➡️ Upgrading Python dev dependencies..."
+	python3 -m pur -r requirements-dev.txt
 
 test:
 	@echo "➡️ Running Black..."

@@ -113,6 +113,19 @@ Déclaration de sinistre {{ call.claim.claim_id }}
     {% endif %}
   </div>
 
+  <!-- Reminders -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4">
+    <h2 class="text-lg pb-4">⏭️ Prochaine action</h2>
+
+    {% if not call.next %}
+    <p class="text-neutral-600 dark:text-neutral-400">Aucune prochaine action pour l'instant.</p>
+    {% else %}
+    <p>
+      {{ call.next.action.value | replace("_", " " ) | capitalize }}.&nbsp;<span class="text-neutral-600 dark:text-neutral-400">{{ call.next.justification }}</span>
+    </p>
+    {% endif %}
+  </div>
+
   <!-- Details -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
     <h2 class="text-lg px-4 pt-4">🔎 Détails</h2>

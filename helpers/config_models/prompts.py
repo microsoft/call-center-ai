@@ -8,6 +8,7 @@ from models.message import (
     MessageModel,
     Persona as MessagePersona,
 )
+from models.next import Action as NextAction
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import computed_field, BaseModel
@@ -72,9 +73,10 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Is allowed to make assumptions, as the customer will correct them if they are wrong
         - Is polite, helpful, and professional
         - Keep the sentences short and simple
+        - Phone numbers are always in the format E164 (e.g. +33612345678, +18449197576)
         - Rephrase the customer's questions as statements and answer them
-        - Use additional context to enhance the conversation with useful details
         - Use additional context as a reference to answer the customer's questions related to insurance or contract details
+        - Use additional context to enhance the conversation with useful details
         - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris PARIS", "My name is John JOHN", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM")
         - Will answer the customer's questions if they are related to their contract, claim, or insurance
         - Won't answer if they don't know the answer
@@ -180,7 +182,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         Conversation history:
         {messages}
     """
-    citations_tpl: str = """
+    citations_system_tpl: str = """
         Assitant will add Markdown citations to the text. Citations are used to add additional context to the text, without cluttering the content itself.
 
         Assitant:
@@ -219,6 +221,44 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
 
         Text:
         {text}
+    """
+    next_system_tpl: str = """
+        Assitant will choose the next action from the company sales team point of view. Answer is a JSON object with the action to take and the justification for this action.
+
+        Assitant:
+        - Take as first priority the customer satisfaction
+        - Won't make any assumptions
+        - Write no more than a few sentences as justification
+
+        Available actions:
+        {actions}
+
+        Claim status:
+        {claim}
+
+        Reminders:
+        {reminders}
+
+        Conversation history:
+        {messages}
+
+        Response format:
+        {{
+            "action": "[action]",
+            "justification": "[justification]"
+        }}
+
+        Example #1:
+        {{
+            "action": "in_depth_study",
+            "justification": "The customer has a lot of questions about the insurance policy. They are not sure if they are covered for the incident. Contract seems to not be clear about this situation."
+        }}
+
+        Example #2:
+        {{
+            "action": "commercial_offer",
+            "justification": "The company planned the customer taxi ride from the wrong address. The customer is not happy about this situation."
+        }}
     """
 
     def default_system(self, phone_number: str) -> str:
@@ -265,14 +305,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.sms_summary_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(
-                [
-                    message
-                    for message in messages
-                    if message.persona is not MessagePersona.TOOL
-                ],
-                exclude={"tool_calls"},
-            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
+            messages=_pydantic_to_str(messages),
             reminders=_pydantic_to_str(reminders),
         )
 
@@ -288,14 +321,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.synthesis_short_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(
-                [
-                    message
-                    for message in messages
-                    if message.persona is not MessagePersona.TOOL
-                ],
-                exclude={"tool_calls"},
-            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
+            messages=_pydantic_to_str(messages),
             reminders=_pydantic_to_str(reminders),
         )
 
@@ -311,18 +337,11 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             self.synthesis_long_system_tpl,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(
-                [
-                    message
-                    for message in messages
-                    if message.persona is not MessagePersona.TOOL
-                ],
-                exclude={"tool_calls"},
-            ),  # Filter out tool messages, to avoid LLM to summarize invisible messages (from the user perspective)
+            messages=_pydantic_to_str(messages),
             reminders=_pydantic_to_str(reminders),
         )
 
-    def citations(
+    def citations_system(
         self,
         claim: ClaimModel,
         messages: List[MessageModel],
@@ -330,7 +349,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         text: str,
     ) -> str:
         return self._return(
-            self.citations_tpl,
+            self.citations_system_tpl,
             claim=_pydantic_to_str(claim),
             messages=_pydantic_to_str(
                 [
@@ -342,6 +361,20 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             ),  # Filter out tool messages, to avoid LLM to cite itself
             reminders=_pydantic_to_str(reminders),
             text=text,
+        )
+
+    def next_system(
+        self,
+        claim: ClaimModel,
+        messages: List[MessageModel],
+        reminders: List[ReminderModel],
+    ) -> str:
+        return self._return(
+            self.next_system_tpl,
+            actions=", ".join([action.value for action in NextAction]),
+            claim=_pydantic_to_str(claim),
+            messages=_pydantic_to_str(messages),
+            reminders=_pydantic_to_str(reminders),
         )
 
     def _return(

@@ -31,6 +31,7 @@ from helpers.config_models.database import Mode as DatabaseMode
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
 from models.call import CallModel
+from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from openai.types.chat import (
@@ -566,7 +567,7 @@ async def handle_play(
 
     try:
         for chunk in chunks:
-            _logger.debug(f"Playing chunk ({call.call_id}): {chunk}")
+            _logger.debug(f"Playing chunk: {chunk}")
             client.play_media(
                 operation_context=context,
                 play_source=audio_from_text(chunk),
@@ -574,13 +575,13 @@ async def handle_play(
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
 
 
-async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
+async def gpt_completion(system: str, call: CallModel, max_tokens: int, json_output: bool = False) -> str:
     _logger.debug(f"Running GPT completion ({call.call_id})")
 
     messages: List[ChatCompletionMessageParam] = [
@@ -599,12 +600,11 @@ async def gpt_completion(system: str, call: CallModel, max_tokens: int) -> str:
 
     content = None
     try:
-        res = await completion_sync(
+        content = await completion_sync(
+            json_output=json_output,
             max_tokens=max_tokens,
             messages=messages,
         )
-        content = res.content
-
     except Exception:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
@@ -615,7 +615,7 @@ async def gpt_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
     user_callback: Callable[[str], Coroutine[Any, Any, None]],
-    retry_attempt: int = 0,
+    _retry_attempt: int = 0,
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running GPT chat ({call.call_id})")
 
@@ -883,7 +883,8 @@ async def gpt_chat(
             tool_call["function"]["name"] == "multi_tool_use.parallel"
             for _, tool_call in tool_calls.items()
         ):
-            if retry_attempt > 3:
+            _logger.debug(f"Invalid tool schema: {tool_calls}")
+            if _retry_attempt > 3:
                 _logger.warn(
                     f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
                 )
@@ -892,7 +893,7 @@ async def gpt_chat(
                 f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
             )
             return await gpt_chat(
-                background_tasks, call, user_callback, retry_attempt + 1
+                background_tasks, call, user_callback, _retry_attempt + 1
             )
 
         intent = IndentAction.CONTINUE
@@ -941,12 +942,10 @@ async def gpt_chat(
                         content = f'Failed to update a non-editable field "{parameters['field']}".'
                     else:
                         try:
-                            # Define the field
-                            setattr(
-                                call.claim, parameters["field"], parameters["value"]
-                            )
-                            # Trigger a re-validation to spot errors before saving
-                            ClaimModel.model_validate(call.claim)
+                            # Define the field and force to trigger validation
+                            copy = call.claim.model_dump()
+                            copy[parameters["field"]] = parameters["value"]
+                            call.claim = ClaimModel.model_validate(copy)
                         except ValidationError as e:
                             content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
                     if not content:
@@ -972,7 +971,9 @@ async def gpt_chat(
                         full_content += local_content + " "
                         await user_callback(local_content)
 
-                    # Generate synthesis for the old claim
+                    # Generate next action
+                    background_tasks.add_task(post_call_next, call)
+                    # Generate synthesis
                     background_tasks.add_task(post_call_synthesis, call)
 
                     # Add context of the last message, if not, LLM messed up and loop on this action
@@ -1095,7 +1096,7 @@ async def handle_recognize_media(
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
@@ -1115,7 +1116,7 @@ async def handle_media(
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
@@ -1128,7 +1129,7 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
     except ResourceNotFoundError:
         _logger.debug(f"Call already hung up ({call.call_id})")
     except HttpResponseError as e:
-        if e.status_code == 8528:
+        if "call already terminated" in e.message.lower():
             _logger.debug(f"Call hung up before playing ({call.call_id})")
         else:
             raise e
@@ -1143,6 +1144,7 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
 
     # Start post-call intelligence
     await asyncio.gather(
+        post_call_next(call),
         post_call_sms(call),
         post_call_synthesis(call),
     )
@@ -1182,6 +1184,7 @@ async def post_call_sms(call: CallModel) -> None:
                     persona=MessagePersona.ASSISTANT,
                 )
             )
+            await db.call_aset(call)
         else:
             _logger.warn(
                 f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.call_id})"
@@ -1241,7 +1244,7 @@ async def post_call_synthesis(call: CallModel) -> None:
             max_tokens=100,
         ),
         gpt_completion(
-            system=CONFIG.prompts.llm.citations(
+            system=CONFIG.prompts.llm.citations_system(
                 claim=call.claim,
                 messages=call.messages,
                 reminders=call.reminders,
@@ -1266,6 +1269,38 @@ async def post_call_synthesis(call: CallModel) -> None:
         long=long,
         short=short,
     )
+    await db.call_aset(call)
+
+
+# TODO: Param _retry_attempt may be replaced by the @retry decorator
+async def post_call_next(call: CallModel, _retry_attempt: int = 0) -> None:
+    """
+    Generate next action for the call.
+    """
+    content = await gpt_completion(
+        system=CONFIG.prompts.llm.next_system(
+            claim=call.claim,
+            messages=call.messages,
+            reminders=call.reminders,
+        ),
+        call=call,
+        json_output=True,
+        max_tokens=1000,
+    )
+
+    try:
+        next = NextModel.model_validate_json(content)
+    except ValidationError:
+        _logger.debug(f"Invalid next action: {content}")
+        if _retry_attempt > 3:
+            _logger.warn("LLM send back invalid next action, retry limit reached")
+            return
+        _logger.warn("LLM send back invalid next action, retrying")
+        await post_call_next(call, _retry_attempt + 1)
+        return
+
+    _logger.info(f"Next action ({call.call_id}): {next}")
+    call.next = next
     await db.call_aset(call)
 
 
