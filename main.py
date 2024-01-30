@@ -416,13 +416,13 @@ async def intelligence(
     background_tasks: BackgroundTasks, call: CallModel, client: CallConnectionClient
 ) -> CallModel:
     """
-    Handle the intelligence of the call, including: GPT chat, GPT completion, TTS, and media play.
+    Handle the intelligence of the call, including: LLM chat, TTS, and media play.
 
     Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after 15 seconds, play the timeout sound. If the intelligence is not processed after 30 seconds, stop the intelligence processing and play the error sound.
     """
     has_started = False
 
-    async def gpt_callback(text: str) -> None:
+    async def tts_callback(text: str) -> None:
         nonlocal has_started
 
         if not await safety_check(text):
@@ -437,7 +437,7 @@ async def intelligence(
             text=text,
         )
 
-    chat_task = asyncio.create_task(gpt_chat(background_tasks, call, gpt_callback))
+    chat_task = asyncio.create_task(llm_chat(background_tasks, call, tts_callback))
     soft_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
     )
@@ -584,13 +584,13 @@ async def handle_play(
             raise e
 
 
-async def gpt_completion(system: Optional[str], call: CallModel) -> Optional[str]:
+async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str]:
     """
-    Run GPT completion from a system prompt and a Call model.
+    Run LLM completion from a system prompt and a Call model.
 
     If the system prompt is None, no completion will be run and None will be returned. Otherwise, the response of the LLM will be returned.
     """
-    _logger.debug(f"Running GPT completion ({call.call_id})")
+    _logger.debug(f"Running LLM completion ({call.call_id})")
 
     if not system:
         return None
@@ -611,13 +611,13 @@ async def gpt_completion(system: Optional[str], call: CallModel) -> Optional[str
     return content
 
 
-async def gpt_model(system: Optional[str], call: CallModel, model: Type[ModelType]) -> Optional[ModelType]:
+async def llm_model(system: Optional[str], call: CallModel, model: Type[ModelType]) -> Optional[ModelType]:
     """
-    Run GPT completion from a system prompt, a Call model, and an expected model type as a return.
+    Run LLM completion from a system prompt, a Call model, and an expected model type as a return.
 
     The logic will try its best to return a model of the expected type, but it is not guaranteed. It it fails, `None` will be returned.
     """
-    _logger.debug(f"Running GPT model ({call.call_id})")
+    _logger.debug(f"Running LLM model ({call.call_id})")
 
     if not system:
         return None
@@ -654,13 +654,13 @@ def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletio
     return messages
 
 
-async def gpt_chat(
+async def llm_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
     user_callback: Callable[[str], Coroutine[Any, Any, None]],
     _retry_attempt: int = 0,
 ) -> Tuple[CallModel, ActionModel]:
-    _logger.debug(f"Running GPT chat ({call.call_id})")
+    _logger.debug(f"Running LLM chat ({call.call_id})")
 
     def _error_response() -> Tuple[CallModel, ActionModel]:
         return (
@@ -681,7 +681,7 @@ async def gpt_chat(
     trainings = sorted(
         set(training for trainings in trainings_tasks for training in trainings or [])
     )  # Flatten, remove duplicates, and sort by score
-    _logger.info(f"Enhancing GPT chat with {len(trainings)} trainings ({call.call_id})")
+    _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
     _logger.debug(f"Trainings: {trainings}")
 
     messages: List[ChatCompletionMessageParam] = [
@@ -935,7 +935,7 @@ async def gpt_chat(
             _logger.warn(
                 f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
             )
-            return await gpt_chat(
+            return await llm_chat(
                 background_tasks, call, user_callback, _retry_attempt + 1
             )
 
@@ -1196,7 +1196,7 @@ async def post_call_sms(call: CallModel) -> None:
     """
     Send an SMS report to the customer.
     """
-    content = await gpt_completion(
+    content = await llm_completion(
         system=CONFIG.prompts.llm.sms_summary_system(
             claim=call.claim,
             messages=call.messages,
@@ -1279,7 +1279,7 @@ async def post_call_synthesis(call: CallModel) -> None:
     _logger.debug(f"Synthesizing call ({call.call_id})")
 
     short, long = await asyncio.gather(
-        gpt_completion(
+        llm_completion(
             call=call,
             system=CONFIG.prompts.llm.synthesis_short_system(
                 claim=call.claim,
@@ -1287,13 +1287,13 @@ async def post_call_synthesis(call: CallModel) -> None:
                 reminders=call.reminders,
             ),
         ),
-        gpt_completion(
+        llm_completion(
             call=call,
             system=CONFIG.prompts.llm.citations_system(
                 claim=call.claim,
                 messages=call.messages,
                 reminders=call.reminders,
-                text=await gpt_completion(
+                text=await llm_completion(
                     call=call,
                     system=CONFIG.prompts.llm.synthesis_long_system(
                         claim=call.claim,
@@ -1323,7 +1323,7 @@ async def post_call_next(call: CallModel) -> None:
     """
     Generate next action for the call.
     """
-    next = await gpt_model(
+    next = await llm_model(
         call=call,
         model=NextModel,
         system=CONFIG.prompts.llm.next_system(
