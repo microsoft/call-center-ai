@@ -333,7 +333,7 @@ Steps to deploy:
 2. Create the local `config.yaml`
 3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
-5. Wait for the deployment to finish
+5. Wait for the deployment to finish (if it fails for a `'null' not found` error, retry the command)
 6. Create the AI Search index
 7. Get the logs with `make logs name=my-instance`
 
