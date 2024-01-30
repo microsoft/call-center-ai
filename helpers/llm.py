@@ -10,15 +10,27 @@ from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from openai import AsyncAzureOpenAI, AsyncStream
+from openai import (
+    AsyncAzureOpenAI,
+    AsyncStream,
+    APIConnectionError,
+    APIResponseValidationError,
+    APIStatusError,
+)
 from openai.types.chat import (
     ChatCompletionChunk,
     ChatCompletionMessageParam,
     ChatCompletionToolParam,
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDelta
-from tenacity import retry, stop_after_attempt, wait_random_exponential
-from typing import Any, AsyncGenerator, List, Optional, Union
+from pydantic import BaseModel, ValidationError
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+    retry_if_exception_type,
+)
+from typing import AsyncGenerator, List, Optional, Type, TypeVar
 import asyncio
 
 
@@ -47,12 +59,32 @@ _contentsafety = ContentSafetyClient(
 )
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
+ModelType = TypeVar("ModelType", bound=BaseModel)
+
+
+class SafetyCheckError(Exception):
+    pass
+
+
+@retry(
+    reraise=True,
+    retry=(
+        retry_if_exception_type(APIResponseValidationError)
+        | retry_if_exception_type(APIStatusError)
+    ),
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=0.5, max=30),
+)
 async def completion_stream(
     messages: List[ChatCompletionMessageParam],
     max_tokens: int,
     tools: Optional[List[ChatCompletionToolParam]] = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
+    """
+    Returns a stream of completion results.
+
+    Catch errors for a maximum of 3 times. Won't retry on connection errors (like timeouts) as the stream will be already partially consumed.
+    """
     extra = {}
 
     if tools:
@@ -70,12 +102,27 @@ async def completion_stream(
         yield chunck.choices[0].delta
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
+@retry(
+    reraise=True,
+    retry=(
+        retry_if_exception_type(APIConnectionError)
+        | retry_if_exception_type(APIResponseValidationError)
+        | retry_if_exception_type(APIStatusError)
+        | retry_if_exception_type(SafetyCheckError)
+    ),
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=0.5, max=30),
+)
 async def completion_sync(
     messages: List[ChatCompletionMessageParam],
     max_tokens: int,
     json_output: bool = False,
 ) -> str:
+    """
+    Returns a completion result.
+
+    Catch errors for a maximum of 3 times. This includes `SafetyCheckError`, only for text responses (not JSON).
+    """
     extra = {}
 
     if json_output:
@@ -88,12 +135,38 @@ async def completion_sync(
         temperature=0,  # Most focused and deterministic
         **extra,
     )
-    return res.choices[0].message.content
+    content = res.choices[0].message.content
+
+    if not json_output:
+        if not await safety_check(content):
+            raise SafetyCheckError()
+
+    return content
+
+
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(ValidationError),
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=0.5, max=30),
+)
+async def completion_model_sync(
+    messages: List[ChatCompletionMessageParam],
+    max_tokens: int,
+    model: Type[ModelType],
+) -> ModelType:
+    """
+    Returns an object validated against a given model, from a completion result.
+
+    Catch errors for a maximum of 3 times, but not `SafetyCheckError`.
+    """
+    res = await completion_sync(messages, max_tokens, json_output=True)
+    return model.model_validate_json(res)
 
 
 async def safety_check(text: str) -> bool:
     """
-    Returns True if the text is safe, False otherwise.
+    Returns `True` if the text is safe, `False` otherwise.
 
     Text can be returned both safe and censored, before containing unsafe content.
     """
@@ -139,7 +212,12 @@ async def close() -> None:
     await asyncio.gather(_oai.close(), _contentsafety.close())
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=0.5, max=30))
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(HttpResponseError),
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=0.5, max=30),
+)
 async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
     return await _contentsafety.analyze_text(
         AnalyzeTextOptions(
@@ -154,7 +232,7 @@ def _contentsafety_category_test(
     res: List[TextCategoriesAnalysis], category: TextCategory
 ) -> bool:
     """
-    Returns True if the category is safe or the severity is low. False otherwise, meaning the category is unsafe.
+    Returns `True` if the category is safe or the severity is low, `False` otherwise, meaning the category is unsafe.
     """
     detection = next(item for item in res if item.category == category)
     if detection and detection.severity and detection.severity > 2:

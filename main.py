@@ -8,7 +8,7 @@ _logger.info(f"claim-ai v{CONFIG.version}")
 
 
 # General imports
-from typing import Any, Callable, Coroutine, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, List, Optional, Tuple, Type
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -35,6 +35,7 @@ from models.next import Action as NextAction
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
+from openai import APIError
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageParam,
@@ -58,7 +59,7 @@ from models.message import (
     ToolModel as MessageToolModel,
 )
 from contextlib import asynccontextmanager
-from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close
+from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close, completion_model_sync, ModelType, SafetyCheckError
 from models.claim import ClaimModel
 from pydantic import ValidationError
 from uuid import UUID
@@ -415,13 +416,13 @@ async def intelligence(
     background_tasks: BackgroundTasks, call: CallModel, client: CallConnectionClient
 ) -> CallModel:
     """
-    Handle the intelligence of the call, including: GPT chat, GPT completion, TTS, and media play.
+    Handle the intelligence of the call, including: LLM chat, TTS, and media play.
 
     Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after 15 seconds, play the timeout sound. If the intelligence is not processed after 30 seconds, stop the intelligence processing and play the error sound.
     """
     has_started = False
 
-    async def gpt_callback(text: str) -> None:
+    async def tts_callback(text: str) -> None:
         nonlocal has_started
 
         if not await safety_check(text):
@@ -436,7 +437,7 @@ async def intelligence(
             text=text,
         )
 
-    chat_task = asyncio.create_task(gpt_chat(background_tasks, call, gpt_callback))
+    chat_task = asyncio.create_task(llm_chat(background_tasks, call, tts_callback))
     soft_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
     )
@@ -583,9 +584,60 @@ async def handle_play(
             raise e
 
 
-async def gpt_completion(system: str, call: CallModel, max_tokens: int, json_output: bool = False) -> str:
-    _logger.debug(f"Running GPT completion ({call.call_id})")
+async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str]:
+    """
+    Run LLM completion from a system prompt and a Call model.
 
+    If the system prompt is None, no completion will be run and None will be returned. Otherwise, the response of the LLM will be returned.
+    """
+    _logger.debug(f"Running LLM completion ({call.call_id})")
+
+    if not system:
+        return None
+
+    messages = _oai_completion_messages(system, call)
+    content = None
+
+    try:
+        content = await completion_sync(
+            max_tokens=1000,
+            messages=messages,
+        )
+    except APIError:
+        _logger.warn(f"OpenAI API call error", exc_info=True)
+    except SafetyCheckError:
+        _logger.warn(f"Safety check error", exc_info=True)
+
+    return content
+
+
+async def llm_model(system: Optional[str], call: CallModel, model: Type[ModelType]) -> Optional[ModelType]:
+    """
+    Run LLM completion from a system prompt, a Call model, and an expected model type as a return.
+
+    The logic will try its best to return a model of the expected type, but it is not guaranteed. It it fails, `None` will be returned.
+    """
+    _logger.debug(f"Running LLM model ({call.call_id})")
+
+    if not system:
+        return None
+
+    messages = _oai_completion_messages(system, call)
+    res = None
+
+    try:
+        res = await completion_model_sync(
+            max_tokens=1000,
+            messages=messages,
+            model=model,
+        )
+    except APIError:
+        _logger.warn(f"OpenAI API call error", exc_info=True)
+
+    return res
+
+
+def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletionMessageParam]:
     messages: List[ChatCompletionMessageParam] = [
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.default_system(
@@ -599,27 +651,16 @@ async def gpt_completion(system: str, call: CallModel, max_tokens: int, json_out
         ),
     ]
     _logger.debug(f"Messages: {messages}")
-
-    content = None
-    try:
-        content = await completion_sync(
-            json_output=json_output,
-            max_tokens=max_tokens,
-            messages=messages,
-        )
-    except Exception:
-        _logger.warn(f"OpenAI API call error", exc_info=True)
-
-    return content or ""
+    return messages
 
 
-async def gpt_chat(
+async def llm_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
     user_callback: Callable[[str], Coroutine[Any, Any, None]],
     _retry_attempt: int = 0,
 ) -> Tuple[CallModel, ActionModel]:
-    _logger.debug(f"Running GPT chat ({call.call_id})")
+    _logger.debug(f"Running LLM chat ({call.call_id})")
 
     def _error_response() -> Tuple[CallModel, ActionModel]:
         return (
@@ -640,7 +681,7 @@ async def gpt_chat(
     trainings = sorted(
         set(training for trainings in trainings_tasks for training in trainings or [])
     )  # Flatten, remove duplicates, and sort by score
-    _logger.info(f"Enhancing GPT chat with {len(trainings)} trainings ({call.call_id})")
+    _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
     _logger.debug(f"Trainings: {trainings}")
 
     messages: List[ChatCompletionMessageParam] = [
@@ -894,7 +935,7 @@ async def gpt_chat(
             _logger.warn(
                 f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
             )
-            return await gpt_chat(
+            return await llm_chat(
                 background_tasks, call, user_callback, _retry_attempt + 1
             )
 
@@ -1044,7 +1085,7 @@ async def gpt_chat(
             ),
         )
 
-    except Exception:
+    except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
     return _error_response()
@@ -1059,7 +1100,7 @@ async def handle_recognize_text(
     """
     Play a text to a call participant and start recognizing the response.
 
-    If store is True, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
+    If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
     if text:
         await handle_play(
@@ -1077,6 +1118,7 @@ async def handle_recognize_text(
     )
 
 
+# TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
 async def handle_recognize_media(
     client: CallConnectionClient,
     call: CallModel,
@@ -1084,8 +1126,6 @@ async def handle_recognize_media(
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
-
-    TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
     """
     try:
         client.start_recognizing_media(
@@ -1156,17 +1196,20 @@ async def post_call_sms(call: CallModel) -> None:
     """
     Send an SMS report to the customer.
     """
-    content = await gpt_completion(
+    content = await llm_completion(
         system=CONFIG.prompts.llm.sms_summary_system(
             claim=call.claim,
             messages=call.messages,
             reminders=call.reminders,
         ),
         call=call,
-        max_tokens=300,
     )
-    _logger.info(f"SMS report ({call.call_id}): {content}")
 
+    if not content:
+        _logger.warn(f"Error generating SMS report ({call.call_id})")
+        return
+
+    _logger.info(f"SMS report ({call.call_id}): {content}")
     try:
         responses = sms_client.send(
             from_=str(CONFIG.communication_service.phone_number),
@@ -1236,34 +1279,36 @@ async def post_call_synthesis(call: CallModel) -> None:
     _logger.debug(f"Synthesizing call ({call.call_id})")
 
     short, long = await asyncio.gather(
-        gpt_completion(
+        llm_completion(
+            call=call,
             system=CONFIG.prompts.llm.synthesis_short_system(
                 claim=call.claim,
                 messages=call.messages,
                 reminders=call.reminders,
             ),
-            call=call,
-            max_tokens=100,
         ),
-        gpt_completion(
+        llm_completion(
+            call=call,
             system=CONFIG.prompts.llm.citations_system(
                 claim=call.claim,
                 messages=call.messages,
                 reminders=call.reminders,
-                text=await gpt_completion(
+                text=await llm_completion(
+                    call=call,
                     system=CONFIG.prompts.llm.synthesis_long_system(
                         claim=call.claim,
                         messages=call.messages,
                         reminders=call.reminders,
                     ),
-                    call=call,
-                    max_tokens=1000,
                 ),
             ),
-            call=call,
-            max_tokens=1000,
         ),
     )
+
+    if not short or not long:
+        _logger.warn(f"Error generating synthesis ({call.call_id})")
+        return
+
     _logger.info(f"Short synthesis ({call.call_id}): {short}")
     _logger.info(f"Long synthesis ({call.call_id}): {long}")
 
@@ -1274,31 +1319,22 @@ async def post_call_synthesis(call: CallModel) -> None:
     await db.call_aset(call)
 
 
-# TODO: Param _retry_attempt may be replaced by the @retry decorator
-async def post_call_next(call: CallModel, _retry_attempt: int = 0) -> None:
+async def post_call_next(call: CallModel) -> None:
     """
     Generate next action for the call.
     """
-    content = await gpt_completion(
+    next = await llm_model(
+        call=call,
+        model=NextModel,
         system=CONFIG.prompts.llm.next_system(
             claim=call.claim,
             messages=call.messages,
             reminders=call.reminders,
         ),
-        call=call,
-        json_output=True,
-        max_tokens=1000,
     )
 
-    try:
-        next = NextModel.model_validate_json(content)
-    except ValidationError:
-        _logger.debug(f"Invalid next action: {content}")
-        if _retry_attempt > 3:
-            _logger.warn("LLM send back invalid next action, retry limit reached")
-            return
-        _logger.warn("LLM send back invalid next action, retrying")
-        await post_call_next(call, _retry_attempt + 1)
+    if not next:
+        _logger.warn(f"Error generating next action ({call.call_id})")
         return
 
     _logger.info(f"Next action ({call.call_id}): {next}")
