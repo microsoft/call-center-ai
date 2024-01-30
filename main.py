@@ -942,12 +942,10 @@ async def gpt_chat(
                         content = f'Failed to update a non-editable field "{parameters['field']}".'
                     else:
                         try:
-                            # Define the field
-                            setattr(
-                                call.claim, parameters["field"], parameters["value"]
-                            )
-                            # Trigger a re-validation to spot errors before saving
-                            ClaimModel.model_validate(call.claim)
+                            # Define the field and force to trigger validation
+                            copy = call.claim.model_dump()
+                            copy[parameters["field"]] = parameters["value"]
+                            call.claim = ClaimModel.model_validate(copy)
                         except ValidationError as e:
                             content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
                     if not content:
