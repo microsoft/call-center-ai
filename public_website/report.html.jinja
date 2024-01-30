@@ -38,7 +38,7 @@ Déclaration de sinistre {{ call.claim.claim_id }}
 
     <!-- Agent and customer -->
     <div class="overflow-hidden space-y-6">
-      {% for message in call.messages %}
+      {% for message in call.messages | sort(attribute='created_at') %}
       {% set name = bot_name if message.persona == 'assistant' else call.claim.policyholder_name %}
       <div class="flex flex-row">
         <div class="basis-6 relative self-stretch">
@@ -93,15 +93,14 @@ Déclaration de sinistre {{ call.claim.claim_id }}
 
 <div class="col-start-5 col-end-7 space-y-4">
   <!-- Reminders -->
-  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4">
-    <h2 class="text-lg pb-4">⏰ Rappels</h2>
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
+    <h2 class="text-lg">⏰ Rappels</h2>
 
     {% if not call.reminders %}
     <p class="text-neutral-600 dark:text-neutral-400">Aucun rappel pour l'instant.</p>
     {% else %}
     <div class="space-y-6">
-      <!-- TODO: Sort reminders by due date -->
-      {% for reminder in call.reminders %}
+      {% for reminder in call.reminders | sort(attribute='due_date_time') %}
       <div>
         <div class="text-xs">
           {{ reminder.owner | title }}&nbsp;<span class="text-neutral-600 dark:text-neutral-400">({{ reminder.due_date_time }})</span>
@@ -113,22 +112,35 @@ Déclaration de sinistre {{ call.claim.claim_id }}
     {% endif %}
   </div>
 
-  <!-- Reminders -->
-  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4">
-    <h2 class="text-lg pb-4">⏭️ Prochaine action</h2>
+  <!-- Next actions -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
+    <h2 class="text-lg">📥 Prochaine action</h2>
 
     {% if not call.next %}
     <p class="text-neutral-600 dark:text-neutral-400">Aucune prochaine action pour l'instant.</p>
     {% else %}
-    <p>
-      {{ call.next.action.value | replace("_", " " ) | capitalize }}.&nbsp;<span class="text-neutral-600 dark:text-neutral-400">{{ call.next.justification }}</span>
-    </p>
+    <ul>
+      {% for action in next_actions | sort %}
+      {% if action.value == call.next.action.value %}
+      <li>
+        {{ action.value | replace("_", " " ) | capitalize }}
+      </li>
+      {% else %}
+      <li class="text-xs text-neutral-600 dark:text-neutral-400">
+        {{ action.value | replace("_", " " ) | capitalize }}
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ul>
     {% endif %}
+    <p class="text-neutral-600 dark:text-neutral-400">
+      {{ call.next.justification }}
+    </p>
   </div>
 
   <!-- Details -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
-    <h2 class="text-lg px-4 pt-4">🔎 Détails</h2>
+    <h2 class="text-lg px-4 pt-4">📁 Détails</h2>
     <table class="table-auto w-full">
       <tbody>
         {%
