@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi.encoders import jsonable_encoder
 from functools import cached_property
 from logging import Logger
@@ -85,7 +85,6 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Is allowed to make assumptions, as the customer will correct them if they are wrong
         - Is polite, helpful, and professional
         - Keep the sentences short and simple
-        - Phone numbers are always in the format E164 (e.g. +33612345678, +18449197576)
         - Rephrase the customer's questions as statements and answer them
         - Use additional context as a reference to answer the customer's questions related to insurance or contract details
         - Use additional context to enhance the conversation with useful details
@@ -283,7 +282,9 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
                 bot_company=CONFIG.workflow.bot_company,
                 bot_name=CONFIG.workflow.bot_name,
                 bot_phone_number=CONFIG.communication_service.phone_number,
-                date=datetime.now().isoformat(),
+                date=datetime.now(UTC)
+                .astimezone()
+                .strftime("%Y-%m-%d %H:%M %Z%z"),  # Example 2024-02-01 18:58 CET+0100
                 phone_number=phone_number,
             )
         )

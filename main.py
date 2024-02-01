@@ -838,7 +838,7 @@ async def llm_chat(
                             "type": "string",
                         },
                         "value": {
-                            "description": "The claim field value to update.",
+                            "description": "The claim field value to update. For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58). For phone numbers, use E164 format (e.g. +33612345678).",
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
@@ -1007,7 +1007,6 @@ async def llm_chat(
                         full_content += local_content + " "
                         await user_callback(local_content)
 
-                    content = None
                     if not parameters["field"] in ClaimModel.editable_fields():
                         content = f'Failed to update a non-editable field "{parameters['field']}".'
                     else:
@@ -1016,10 +1015,9 @@ async def llm_chat(
                             copy = call.claim.model_dump()
                             copy[parameters["field"]] = parameters["value"]
                             call.claim = ClaimModel.model_validate(copy)
-                        except ValidationError as e:
+                            content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
+                        except ValidationError as e:  # Catch error to inform LLM
                             content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
-                    if not content:
-                        content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
                     model.content = content
 
                 elif name == IndentAction.NEW_CLAIM.value:
@@ -1074,25 +1072,30 @@ async def llm_chat(
                     updated = False
                     for reminder in call.reminders:
                         if reminder.title == parameters["title"]:
-                            reminder.description = parameters["description"]
-                            reminder.due_date_time = parameters["due_date_time"]
-                            reminder.owner = parameters["owner"]
-                            model.content = (
-                                f'Reminder "{parameters['title']}" updated.'
-                            )
+                            try:
+                                reminder.description = parameters["description"]
+                                reminder.due_date_time = parameters["due_date_time"]
+                                reminder.owner = parameters["owner"]
+                                content = f'Reminder "{parameters['title']}" updated.'
+                            except ValidationError as e:  # Catch error to inform LLM
+                                content = f'Failed to edit reminder "{parameters["title"]}": {e.json()}'
+                            model.content = content
                             updated = True
                             break
 
                     if not updated:
-                        call.reminders.append(
-                            ReminderModel(
+                        try:
+                            reminder = ReminderModel(
                                 description=parameters["description"],
                                 due_date_time=parameters["due_date_time"],
                                 title=parameters["title"],
                                 owner=parameters["owner"],
                             )
-                        )
-                        model.content = f'Reminder "{parameters['title']}" created.'
+                            call.reminders.append(reminder)
+                            content = f'Reminder "{parameters['title']}" created.'
+                        except ValidationError as e:  # Catch error to inform LLM
+                            content = f'Failed to create reminder "{parameters["title"]}": {e.json()}'
+                        model.content = content
 
                 models.append(model)
 

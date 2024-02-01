@@ -26,7 +26,7 @@ class ClaimModel(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
     # Editable fields
     extra_details: Optional[str] = None
-    incident_date_time: Optional[str] = None
+    incident_date_time: Optional[datetime] = None
     incident_description: Optional[str] = None
     incident_location: Optional[str] = None
     injuries_description: Optional[str] = None
