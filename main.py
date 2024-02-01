@@ -45,7 +45,7 @@ from openai.types.chat import (
     ChatCompletionToolParam,
     ChatCompletionUserMessageParam,
 )
-from persistence.ai_search import AiSearchSearch
+from persistence.ai_search import AiSearchSearch, TrainingModel as AiSearchTrainingModel
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
 from urllib.parse import quote_plus
@@ -664,6 +664,7 @@ async def llm_chat(
     call: CallModel,
     user_callback: Callable[[str], Coroutine[Any, Any, None]],
     _retry_attempt: int = 0,
+    _trainings: List[AiSearchTrainingModel] = [],
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running LLM chat ({call.call_id})")
 
@@ -701,16 +702,19 @@ async def llm_chat(
             ),
         )
 
-    # Query expansion from last messages
-    trainings_tasks = await asyncio.gather(
-        *[
-            search.training_asearch_all(message.content)
-            for message in call.messages[-5:]
-        ],
-    )
-    trainings = sorted(
-        set(training for trainings in trainings_tasks for training in trainings or [])
-    )  # Flatten, remove duplicates, and sort by score
+    trainings = _trainings
+    if not trainings:
+        # Query expansion from last messages
+        trainings_tasks = await asyncio.gather(
+            *[
+                search.training_asearch_all(message.content)
+                for message in call.messages[-5:]
+            ],
+        )
+        trainings = sorted(
+            set(training for trainings in trainings_tasks for training in trainings or [])
+        )  # Flatten, remove duplicates, and sort by score
+
     _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
     _logger.debug(f"Trainings: {trainings}")
 
@@ -950,7 +954,7 @@ async def llm_chat(
                 _logger.warn(f'LLM send back empty content, retry limit reached')
                 return await _error_response()
             _logger.warn(f'LLM send back empty content, retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1)
+            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
 
         # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
         # TODO: Tries to detect this error earlier
@@ -964,7 +968,7 @@ async def llm_chat(
                 _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached')
                 return await _error_response()
             _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1)
+            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
 
         intent = IndentAction.CONTINUE
         models = []
