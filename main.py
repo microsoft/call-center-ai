@@ -299,7 +299,9 @@ async def communication_event_worker(
 
         if len(call.messages) == 1:  # First call
             await handle_recognize_text(
-                call=call, client=client, text=CONFIG.prompts.tts.hello()
+                call=call,
+                client=client,
+                text=CONFIG.prompts.tts.hello(),
             )
 
         else:  # Returning call
@@ -495,7 +497,8 @@ async def intelligence(
             f"Error loading intelligence ({call.call_id}), answering with default error"
         )
         chat_action = ActionModel(
-            content=CONFIG.prompts.tts.error(), intent=IndentAction.CONTINUE
+            content=CONFIG.prompts.tts.error(),
+            intent=IndentAction.CONTINUE,
         )
 
     _logger.debug(f"Chat ({call.call_id}): {chat_action}")
@@ -551,7 +554,10 @@ async def handle_play(
     """
     if store:
         call.messages.append(
-            MessageModel(content=text, persona=MessagePersona.ASSISTANT)
+            MessageModel(
+                content=text,
+                persona=MessagePersona.ASSISTANT,
+            )
         )
 
     _logger.info(f"Playing text ({call.call_id}): {text}")
@@ -913,7 +919,7 @@ async def llm_chat(
             # Batch remaining user return
             await user_callback(buffer_content)
 
-        # Remove tool calls from full content, if any
+        # Get data from full content to be able to store it in the DB
         full_content = _remove_message_actions(full_content)
 
         _logger.debug(f"Chat response: {full_content}")

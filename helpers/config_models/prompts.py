@@ -292,12 +292,12 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
 
         return self._return(
             self.chat_system_tpl,
-            trainings=trainings,
             actions=", ".join([action.value for action in MessageAction]),
             bot_company=CONFIG.workflow.bot_company,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
             reminders=_pydantic_to_str(reminders),
+            trainings=trainings,
         )
 
     def sms_summary_system(
