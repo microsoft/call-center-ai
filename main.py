@@ -127,7 +127,7 @@ api = FastAPI(
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
 SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
-MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
+MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
 
@@ -667,11 +667,36 @@ async def llm_chat(
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running LLM chat ({call.call_id})")
 
-    def _error_response() -> Tuple[CallModel, ActionModel]:
+    def _remove_message_actions(text: str) -> str:
+        """
+        Remove action from content. AI often adds it by mistake event if explicitly asked not to.
+        """
+        res = re.match(MESSAGE_ACTION_R, text)
+        if not res:
+            return text.strip()
+        content = res.group(2)
+        return content.strip() if content else ""
+
+    async def _buffer_user_callback(buffer: str) -> None:
+        # Remove tool calls from buffer content
+        local_content = _remove_message_actions(buffer)
+        # Batch current user return
+        if local_content:
+            await user_callback(local_content)
+
+    async def _error_response() -> Tuple[CallModel, ActionModel]:
+        content = CONFIG.prompts.tts.error()
+        await user_callback(content)
+        call.messages.append(
+            MessageModel(
+                content=content,
+                persona=MessagePersona.ASSISTANT,
+            )
+        )
         return (
             call,
             ActionModel(
-                content=CONFIG.prompts.tts.error(),
+                content=content,
                 intent=IndentAction.CONTINUE,
             ),
         )
@@ -709,7 +734,7 @@ async def llm_chat(
         if message.persona == MessagePersona.HUMAN:
             messages.append(
                 ChatCompletionUserMessageParam(
-                    content=f"{message.action.value}: {message.content}",
+                    content=f"action={message.action.value} {message.content}",
                     role="user",
                 )
             )
@@ -717,14 +742,14 @@ async def llm_chat(
             if not message.tool_calls:
                 messages.append(
                     ChatCompletionAssistantMessageParam(
-                        content=f"{message.action.value}: {message.content}",
+                        content=f"action={message.action.value} {message.content}",
                         role="assistant",
                     )
                 )
             else:
                 messages.append(
                     ChatCompletionAssistantMessageParam(
-                        content=f"{message.action.value}: {message.content}",
+                        content=f"action={message.action.value} {message.content}",
                         role="assistant",
                         tool_calls=[
                             ChatCompletionMessageToolCallParam(
@@ -910,8 +935,7 @@ async def llm_chat(
                     await _buffer_user_callback(local_content)
 
         if buffer_content:
-            # Batch remaining user return
-            await user_callback(buffer_content)
+            await _buffer_user_callback(buffer_content)
 
         # Get data from full content to be able to store it in the DB
         full_content = _remove_message_actions(full_content)
@@ -928,16 +952,10 @@ async def llm_chat(
         ):
             _logger.debug(f"Invalid tool schema: {tool_calls}")
             if _retry_attempt > 3:
-                _logger.warn(
-                    f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
-                )
-                return _error_response()
-            _logger.warn(
-                f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
-            )
-            return await llm_chat(
-                background_tasks, call, user_callback, _retry_attempt + 1
-            )
+                _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached')
+                return await _error_response()
+            _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying')
+            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1)
 
         intent = IndentAction.CONTINUE
         models = []
@@ -1088,7 +1106,7 @@ async def llm_chat(
     except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
-    return _error_response()
+    return await _error_response()
 
 
 async def handle_recognize_text(
