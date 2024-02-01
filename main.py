@@ -8,7 +8,7 @@ _logger.info(f"claim-ai v{CONFIG.version}")
 
 
 # General imports
-from typing import Any, Callable, Coroutine, List, Optional, Tuple, Type
+from typing import Any, Callable, Coroutine, Generator, List, Optional, Tuple, Type
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -126,7 +126,7 @@ api = FastAPI(
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
-SENTENCE_R = r"[^\w\s+\-/'\",:;()@]"
+SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
 MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
@@ -562,13 +562,12 @@ async def handle_play(
 
     _logger.info(f"Playing text ({call.call_id}): {text}")
 
-    # Split text in chunks of max 400 characters, separated by a comma
+    # Split text in chunks of max 400 characters, separated by sentence
     chunks = []
     chunk = ""
-    for word in text.split("."):  # Split by sentence
-        to_add = f"{word}. "
+    for to_add in _sentence_split(text):
         if len(chunk) + len(to_add) >= 400:
-            chunks.append(chunk)
+            chunks.append(chunk.strip())  # Remove trailing space
             chunk = ""
         chunk += to_add
     if chunk:
@@ -906,14 +905,9 @@ async def llm_chat(
                 # Store whole content
                 full_content += delta.content
                 buffer_content += delta.content
-                # Remove tool calls from buffer content, if any
-                buffer_content = _remove_message_actions(buffer_content)
-                # Test if there ia a sentence in the buffer
-                separators = re.findall(SENTENCE_R, buffer_content)
-                if separators and separators[0] in buffer_content:
-                    to_return = re.split(SENTENCE_R, buffer_content)[0] + separators[0]
-                    buffer_content = buffer_content[len(to_return) :]
-                    await user_callback(to_return.strip())
+                for local_content in _sentence_split(buffer_content):
+                    buffer_content = buffer_content[len(local_content) :]  # Remove consumed content from buffer
+                    await _buffer_user_callback(local_content)
 
         if buffer_content:
             # Batch remaining user return
@@ -1348,8 +1342,12 @@ async def post_call_next(call: CallModel) -> None:
     await db.call_aset(call)
 
 
-def _remove_message_actions(text: str) -> str:
+def _sentence_split(text: str) -> Generator[str, None, None]:
     """
-    Remove action from content. AI often adds it by mistake event if explicitly asked not to.
+    Split a text into sentences.
     """
-    return re.sub(MESSAGE_ACTION_R, "", text).strip()
+    separators = re.findall(SENTENCE_R, text)
+    splits = re.split(SENTENCE_R, text)
+    for i, separator in enumerate(separators):
+        local_content = splits[i] + separator
+        yield local_content
