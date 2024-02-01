@@ -56,12 +56,18 @@ class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
 
 
 class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
+    """
+    Introduce to Assistant who they are, what they do.
+
+    Introduce a emotional stimuli to the LLM, to make is lazier (https://arxiv.org/pdf/2307.11760.pdf).
+    """
+
     default_system_tpl: str = """
         Assistant is called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience.
 
         Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
 
-        I'll tip you 10$ for each quality answer, I promise.
+        Take a deep breath. This is very important for the customer.
     """
     chat_system_tpl: str = """
         Assistant will help the customer with their insurance claim.
