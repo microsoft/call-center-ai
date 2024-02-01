@@ -56,6 +56,7 @@ from models.message import (
     Action as MessageAction,
     MessageModel,
     Persona as MessagePersona,
+    Style as MessageStyle,
     ToolModel as MessageToolModel,
 )
 from contextlib import asynccontextmanager
@@ -128,6 +129,7 @@ CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
 SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
 MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
+MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
 
@@ -301,6 +303,7 @@ async def communication_event_worker(
             await handle_recognize_text(
                 call=call,
                 client=client,
+                style=MessageStyle.CHEERFUL,
                 text=CONFIG.prompts.tts.hello(),
             )
 
@@ -308,6 +311,7 @@ async def communication_event_worker(
             await handle_play(
                 call=call,
                 client=client,
+                style=MessageStyle.CHEERFUL,
                 text=CONFIG.prompts.tts.welcome_back(),
             )
             call = await intelligence(background_tasks, call, client)
@@ -424,7 +428,7 @@ async def intelligence(
     """
     has_started = False
 
-    async def tts_callback(text: str) -> None:
+    async def tts_callback(text: str, style: MessageStyle) -> None:
         nonlocal has_started
 
         if not await safety_check(text):
@@ -436,6 +440,7 @@ async def intelligence(
             call=call,
             client=client,
             store=False,
+            style=style,
             text=text,
         )
 
@@ -542,6 +547,7 @@ async def handle_play(
     client: CallConnectionClient,
     call: CallModel,
     text: str,
+    style: MessageStyle = MessageStyle.NONE,
     context: Optional[str] = None,
     store: bool = True,
 ) -> None:
@@ -557,10 +563,11 @@ async def handle_play(
             MessageModel(
                 content=text,
                 persona=MessagePersona.ASSISTANT,
+                style=style,
             )
         )
 
-    _logger.info(f"Playing text ({call.call_id}): {text}")
+    _logger.info(f"Playing text ({call.call_id}): {text} ({style})")
 
     # Split text in chunks of max 400 characters, separated by sentence
     chunks = []
@@ -578,7 +585,7 @@ async def handle_play(
             _logger.debug(f"Playing chunk: {chunk}")
             client.play_media(
                 operation_context=context,
-                play_source=audio_from_text(chunk),
+                play_source=audio_from_text(chunk, style),
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
@@ -662,7 +669,7 @@ def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletio
 async def llm_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
-    user_callback: Callable[[str], Coroutine[Any, Any, None]],
+    user_callback: Callable[[str, MessageStyle], Coroutine[Any, Any, None]],
     _retry_attempt: int = 0,
     _trainings: List[AiSearchTrainingModel] = [],
 ) -> Tuple[CallModel, ActionModel]:
@@ -678,20 +685,37 @@ async def llm_chat(
         content = res.group(2)
         return content.strip() if content else ""
 
-    async def _buffer_user_callback(buffer: str) -> None:
-        # Remove tool calls from buffer content
-        local_content = _remove_message_actions(buffer)
+    def _extract_message_style(text: str) -> Tuple[Optional[MessageStyle], str]:
+        """
+        Detect the style of a message.
+        """
+        res = re.match(MESSAGE_STYLE_R, text)
+        if not res:
+            return None, text
+        try:
+            content = res.group(2)
+            return MessageStyle(res.group(1)), content.strip() if content else ""
+        except ValueError:
+            return None, text
+
+    async def _buffer_user_callback(buffer: str, style: MessageStyle) -> MessageStyle:
+        # Remove tool calls from buffer content and detect style
+        local_style, local_content = _extract_message_style(_remove_message_actions(buffer))
+        new_style = local_style or style
         # Batch current user return
         if local_content:
-            await user_callback(local_content)
+            await user_callback(local_content, new_style)
+        return new_style
 
     async def _error_response() -> Tuple[CallModel, ActionModel]:
         content = CONFIG.prompts.tts.error()
-        await user_callback(content)
+        style = MessageStyle.NONE
+        await user_callback(content, style)
         call.messages.append(
             MessageModel(
                 content=content,
                 persona=MessagePersona.ASSISTANT,
+                style=style,
             )
         )
         return (
@@ -738,7 +762,7 @@ async def llm_chat(
         if message.persona == MessagePersona.HUMAN:
             messages.append(
                 ChatCompletionUserMessageParam(
-                    content=f"action={message.action.value} {message.content}",
+                    content=f"action={message.action.value} style={message.style.value} {message.content}",
                     role="user",
                 )
             )
@@ -746,14 +770,14 @@ async def llm_chat(
             if not message.tool_calls:
                 messages.append(
                     ChatCompletionAssistantMessageParam(
-                        content=f"action={message.action.value} {message.content}",
+                        content=f"action={message.action.value} style={message.style.value} {message.content}",
                         role="assistant",
                     )
                 )
             else:
                 messages.append(
                     ChatCompletionAssistantMessageParam(
-                        content=f"action={message.action.value} {message.content}",
+                        content=f"action={message.action.value} style={message.style.value} {message.content}",
                         role="assistant",
                         tool_calls=[
                             ChatCompletionMessageToolCallParam(
@@ -903,6 +927,7 @@ async def llm_chat(
 
     full_content = ""
     buffer_content = ""
+    default_style = MessageStyle.NONE
     tool_calls = {}
     try:
         async for delta in completion_stream(
@@ -936,13 +961,13 @@ async def llm_chat(
                 buffer_content += delta.content
                 for local_content in _sentence_split(buffer_content):
                     buffer_content = buffer_content[len(local_content) :]  # Remove consumed content from buffer
-                    await _buffer_user_callback(local_content)
+                    default_style = await _buffer_user_callback(local_content, default_style)
 
         if buffer_content:
-            await _buffer_user_callback(buffer_content)
+            default_style = await _buffer_user_callback(buffer_content, default_style)
 
         # Get data from full content to be able to store it in the DB
-        full_content = _remove_message_actions(full_content)
+        _, full_content = _extract_message_style(_remove_message_actions(full_content))
 
         _logger.debug(f"Chat response: {full_content}")
         _logger.debug(f"Tool calls: {tool_calls}")
@@ -1009,7 +1034,7 @@ async def llm_chat(
                     else:
                         local_content = parameters[customer_response_prop]
                         full_content += local_content + " "
-                        await user_callback(local_content)
+                        await user_callback(local_content, default_style)
 
                     if not parameters["field"] in ClaimModel.editable_fields():
                         content = f'Failed to update a non-editable field "{parameters['field']}".'
@@ -1041,7 +1066,7 @@ async def llm_chat(
                     else:
                         local_content = parameters[customer_response_prop]
                         full_content += local_content + " "
-                        await user_callback(local_content)
+                        await user_callback(local_content, default_style)
 
                     # Generate next action
                     background_tasks.add_task(post_call_next, call)
@@ -1071,7 +1096,7 @@ async def llm_chat(
                     else:
                         local_content = parameters[customer_response_prop]
                         full_content += local_content + " "
-                        await user_callback(local_content)
+                        await user_callback(local_content, default_style)
 
                     updated = False
                     for reminder in call.reminders:
@@ -1107,6 +1132,7 @@ async def llm_chat(
             MessageModel(
                 content=full_content,
                 persona=MessagePersona.ASSISTANT,
+                style=default_style,
                 tool_calls=models,
             )
         )
@@ -1128,6 +1154,7 @@ async def llm_chat(
 async def handle_recognize_text(
     client: CallConnectionClient,
     call: CallModel,
+    style: MessageStyle = MessageStyle.NONE,
     text: Optional[str] = None,
     store: bool = True,
 ) -> None:
@@ -1141,6 +1168,7 @@ async def handle_recognize_text(
             call=call,
             client=client,
             store=store,
+            style=style,
             text=text,
         )
 
@@ -1277,7 +1305,7 @@ async def post_call_sms(call: CallModel) -> None:
         )
 
 
-def audio_from_text(text: str) -> SsmlSource:
+def audio_from_text(text: str, style: MessageStyle) -> SsmlSource:
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
@@ -1289,7 +1317,7 @@ def audio_from_text(text: str) -> SsmlSource:
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
-    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><prosody rate="0.95">{text}</prosody></voice></speak>'
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><mstts:express-as style="{style.value}" styledegree="0.5"><prosody rate="0.95">{text}</prosody></mstts:express-as></voice></speak>'
     return SsmlSource(ssml_text=ssml)
 
 
