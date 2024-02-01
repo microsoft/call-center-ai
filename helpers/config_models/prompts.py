@@ -397,12 +397,12 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     ) -> str:
         return dedent(
             f"""
-            {dedent(prompt_tpl.format(**kwargs))}
+            {dedent(prompt_tpl.format(**kwargs)).strip()}
 
             Additional context:
             {_pydantic_to_str(trainings)}
         """
-        )
+        ).strip()
 
     @computed_field
     @cached_property
@@ -485,7 +485,7 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
         return self._return(self.timeout_loading_tpl)
 
     def _return(self, prompt_tpl: str, **kwargs) -> str:
-        return dedent(prompt_tpl.format(**kwargs))
+        return dedent(prompt_tpl.format(**kwargs)).strip()
 
 
 class PromptsModel(BaseSettings, env_prefix="prompts_"):
