@@ -20,7 +20,7 @@ class CosmosStore(IStore):
     _config: CosmosDbModel
 
     def __init__(self, config: CosmosDbModel):
-        _logger.info(f"Using CosmosDB {config.database}/{config.container}")
+        _logger.info(f"Using Cosmos DB {config.database}/{config.container}")
         self._config = config
 
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
