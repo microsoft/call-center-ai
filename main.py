@@ -8,7 +8,7 @@ _logger.info(f"claim-ai v{CONFIG.version}")
 
 
 # General imports
-from typing import Any, Callable, Coroutine, List, Optional, Tuple, Type
+from typing import Any, Callable, Coroutine, Generator, List, Optional, Tuple, Type
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -45,7 +45,7 @@ from openai.types.chat import (
     ChatCompletionToolParam,
     ChatCompletionUserMessageParam,
 )
-from persistence.ai_search import AiSearchSearch
+from persistence.ai_search import AiSearchSearch, TrainingModel as AiSearchTrainingModel
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
 from urllib.parse import quote_plus
@@ -126,8 +126,8 @@ api = FastAPI(
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
 CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
-SENTENCE_R = r"[^\w\s+\-/'\",:;()@]"
-MESSAGE_ACTION_R = rf"(?:{'|'.join([action.value for action in MessageAction])}):"
+SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
+MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
 
@@ -299,7 +299,9 @@ async def communication_event_worker(
 
         if len(call.messages) == 1:  # First call
             await handle_recognize_text(
-                call=call, client=client, text=CONFIG.prompts.tts.hello()
+                call=call,
+                client=client,
+                text=CONFIG.prompts.tts.hello(),
             )
 
         else:  # Returning call
@@ -495,7 +497,8 @@ async def intelligence(
             f"Error loading intelligence ({call.call_id}), answering with default error"
         )
         chat_action = ActionModel(
-            content=CONFIG.prompts.tts.error(), intent=IndentAction.CONTINUE
+            content=CONFIG.prompts.tts.error(),
+            intent=IndentAction.CONTINUE,
         )
 
     _logger.debug(f"Chat ({call.call_id}): {chat_action}")
@@ -551,18 +554,20 @@ async def handle_play(
     """
     if store:
         call.messages.append(
-            MessageModel(content=text, persona=MessagePersona.ASSISTANT)
+            MessageModel(
+                content=text,
+                persona=MessagePersona.ASSISTANT,
+            )
         )
 
     _logger.info(f"Playing text ({call.call_id}): {text}")
 
-    # Split text in chunks of max 400 characters, separated by a comma
+    # Split text in chunks of max 400 characters, separated by sentence
     chunks = []
     chunk = ""
-    for word in text.split("."):  # Split by sentence
-        to_add = f"{word}. "
+    for to_add in _sentence_split(text):
         if len(chunk) + len(to_add) >= 400:
-            chunks.append(chunk)
+            chunks.append(chunk.strip())  # Remove trailing space
             chunk = ""
         chunk += to_add
     if chunk:
@@ -659,28 +664,57 @@ async def llm_chat(
     call: CallModel,
     user_callback: Callable[[str], Coroutine[Any, Any, None]],
     _retry_attempt: int = 0,
+    _trainings: List[AiSearchTrainingModel] = [],
 ) -> Tuple[CallModel, ActionModel]:
     _logger.debug(f"Running LLM chat ({call.call_id})")
 
-    def _error_response() -> Tuple[CallModel, ActionModel]:
+    def _remove_message_actions(text: str) -> str:
+        """
+        Remove action from content. AI often adds it by mistake event if explicitly asked not to.
+        """
+        res = re.match(MESSAGE_ACTION_R, text)
+        if not res:
+            return text.strip()
+        content = res.group(2)
+        return content.strip() if content else ""
+
+    async def _buffer_user_callback(buffer: str) -> None:
+        # Remove tool calls from buffer content
+        local_content = _remove_message_actions(buffer)
+        # Batch current user return
+        if local_content:
+            await user_callback(local_content)
+
+    async def _error_response() -> Tuple[CallModel, ActionModel]:
+        content = CONFIG.prompts.tts.error()
+        await user_callback(content)
+        call.messages.append(
+            MessageModel(
+                content=content,
+                persona=MessagePersona.ASSISTANT,
+            )
+        )
         return (
             call,
             ActionModel(
-                content=CONFIG.prompts.tts.error(),
+                content=content,
                 intent=IndentAction.CONTINUE,
             ),
         )
 
-    # Query expansion from last messages
-    trainings_tasks = await asyncio.gather(
-        *[
-            search.training_asearch_all(message.content)
-            for message in call.messages[-5:]
-        ],
-    )
-    trainings = sorted(
-        set(training for trainings in trainings_tasks for training in trainings or [])
-    )  # Flatten, remove duplicates, and sort by score
+    trainings = _trainings
+    if not trainings:
+        # Query expansion from last messages
+        trainings_tasks = await asyncio.gather(
+            *[
+                search.training_asearch_all(message.content)
+                for message in call.messages[-5:]
+            ],
+        )
+        trainings = sorted(
+            set(training for trainings in trainings_tasks for training in trainings or [])
+        )  # Flatten, remove duplicates, and sort by score
+
     _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
     _logger.debug(f"Trainings: {trainings}")
 
@@ -704,7 +738,7 @@ async def llm_chat(
         if message.persona == MessagePersona.HUMAN:
             messages.append(
                 ChatCompletionUserMessageParam(
-                    content=f"{message.action.value}: {message.content}",
+                    content=f"action={message.action.value} {message.content}",
                     role="user",
                 )
             )
@@ -712,14 +746,14 @@ async def llm_chat(
             if not message.tool_calls:
                 messages.append(
                     ChatCompletionAssistantMessageParam(
-                        content=f"{message.action.value}: {message.content}",
+                        content=f"action={message.action.value} {message.content}",
                         role="assistant",
                     )
                 )
             else:
                 messages.append(
                     ChatCompletionAssistantMessageParam(
-                        content=f"{message.action.value}: {message.content}",
+                        content=f"action={message.action.value} {message.content}",
                         role="assistant",
                         tool_calls=[
                             ChatCompletionMessageToolCallParam(
@@ -808,7 +842,7 @@ async def llm_chat(
                             "type": "string",
                         },
                         "value": {
-                            "description": "The claim field value to update.",
+                            "description": "The claim field value to update. For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58). For phone numbers, use E164 format (e.g. +33612345678).",
                             "type": "string",
                         },
                         f"{customer_response_prop}": {
@@ -900,24 +934,27 @@ async def llm_chat(
                 # Store whole content
                 full_content += delta.content
                 buffer_content += delta.content
-                # Remove tool calls from buffer content, if any
-                buffer_content = _remove_message_actions(buffer_content)
-                # Test if there ia a sentence in the buffer
-                separators = re.findall(SENTENCE_R, buffer_content)
-                if separators and separators[0] in buffer_content:
-                    to_return = re.split(SENTENCE_R, buffer_content)[0] + separators[0]
-                    buffer_content = buffer_content[len(to_return) :]
-                    await user_callback(to_return.strip())
+                for local_content in _sentence_split(buffer_content):
+                    buffer_content = buffer_content[len(local_content) :]  # Remove consumed content from buffer
+                    await _buffer_user_callback(local_content)
 
         if buffer_content:
-            # Batch remaining user return
-            await user_callback(buffer_content)
+            await _buffer_user_callback(buffer_content)
 
-        # Remove tool calls from full content, if any
+        # Get data from full content to be able to store it in the DB
         full_content = _remove_message_actions(full_content)
 
         _logger.debug(f"Chat response: {full_content}")
         _logger.debug(f"Tool calls: {tool_calls}")
+
+        # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
+        if not full_content:
+            _logger.debug(f"Empty content, retrying")
+            if _retry_attempt > 3:
+                _logger.warn(f'LLM send back empty content, retry limit reached')
+                return await _error_response()
+            _logger.warn(f'LLM send back empty content, retrying')
+            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
 
         # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
         # TODO: Tries to detect this error earlier
@@ -928,16 +965,10 @@ async def llm_chat(
         ):
             _logger.debug(f"Invalid tool schema: {tool_calls}")
             if _retry_attempt > 3:
-                _logger.warn(
-                    f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
-                )
-                return _error_response()
-            _logger.warn(
-                f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
-            )
-            return await llm_chat(
-                background_tasks, call, user_callback, _retry_attempt + 1
-            )
+                _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached')
+                return await _error_response()
+            _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying')
+            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
 
         intent = IndentAction.CONTINUE
         models = []
@@ -980,7 +1011,6 @@ async def llm_chat(
                         full_content += local_content + " "
                         await user_callback(local_content)
 
-                    content = None
                     if not parameters["field"] in ClaimModel.editable_fields():
                         content = f'Failed to update a non-editable field "{parameters['field']}".'
                     else:
@@ -989,10 +1019,9 @@ async def llm_chat(
                             copy = call.claim.model_dump()
                             copy[parameters["field"]] = parameters["value"]
                             call.claim = ClaimModel.model_validate(copy)
-                        except ValidationError as e:
+                            content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
+                        except ValidationError as e:  # Catch error to inform LLM
                             content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
-                    if not content:
-                        content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
                     model.content = content
 
                 elif name == IndentAction.NEW_CLAIM.value:
@@ -1047,25 +1076,30 @@ async def llm_chat(
                     updated = False
                     for reminder in call.reminders:
                         if reminder.title == parameters["title"]:
-                            reminder.description = parameters["description"]
-                            reminder.due_date_time = parameters["due_date_time"]
-                            reminder.owner = parameters["owner"]
-                            model.content = (
-                                f'Reminder "{parameters['title']}" updated.'
-                            )
+                            try:
+                                reminder.description = parameters["description"]
+                                reminder.due_date_time = parameters["due_date_time"]
+                                reminder.owner = parameters["owner"]
+                                content = f'Reminder "{parameters['title']}" updated.'
+                            except ValidationError as e:  # Catch error to inform LLM
+                                content = f'Failed to edit reminder "{parameters["title"]}": {e.json()}'
+                            model.content = content
                             updated = True
                             break
 
                     if not updated:
-                        call.reminders.append(
-                            ReminderModel(
+                        try:
+                            reminder = ReminderModel(
                                 description=parameters["description"],
                                 due_date_time=parameters["due_date_time"],
                                 title=parameters["title"],
                                 owner=parameters["owner"],
                             )
-                        )
-                        model.content = f'Reminder "{parameters['title']}" created.'
+                            call.reminders.append(reminder)
+                            content = f'Reminder "{parameters['title']}" created.'
+                        except ValidationError as e:  # Catch error to inform LLM
+                            content = f'Failed to create reminder "{parameters["title"]}": {e.json()}'
+                        model.content = content
 
                 models.append(model)
 
@@ -1088,7 +1122,7 @@ async def llm_chat(
     except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
 
-    return _error_response()
+    return await _error_response()
 
 
 async def handle_recognize_text(
@@ -1342,8 +1376,12 @@ async def post_call_next(call: CallModel) -> None:
     await db.call_aset(call)
 
 
-def _remove_message_actions(text: str) -> str:
+def _sentence_split(text: str) -> Generator[str, None, None]:
     """
-    Remove action from content. AI often adds it by mistake event if explicitly asked not to.
+    Split a text into sentences.
     """
-    return re.sub(MESSAGE_ACTION_R, "", text).strip()
+    separators = re.findall(SENTENCE_R, text)
+    splits = re.split(SENTENCE_R, text)
+    for i, separator in enumerate(separators):
+        local_content = splits[i] + separator
+        yield local_content

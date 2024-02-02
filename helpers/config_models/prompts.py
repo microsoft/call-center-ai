@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi.encoders import jsonable_encoder
 from functools import cached_property
 from logging import Logger
@@ -56,27 +56,39 @@ class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
 
 
 class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
+    """
+    Introduce to Assistant who they are, what they do.
+
+    Introduce a emotional stimuli to the LLM, to make is lazier (https://arxiv.org/pdf/2307.11760.pdf).
+    """
+
     default_system_tpl: str = """
-        Assistant is called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience. Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
+        Assistant is called {bot_name} and is in a call center for the insurance company {bot_company} as an expert with 20 years of experience.
+
+        Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
+
+        Take a deep breath. This is very important for the customer.
     """
     chat_system_tpl: str = """
         Assistant will help the customer with their insurance claim.
 
         Assistant:
         - Answers in {conversation_lang}, even if the customer speaks in English
-        - Ask the customer to repeat or rephrase their question if it is not clear
+        - Aways answer with at least one full sentence
         - Be proactive in the reminders you create, customer assistance is your priority
         - Do not ask the customer more than 2 questions in a row
         - Don't have access to any other mean of communication with the customer (e.g. email, SMS, chat, web portal), only the phone call
-        - Each conversation message is prefixed with the the action ({actions}), it adds context to the message, never add it in your answer
+        - Each message from the history is prefixed from where it has been said ({actions})
         - If user called multiple times, continue the discussion from the previous call
+        - If you don't how answer, say "I don't know"
+        - If you don't understand the question, ask the customer to rephrase it
         - Is allowed to make assumptions, as the customer will correct them if they are wrong
         - Is polite, helpful, and professional
         - Keep the sentences short and simple
-        - Phone numbers are always in the format E164 (e.g. +33612345678, +18449197576)
         - Rephrase the customer's questions as statements and answer them
         - Use additional context as a reference to answer the customer's questions related to insurance or contract details
         - Use additional context to enhance the conversation with useful details
+        - Welcome the customer when they call
         - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris PARIS", "My name is John JOHN", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM")
         - Will answer the customer's questions if they are related to their contract, claim, or insurance
         - Won't answer if they don't know the answer
@@ -98,13 +110,13 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         5. Advise the customer on what to do next based on the additional context
         6. Be proactive and create reminders for the customer (e.g. follup up on the claim, send documents)
 
+        Assistant requires data from the customer to fill the claim. Latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
+
         Claim status:
         {claim}
 
         Reminders:
         {reminders}
-
-        Assistant requires data from the customer to fill the claim. Latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
     """
     sms_summary_system_tpl: str = """
         Assistant will summarize the call with the customer in a single SMS. The customer cannot reply to this SMS.
@@ -230,7 +242,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Won't make any assumptions
         - Write no more than a few sentences as justification
 
-        Available actions:
+        Allowed actions:
         {actions}
 
         Claim status:
@@ -270,7 +282,9 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
                 bot_company=CONFIG.workflow.bot_company,
                 bot_name=CONFIG.workflow.bot_name,
                 bot_phone_number=CONFIG.communication_service.phone_number,
-                date=datetime.now().isoformat(),
+                date=datetime.now(UTC)
+                .astimezone()
+                .strftime("%Y-%m-%d %H:%M %Z%z"),  # Example 2024-02-01 18:58 CET+0100
                 phone_number=phone_number,
             )
         )
@@ -285,12 +299,12 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
 
         return self._return(
             self.chat_system_tpl,
-            trainings=trainings,
             actions=", ".join([action.value for action in MessageAction]),
             bot_company=CONFIG.workflow.bot_company,
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
             reminders=_pydantic_to_str(reminders),
+            trainings=trainings,
         )
 
     def sms_summary_system(
@@ -390,12 +404,12 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
     ) -> str:
         return dedent(
             f"""
-            {dedent(prompt_tpl.format(**kwargs))}
+            {dedent(prompt_tpl.format(**kwargs)).strip()}
 
             Additional context:
             {_pydantic_to_str(trainings)}
         """
-        )
+        ).strip()
 
     @computed_field
     @cached_property
@@ -478,7 +492,7 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
         return self._return(self.timeout_loading_tpl)
 
     def _return(self, prompt_tpl: str, **kwargs) -> str:
-        return dedent(prompt_tpl.format(**kwargs))
+        return dedent(prompt_tpl.format(**kwargs)).strip()
 
 
 class PromptsModel(BaseSettings, env_prefix="prompts_"):

@@ -170,6 +170,8 @@ async def safety_check(text: str) -> bool:
 
     Text can be returned both safe and censored, before containing unsafe content.
     """
+    if not text:
+        return True
     try:
         res = await _contentsafety_analysis(text)
     except HttpResponseError as e:

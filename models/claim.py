@@ -1,16 +1,14 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
+from pydantic import EmailStr
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from typing import Optional, Set
 import random
-import re
 import string
 
 
 # E164 is standard accross all Microsoft services
 PhoneNumber.phone_format = "E164"
-
-EMAIL_PARSER_R = r"[\w.]+@[\w.]+\.[\w]+"
 
 
 class ClaimModel(BaseModel):
@@ -26,7 +24,7 @@ class ClaimModel(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
     # Editable fields
     extra_details: Optional[str] = None
-    incident_date_time: Optional[str] = None
+    incident_date_time: Optional[datetime] = None
     incident_description: Optional[str] = None
     incident_location: Optional[str] = None
     injuries_description: Optional[str] = None
@@ -35,7 +33,7 @@ class ClaimModel(BaseModel):
     medical_records: Optional[str] = None
     police_report_number: Optional[str] = None
     policy_number: Optional[str] = None
-    policyholder_email: Optional[str] = None
+    policyholder_email: Optional[EmailStr] = None
     policyholder_name: Optional[str] = None
     policyholder_phone: Optional[PhoneNumber] = None
     pre_existing_damage_description: Optional[str] = None
@@ -44,15 +42,6 @@ class ClaimModel(BaseModel):
     stolen_lost_items: Optional[str] = None
     vehicle_info: Optional[str] = None
     witnesses: Optional[str] = None
-
-    @field_validator("policyholder_email")
-    @classmethod
-    def _policyholder_email_validator(cls, policyholder_email: str) -> str:
-        if policyholder_email and not re.match(EMAIL_PARSER_R, policyholder_email):
-            raise ValueError(
-                'Invalid email address, please use a valid email (e.g. "my.name@domain.com").'
-            )
-        return policyholder_email
 
     @staticmethod
     def editable_fields() -> Set[str]:

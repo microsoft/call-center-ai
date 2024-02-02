@@ -74,7 +74,7 @@ Déclaration de sinistre {{ call.claim.claim_id }}
               </span>
             </div>
             <div class="text-neutral-600 dark:text-neutral-400">
-              {{ message.created_at.strftime('%d %b %Y %H:%M') }}
+              {{ message.created_at.strftime('%d %b %Y, %H:%M') }}
             </div>
           </div>
           {% if message.content %}
@@ -103,7 +103,7 @@ Déclaration de sinistre {{ call.claim.claim_id }}
       {% for reminder in call.reminders | sort(attribute='due_date_time') %}
       <div>
         <div class="text-xs">
-          {{ reminder.owner | title }}&nbsp;<span class="text-neutral-600 dark:text-neutral-400">({{ reminder.due_date_time }})</span>
+          {{ reminder.owner | title }}&nbsp;<span class="text-neutral-600 dark:text-neutral-400">({{ reminder.due_date_time.strftime('%d %b %Y, %H:%M') }})</span>
         </div>
         <p class="text-neutral-600 dark:text-neutral-400">{{ reminder.title | capitalize }}</p>
       </div>
@@ -147,23 +147,23 @@ Déclaration de sinistre {{ call.claim.claim_id }}
           set details = [
             {
               'title': 'Date',
-              'value': call.claim.incident_date_time
+              'value': call.claim.incident_date_time.strftime('%d %b %Y, %H:%M') if call.claim.incident_date_time else 'N/A'
             },
             {
               'title': 'Localisation',
-              'value': call.claim.incident_location
+              'value': call.claim.incident_location or 'N/A'
             },
             {
               'title': 'Police',
-              'value': call.claim.policy_number
+              'value': call.claim.policy_number or 'N/A'
             },
             {
               'title': 'Contact',
-              'value': call.claim.policyholder_email | lower ~ ', ' ~ call.claim.policyholder_phone
+              'value': ((call.claim.policyholder_email | lower) or 'N/A') ~ ', ' ~ (call.claim.policyholder_phone or 'N/A')
             },
             {
               'title': 'Téléphone utilisé',
-              'value': call.phone_number
+              'value': call.phone_number or 'N/A'
             }
           ]
         %}

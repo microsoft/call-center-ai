@@ -8,6 +8,6 @@ class ReminderModel(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
     # Editable fields
     description: str
-    due_date_time: str
+    due_date_time: datetime
     owner: Optional[str] = None  # Optional for backwards compatibility
     title: str
