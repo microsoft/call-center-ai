@@ -972,15 +972,6 @@ async def llm_chat(
         _logger.debug(f"Chat response: {full_content}")
         _logger.debug(f"Tool calls: {tool_calls}")
 
-        # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
-        if not full_content:
-            _logger.debug(f"Empty content, retrying")
-            if _retry_attempt > 3:
-                _logger.warn(f'LLM send back empty content, retry limit reached')
-                return await _error_response()
-            _logger.warn(f'LLM send back empty content, retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
-
         # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
         # TODO: Tries to detect this error earlier
         # See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653
@@ -993,6 +984,15 @@ async def llm_chat(
                 _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached')
                 return await _error_response()
             _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying')
+            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
+
+        # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
+        if not full_content and not tool_calls:
+            _logger.debug(f"Empty content, retrying")
+            if _retry_attempt > 3:
+                _logger.warn(f'LLM send back empty content, retry limit reached')
+                return await _error_response()
+            _logger.warn(f'LLM send back empty content, retrying')
             return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
 
         intent = IndentAction.CONTINUE
