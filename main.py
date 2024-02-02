@@ -303,7 +303,6 @@ async def communication_event_worker(
             await handle_recognize_text(
                 call=call,
                 client=client,
-                style=MessageStyle.CHEERFUL,
                 text=CONFIG.prompts.tts.hello(),
             )
 
@@ -311,7 +310,6 @@ async def communication_event_worker(
             await handle_play(
                 call=call,
                 client=client,
-                style=MessageStyle.CHEERFUL,
                 text=CONFIG.prompts.tts.welcome_back(),
             )
             call = await intelligence(background_tasks, call, client)
