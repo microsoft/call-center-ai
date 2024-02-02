@@ -48,6 +48,7 @@ Extract of the data stored during the call:
 - [x] Access the claim on a public website
 - [x] Access to customer conversation history
 - [x] Bot can be called from a phone number
+- [x] Bot use multiple voice tones (e.g. happy, sad, neutral) to keep the conversation engaging
 - [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
 - [x] Create by itself a todo list of tasks to complete the claim
 - [x] Customizable prompts
