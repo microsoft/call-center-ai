@@ -30,20 +30,33 @@ class AiSearchSearch(ISearch):
         try:
             async with self._use_db() as db:
                 results = await db.search(
-                    query_language=CONFIG.workflow.conversation_lang,  # Re-rank results based on language
-                    query_speller="lexicon",  # Spell correction
-                    query_type="semantic",  # Enable semantic search
-                    search_text=text,
-                    select=["id", "content", "source_uri", "title"],
+                    # Full text search
+                    query_type="semantic",
                     semantic_configuration_name=self._config.semantic_configuration,
-                    top=self._config.top_k,
+                    search_fields=[
+                        "content",
+                        "title",
+                    ],
+                    search_text=text,
+                    # Spell correction
+                    query_language=CONFIG.workflow.conversation_lang,
+                    query_speller="lexicon",
+                    # Vector search
                     vector_queries=[
                         VectorizableTextQuery(
                             fields="vectors",
                             k=self._config.top_k,
                             text=text,
                         )
-                    ],  # Enable vector search
+                    ],
+                    # Return fields
+                    select=[
+                        "id",
+                        "content",
+                        "source_uri",
+                        "title",
+                    ],
+                    top=self._config.top_k,
                 )
                 async for result in results:
                     if not result:
