@@ -7,6 +7,7 @@ from models.message import (
     Action as MessageAction,
     MessageModel,
     Persona as MessagePersona,
+    Style as MessageStyle,
 )
 from models.next import Action as NextAction
 from models.reminder import ReminderModel
@@ -87,6 +88,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
         - Keep the sentences short and simple
         - Rephrase the customer's questions as statements and answer them
         - Use additional context as a reference to answer the customer's questions and enhance the conversation with useful details
+        - Use styles as often as possible, to add emotions to the conversation
         - Welcome the customer when they call
         - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g. "I live in Paris PARIS", "My name is John JOHN", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM")
         - Will answer the customer's questions if they are related to their contract, claim, or insurance
@@ -111,11 +113,23 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
 
         Assistant requires data from the customer to fill the claim. Latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
 
+        Allowed styles:
+        {styles}
+
         Claim status:
         {claim}
 
         Reminders:
         {reminders}
+
+        Response format:
+        style=[style] [content]
+
+        Example #1:
+        style=sad Je comprends que votre voiture est bloquée dans le parking.
+
+        Example #2:
+        style=cheerful Votre taxi est prévu pour 10h30, nous faisons le nécessaire pour qu'il arrive à l'heure.
     """
     sms_summary_system_tpl: str = """
         Assistant will summarize the call with the customer in a single SMS. The customer cannot reply to this SMS.
@@ -303,6 +317,7 @@ class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
             claim=_pydantic_to_str(claim),
             conversation_lang=CONFIG.workflow.conversation_lang,
             reminders=_pydantic_to_str(reminders),
+            styles=", ".join([style.value for style in MessageStyle]),
             trainings=trainings,
         )
 

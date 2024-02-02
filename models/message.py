@@ -4,6 +4,20 @@ from pydantic import BaseModel, Field
 from typing import List
 
 
+class Style(str, Enum):
+    """
+    Voice styles the Azure AI Speech Service supports.
+
+    Doc:
+    - Speaking styles: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-voice#use-speaking-styles-and-roles
+    - Support by language: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#voice-styles-and-roles
+    """
+
+    CHEERFUL = "cheerful"
+    NONE = "none"  # This is not a valid style, but we use it in the code to indicate no style
+    SAD = "sad"
+
+
 class Action(str, Enum):
     CALL = "call"
     HANGUP = "hangup"
@@ -31,4 +45,5 @@ class MessageModel(BaseModel):
     action: Action = Action.TALK
     content: str
     persona: Persona
+    style: Style = Style.NONE
     tool_calls: List[ToolModel] = []
