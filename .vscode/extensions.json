@@ -13,6 +13,7 @@
     "ms-vscode.makefile-tools",
     "wholroyd.jinja",
     "visualstudioexptteam.vscodeintellicode",
-    "ms-azuretools.vscode-bicep"
+    "ms-azuretools.vscode-bicep",
+    "tomoki1207.pdf"
   ]
 }
