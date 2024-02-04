@@ -12,12 +12,12 @@ class LoggingLevel(str, Enum):
     WARNING = "WARNING"
 
 
-class LoggingMonitoringModel(BaseSettings, env_prefix="monitoring_logging_"):
+class LoggingMonitoringModel(BaseSettings):
     app_level: LoggingLevel = LoggingLevel.INFO
     sys_level: LoggingLevel = LoggingLevel.WARNING
 
 
-class MonitoringModel(BaseSettings, env_prefix="monitoring_"):
+class MonitoringModel(BaseSettings):
     logging: LoggingMonitoringModel = (
         LoggingMonitoringModel()
     )  # Object is fully defined by default

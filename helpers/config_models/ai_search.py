@@ -2,7 +2,7 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
-class AiSearchModel(BaseSettings, env_prefix="ai_search_"):
+class AiSearchModel(BaseSettings):
     access_key: SecretStr
     endpoint: str
     index: str

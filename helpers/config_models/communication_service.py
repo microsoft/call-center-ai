@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 PhoneNumber.phone_format = "E164"
 
 
-class CommunicationServiceModel(BaseSettings, env_prefix="communication_service_"):
+class CommunicationServiceModel(BaseSettings):
     access_key: SecretStr
     endpoint: str
     phone_number: PhoneNumber

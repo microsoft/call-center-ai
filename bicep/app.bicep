@@ -1,10 +1,15 @@
 param adaModel string
 param adaVersion string
-param config string
+param agentPhoneNumber string
+param botCompany string
+param botName string
+param botPhoneNumber string
+param botVoiceName string
 param gptModel string
 param gptVersion string
 param imageVersion string
 param location string
+param moderationBlocklists array
 param openaiLocation string
 param searchLocation string
 param tags object
@@ -13,6 +18,57 @@ var prefix = deployment().name
 var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 var adaModelFullName = toLower('${adaModel}-${adaVersion}')
+var config = {
+  api: {
+    events_domain: appUrl
+  }
+  database: {
+    mode: 'cosmos_db'
+    cosmos_db: {
+      access_key: cosmos.listKeys().primaryMasterKey
+      container: container.name
+      database: database.name
+      endpoint: cosmos.properties.documentEndpoint
+    }
+  }
+  resources: {
+    public_url: storageAccount.properties.primaryEndpoints.web
+  }
+  workflow: {
+    agent_phone_number: agentPhoneNumber
+    bot_company: botCompany
+    bot_name: botName
+  }
+  communication_service: {
+    access_key: communication.listKeys().primaryKey
+    endpoint: communication.properties.hostName
+    phone_number: botPhoneNumber
+    voice_name: botVoiceName
+  }
+  cognitive_service: {
+    endpoint: cognitiveCommunication.properties.endpoint
+  }
+  openai: {
+    endpoint: cognitiveOpenai.properties.endpoint
+    gpt_deployment: gpt.name
+    gpt_model: gptModel
+  }
+  ai_search: {
+    access_key: search.listAdminKeys().primaryKey
+    endpoint: 'https://${search.name}.search.windows.net'
+    index: 'trainings'
+    semantic_configuration: 'default'
+  }
+  content_safety: {
+    access_key: cognitiveContentsafety.listKeys().key1
+    blocklists: moderationBlocklists
+    endpoint: cognitiveContentsafety.properties.endpoint
+  }
+  prompts: {
+    llm: loadYamlContent('../config.yaml').prompts.llm
+    tts: loadYamlContent('../config.yaml').prompts.tts
+  }
+}
 
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
@@ -76,71 +132,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           env: [
             {
               name: 'CONFIG_JSON'
-              value: config
-            }
-            {
-              name: 'API_EVENTS_DOMAIN'
-              value: appUrl
-            }
-            {
-              name: 'DATABASE_MODE'
-              value: 'cosmos_db'
-            }
-            {
-              name: 'DATABASE_COSMOS_DB_ACCESS_KEY'
-              value: cosmos.listKeys().primaryMasterKey
-            }
-            {
-              name: 'DATABASE_COSMOS_DB_ENDPOINT'
-              value: cosmos.properties.documentEndpoint
-            }
-            {
-              name: 'DATABASE_COSMOS_DB_CONTAINER'
-              value: container.name
-            }
-            {
-              name: 'DATABASE_COSMOS_DB_DATABASE'
-              value: database.name
-            }
-            {
-              name: 'RESOURCES_PUBLIC_URL'
-              value: storageAccount.properties.primaryEndpoints.web
-            }
-            {
-              name: 'COMMUNICATION_SERVICE_ENDPOINT'
-              value: communication.properties.hostName
-            }
-            {
-              name: 'COMMUNICATION_SERVICE_ACCESS_KEY'
-              value: communication.listKeys().primaryKey
-            }
-            {
-              name: 'OPENAI_ENDPOINT'
-              value: cognitiveOpenai.properties.endpoint
-            }
-            {
-              name: 'OPENAI_GPT_DEPLOYMENT'
-              value: gpt.name
-            }
-            {
-              name: 'OPENAI_GPT_MODEL'
-              value: gptModel
-            }
-            {
-              name: 'AI_SEARCH_ENDPOINT'
-              value: 'https://${search.name}.search.windows.net'
-            }
-            {
-              name: 'AI_SEARCH_ACCESS_KEY'
-              value: search.listAdminKeys().primaryKey
-            }
-            {
-              name: 'CONTENT_SAFETY_ENDPOINT'
-              value: cognitiveContentsafety.properties.endpoint
-            }
-            {
-              name: 'CONTENT_SAFETY_ACCESS_KEY'
-              value: cognitiveContentsafety.listKeys().key1
+              value: string(config)
             }
           ]
           resources: {
@@ -207,6 +199,19 @@ resource eventgridTopic 'Microsoft.EventGrid/systemTopics@2023-12-15-preview' = 
   properties: {
     source: communication.id
     topicType: 'Microsoft.Communication.CommunicationServices'
+  }
+}
+
+resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+  name: '${prefix}-communication'
+  location: location
+  tags: tags
+  sku: {
+    name: 'S0'
+  }
+  kind: 'CognitiveServices'
+  properties: {
+    customSubDomainName: '${prefix}-communication'
   }
 }
 

@@ -9,14 +9,14 @@ class Mode(str, Enum):
     SQLITE = "sqlite"
 
 
-class CosmosDbModel(BaseSettings, env_prefix="database_cosmos_db_"):
+class CosmosDbModel(BaseSettings):
     access_key: SecretStr
     container: str
     database: str
     endpoint: str
 
 
-class SqliteModel(BaseSettings, env_prefix="database_sqlite_"):
+class SqliteModel(BaseSettings):
     path: str = ".local"
     schema_version: int = Field(default=3, frozen=True)
     table: str = "calls"
@@ -30,7 +30,7 @@ class SqliteModel(BaseSettings, env_prefix="database_sqlite_"):
         return f"{self.path}-v{self.schema_version}.sqlite"
 
 
-class DatabaseModel(BaseSettings, env_prefix="database_"):
+class DatabaseModel(BaseSettings):
     cosmos_db: Optional[CosmosDbModel] = None
     mode: Mode = Mode.SQLITE
     sqlite: Optional[SqliteModel] = None

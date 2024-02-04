@@ -37,7 +37,7 @@ def _pydantic_to_str(
     )
 
 
-class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
+class SoundModel(BaseSettings):
     loading_tpl: str = "{public_url}/loading.wav"
     ready_tpl: str = "{public_url}/ready.wav"
 
@@ -56,7 +56,7 @@ class SoundModel(BaseSettings, env_prefix="prompts_sound_"):
         )
 
 
-class LlmModel(BaseSettings, env_prefix="prompts_llm_"):
+class LlmModel(BaseSettings):
     """
     Introduce to Assistant who they are, what they do.
 

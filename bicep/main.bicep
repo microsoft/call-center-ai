@@ -1,13 +1,16 @@
 param adaModel string = 'text-embedding-ada-002'
 param adaVersion string = '2'
-param config string
+param agentPhoneNumber string
+param botCompany string
+param botName string
+param botPhoneNumber string
 param gptModel string = 'gpt-4'
 param gptVersion string = '1106-Preview'
 param imageVersion string = 'main'
 param instance string = deployment().name
-param location string = 'westeurope'
-param openaiLocation string = 'swedencentral'
-param searchLocation string = 'northeurope'
+param location string = deployment().location
+param openaiLocation string
+param searchLocation string
 
 targetScope = 'subscription'
 
@@ -35,11 +38,16 @@ module app 'app.bicep' = {
   params: {
     adaModel: adaModel
     adaVersion: adaVersion
-    config: config
+    agentPhoneNumber: agentPhoneNumber
+    botCompany: botCompany
+    botName: botName
+    botPhoneNumber: botPhoneNumber
+    botVoiceName: 'fr-FR-DeniseNeural'
     gptModel: gptModel
     gptVersion: gptVersion
     imageVersion: imageVersion
     location: location
+    moderationBlocklists: []
     openaiLocation: openaiLocation
     searchLocation: searchLocation
     tags: tags
