@@ -7,50 +7,47 @@ from azure.ai.contentsafety.models import (
 )
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from openai import (
-    AsyncAzureOpenAI,
-    AsyncStream,
-    APIConnectionError,
-    APIResponseValidationError,
-    APIStatusError,
-)
-from openai.types.chat import (
-    ChatCompletionChunk,
-    ChatCompletionMessageParam,
-    ChatCompletionToolParam,
-)
-from openai.types.chat.chat_completion_chunk import ChoiceDelta
+from openai import APIConnectionError, APIResponseValidationError, APIStatusError
 from pydantic import BaseModel, ValidationError
+import litellm
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from tenacity import (
+    retry_if_exception_type,
     retry,
     stop_after_attempt,
     wait_random_exponential,
-    retry_if_exception_type,
 )
-from typing import AsyncGenerator, List, Optional, Type, TypeVar
-import asyncio
+from typing import Any, AsyncGenerator, List, Optional, Type, TypeVar
 
 
 _logger = build_logger(__name__)
 
-_logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")
-_oai = AsyncAzureOpenAI(
-    api_version="2023-12-01-preview",
-    azure_deployment=CONFIG.openai.gpt_deployment,
-    azure_endpoint=CONFIG.openai.endpoint,
+# Disable LiteLLM telemetry
+litellm.telemetry = False
+
+_logger.info(f"Using LLM model {CONFIG.openai.gpt_model}")
+_llm_kwargs = {
+    # Azure configuration
+    "api_version": "2023-12-01-preview",
+    "base_url": CONFIG.openai.endpoint,
+    "model": f"azure/{CONFIG.openai.gpt_deployment}",
+    # Reliability
+    "num_retries": 0,  # Retries are handled by tenacity
+    "timeout": 30,
     # Authentication, either RBAC or API key
-    api_key=CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,
-    azure_ad_token_provider=(
+    "api_key": (
+        CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None
+    ),
+    "azure_ad_token": (
         get_bearer_token_provider(
             DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
-        )
+        )()
         if not CONFIG.openai.api_key
         else None
     ),
-)
+}
 
 _logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 _contentsafety = ContentSafetyClient(
@@ -76,10 +73,10 @@ class SafetyCheckError(Exception):
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def completion_stream(
-    messages: List[ChatCompletionMessageParam],
+    messages: List[dict[str, Any]],
     max_tokens: int,
-    tools: Optional[List[ChatCompletionToolParam]] = None,
-) -> AsyncGenerator[ChoiceDelta, None]:
+    tools: Optional[List[dict[str, Any]]] = None,
+) -> AsyncGenerator[dict[str, Any], None]:
     """
     Returns a stream of completion results.
 
@@ -90,13 +87,15 @@ async def completion_stream(
     if tools:
         extra["tools"] = tools
 
-    stream: AsyncStream[ChatCompletionChunk] = await _oai.chat.completions.create(
-        max_tokens=max_tokens,
-        messages=messages,
-        model=CONFIG.openai.gpt_model,
-        stream=True,
-        temperature=0,  # Most focused and deterministic
-        **extra,
+    stream = await litellm.acompletion(
+        **{
+            "max_tokens": max_tokens,
+            "messages": messages,
+            "stream": True,
+            "temperature": 0,  # Most focused and deterministic
+        }
+        | extra
+        | _llm_kwargs
     )
     async for chunck in stream:
         yield chunck.choices[0].delta
@@ -114,7 +113,7 @@ async def completion_stream(
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def completion_sync(
-    messages: List[ChatCompletionMessageParam],
+    messages: List[dict[str, Any]],
     max_tokens: int,
     json_output: bool = False,
 ) -> str:
@@ -128,12 +127,14 @@ async def completion_sync(
     if json_output:
         extra["response_format"] = {"type": "json_object"}
 
-    res = await _oai.chat.completions.create(
-        max_tokens=max_tokens,
-        messages=messages,
-        model=CONFIG.openai.gpt_model,
-        temperature=0,  # Most focused and deterministic
-        **extra,
+    res = await litellm.acompletion(
+        **{
+            "max_tokens": max_tokens,
+            "messages": messages,
+            "temperature": 0,  # Most focused and deterministic
+        }
+        | extra
+        | _llm_kwargs
     )
     content = res.choices[0].message.content
 
@@ -151,7 +152,7 @@ async def completion_sync(
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def completion_model_sync(
-    messages: List[ChatCompletionMessageParam],
+    messages: List[dict[str, Any]],
     max_tokens: int,
     model: Type[ModelType],
 ) -> ModelType:
@@ -211,7 +212,7 @@ async def close() -> None:
     """
     Safely close the OpenAI and Content Safety clients.
     """
-    await asyncio.gather(_oai.close(), _contentsafety.close())
+    await _contentsafety.close()
 
 
 @retry(

@@ -36,15 +36,6 @@ from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from openai import APIError
-from openai.types.chat import (
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionMessageParam,
-    ChatCompletionMessageToolCallParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionToolMessageParam,
-    ChatCompletionToolParam,
-    ChatCompletionUserMessageParam,
-)
 from persistence.ai_search import AiSearchSearch, TrainingModel as AiSearchTrainingModel
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
@@ -647,18 +638,18 @@ async def llm_model(system: Optional[str], call: CallModel, model: Type[ModelTyp
     return res
 
 
-def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletionMessageParam]:
-    messages: List[ChatCompletionMessageParam] = [
-        ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.default_system(
+def _oai_completion_messages(system: str, call: CallModel) -> List[dict[str, str]]:
+    messages = [
+        {
+            "content": CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
-            role="system",
-        ),
-        ChatCompletionSystemMessageParam(
-            content=system,
-            role="system",
-        ),
+            "role": "system",
+        },
+        {
+            "content": system,
+            "role": "system",
+        },
     ]
     _logger.debug(f"Messages: {messages}")
     return messages
@@ -740,48 +731,48 @@ async def llm_chat(
     _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
     _logger.debug(f"Trainings: {trainings}")
 
-    messages: List[ChatCompletionMessageParam] = [
-        ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.default_system(
+    messages = [
+        {
+            "content": CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
             ),
-            role="system",
-        ),
-        ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.chat_system(
+            "role": "system",
+        },
+        {
+            "content": CONFIG.prompts.llm.chat_system(
                 claim=call.claim,
                 reminders=call.reminders,
                 trainings=trainings,
             ),
-            role="system",
-        ),
+            "role": "system",
+        },
     ]
     for message in call.messages:
         if message.persona == MessagePersona.HUMAN:
             messages.append(
-                ChatCompletionUserMessageParam(
-                    content=f"action={message.action.value} style={message.style.value} {message.content}",
-                    role="user",
-                )
+                {
+                    "content": f"action={message.action.value} style={message.style.value} {message.content}",
+                    "role": "user",
+                }
             )
         elif message.persona == MessagePersona.ASSISTANT:
             if not message.tool_calls:
                 messages.append(
-                    ChatCompletionAssistantMessageParam(
-                        content=f"action={message.action.value} style={message.style.value} {message.content}",
-                        role="assistant",
-                    )
+                    {
+                        "content": f"action={message.action.value} style={message.style.value} {message.content}",
+                        "role": "assistant",
+                    }
                 )
             else:
                 messages.append(
-                    ChatCompletionAssistantMessageParam(
-                        content=f"action={message.action.value} style={message.style.value} {message.content}",
-                        role="assistant",
-                        tool_calls=[
-                            ChatCompletionMessageToolCallParam(
-                                id=tool_call.tool_id,
-                                type="function",
-                                function={
+                    {
+                        "content": f"action={message.action.value} style={message.style.value} {message.content}",
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": tool_call.tool_id,
+                                "type": "function",
+                                "function": {
                                     "arguments": tool_call.function_arguments,
                                     "name": "-".join(
                                         re.sub(
@@ -791,26 +782,26 @@ async def llm_chat(
                                         ).split("-")
                                     ),  # Sanitize with dashes then deduplicate dashes, backward compatibility with old models
                                 },
-                            )
+                            }
                             for tool_call in message.tool_calls
-                        ],
-                    )
+                        ], # type: ignore
+                    }
                 )
                 for tool_call in message.tool_calls:
                     messages.append(
-                        ChatCompletionToolMessageParam(
-                            content=tool_call.content,
-                            role="tool",
-                            tool_call_id=tool_call.tool_id,
-                        )
+                        {
+                            "content": tool_call.content,
+                            "role": "tool",
+                            "tool_call_id": tool_call.tool_id,
+                        }
                     )
     _logger.debug(f"Messages: {messages}")
 
     customer_response_prop = "customer_response"
-    tools: List[ChatCompletionToolParam] = [
-        ChatCompletionToolParam(
-            type="function",
-            function={
+    tools = [
+        {
+            "type": "function",
+            "function": {
                 "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
                 "name": IndentAction.TALK_TO_HUMAN.value,
                 "parameters": {
@@ -819,10 +810,10 @@ async def llm_chat(
                     "type": "object",
                 },
             },
-        ),
-        ChatCompletionToolParam(
-            type="function",
-            function={
+        },
+        {
+            "type": "function",
+            "function": {
                 "description": "Use this if the user wants to end the call, or if the user said goodbye in the current call. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
                 "name": IndentAction.END_CALL.value,
                 "parameters": {
@@ -831,10 +822,10 @@ async def llm_chat(
                     "type": "object",
                 },
             },
-        ),
-        ChatCompletionToolParam(
-            type="function",
-            function={
+        },
+        {
+            "type": "function",
+            "function": {
                 "description": "Use this if the user wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.",
                 "name": IndentAction.NEW_CLAIM.value,
                 "parameters": {
@@ -850,10 +841,10 @@ async def llm_chat(
                     "type": "object",
                 },
             },
-        ),
-        ChatCompletionToolParam(
-            type="function",
-            function={
+        },
+        {
+            "type": "function",
+            "function": {
                 "description": "Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update contact contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
                 "name": IndentAction.UPDATED_CLAIM.value,
                 "parameters": {
@@ -880,10 +871,10 @@ async def llm_chat(
                     "type": "object",
                 },
             },
-        ),
-        ChatCompletionToolParam(
-            type="function",
-            function={
+        },
+        {
+            "type": "function",
+            "function": {
                 "description": "Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.",
                 "name": IndentAction.NEW_OR_UPDATED_REMINDER.value,
                 "parameters": {
@@ -919,7 +910,7 @@ async def llm_chat(
                     "type": "object",
                 },
             },
-        ),
+        },
     ]
     _logger.debug(f"Tools: {tools}")
 
@@ -933,8 +924,9 @@ async def llm_chat(
             messages=messages,
             tools=tools,
         ):
-            if delta.content is None:
-                for piece in delta.tool_calls or []:
+            content = delta.get("content", None)
+            if not content:
+                for piece in delta.get("tool_calls", []):
                     tool_calls[piece.index] = tool_calls.get(
                         piece.index,
                         {
@@ -955,8 +947,8 @@ async def llm_chat(
                         ] += piece.function.arguments
             else:
                 # Store whole content
-                full_content += delta.content
-                buffer_content += delta.content
+                full_content += content
+                buffer_content += content
                 for local_content in _sentence_split(buffer_content):
                     buffer_content = buffer_content[len(local_content) :]  # Remove consumed content from buffer
                     default_style = await _buffer_user_callback(local_content, default_style)
@@ -1034,17 +1026,21 @@ async def llm_chat(
                         full_content += local_content + " "
                         await user_callback(local_content, default_style)
 
-                    if not parameters["field"] in ClaimModel.editable_fields():
-                        content = f'Failed to update a non-editable field "{parameters['field']}".'
+                    field = parameters["field"]
+                    value = parameters["value"]
+                    if not field in ClaimModel.editable_fields():
+                        content = f'Failed to update a non-editable field "{field}".'
                     else:
                         try:
                             # Define the field and force to trigger validation
                             copy = call.claim.model_dump()
-                            copy[parameters["field"]] = parameters["value"]
+                            copy[field] = value
                             call.claim = ClaimModel.model_validate(copy)
-                            content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
+                            content = (
+                                f'Updated claim field "{field}" with value "{value}".'
+                            )
                         except ValidationError as e:  # Catch error to inform LLM
-                            content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
+                            content = f'Failed to edit field "{field}": {e.json()}'
                     model.content = content
 
                 elif name == IndentAction.NEW_CLAIM.value:
@@ -1096,16 +1092,19 @@ async def llm_chat(
                         full_content += local_content + " "
                         await user_callback(local_content, default_style)
 
+                    title = parameters["title"]
                     updated = False
                     for reminder in call.reminders:
-                        if reminder.title == parameters["title"]:
+                        if reminder.title == title:
                             try:
                                 reminder.description = parameters["description"]
                                 reminder.due_date_time = parameters["due_date_time"]
                                 reminder.owner = parameters["owner"]
-                                content = f'Reminder "{parameters['title']}" updated.'
+                                content = f'Reminder "{title}" updated.'
                             except ValidationError as e:  # Catch error to inform LLM
-                                content = f'Failed to edit reminder "{parameters["title"]}": {e.json()}'
+                                content = (
+                                    f'Failed to edit reminder "{title}": {e.json()}'
+                                )
                             model.content = content
                             updated = True
                             break
@@ -1115,13 +1114,13 @@ async def llm_chat(
                             reminder = ReminderModel(
                                 description=parameters["description"],
                                 due_date_time=parameters["due_date_time"],
-                                title=parameters["title"],
+                                title=title,
                                 owner=parameters["owner"],
                             )
                             call.reminders.append(reminder)
-                            content = f'Reminder "{parameters['title']}" created.'
+                            content = f'Reminder "{title}" created.'
                         except ValidationError as e:  # Catch error to inform LLM
-                            content = f'Failed to create reminder "{parameters["title"]}": {e.json()}'
+                            content = f'Failed to create reminder "{title}": {e.json()}'
                         model.content = content
 
                 models.append(model)
