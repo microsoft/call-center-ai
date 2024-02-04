@@ -207,13 +207,6 @@ Create a local `config.yaml` file (most of the fields are filled automatically b
 
 ```yaml
 # config.yaml
-api: {}
-
-database:
-  cosmos_db: {}
-
-resources: {}
-
 workflow:
   agent_phone_number: "+33612345678"
   bot_company: Contoso
@@ -221,30 +214,23 @@ workflow:
 
 communication_service:
   phone_number: "+33612345678"
-  voice_name: fr-FR-DeniseNeural
 
-cognitive_service:
-  endpoint: https://xxx.cognitiveservices.azure.com
-
-openai: {}
-
-ai_search:
-  index: trainings
-  semantic_configuration: default
-
-content_safety:
-  blocklists: []
+prompts:
+  llm: {}
+  tts: {}
 ```
 
 Steps to deploy:
 
-1. Create an `Communication Services` resource plus a `Phone Number`
-2. Create the local `config.yaml`
+1. Create an Communication Services resource plus a Phone Number with inbound call capability
+2. Create the local `config.yaml` file (like the example above)
 3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish (if it fails for a `'null' not found` error, retry the command)
-6. Create the AI Search index
-7. Get the logs with `make logs name=my-instance`
+6. Link the AI multi-service account named `[my-instance]-communication` to the Communication Services resource
+7. Create a AI Search index named `trainings`
+
+Get the logs with `make logs name=my-instance`.
 
 ## Local installation
 

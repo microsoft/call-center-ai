@@ -1,9 +1,21 @@
+# Container configuration
 container_name := ghcr.io/clemlesne/claim-ai-phone-bot
 docker := docker
+# Versioning
 version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
+# DevTunnel configuration
 tunnel_name := claim-ai-phone-bot-$(shell hostname | tr '[:upper:]' '[:lower:]')
 tunnel_url ?= $(shell devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*')
+# App location
+app_location := westeurope
+openai_location := swedencentral
+search_location := northeurope
+# App configuration
+agent_phone_number ?= $(shell cat config.yaml | yq '.workflow.agent_phone_number')
+bot_company ?= $(shell cat config.yaml | yq '.workflow.bot_company')
+bot_name ?= $(shell cat config.yaml | yq '.workflow.bot_name')
+bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_number')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
@@ -85,7 +97,7 @@ start:
 	$(MAKE) eventgrid-register \
 		endpoint=$(tunnel_url) \
 		name=$(tunnel_name) \
-		phone_number=$(shell cat config.yaml | yq '.communication_service.phone_number') \
+		phone_number=$(bot_phone_number) \
 		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/claim-ai/providers/Microsoft.Communication/communicationServices/claim-ai"
 
 	@echo "🚀 Claim AI is running on $(tunnel_url)"
@@ -98,8 +110,14 @@ stop:
 deploy:
 	@echo "🛠️ Deploying to Azure..."
 	az deployment sub create \
-		--location westeurope \
-		--parameters config='$(shell cat config.yaml | yq -o json)' \
+		--location $(app_location) \
+		--parameters \
+			'agentPhoneNumber=$(agent_phone_number)' \
+			'botCompany=$(bot_company)' \
+			'botName=$(bot_name)' \
+			'botPhoneNumber=$(bot_phone_number)' \
+			'openaiLocation=$(openai_location)' \
+			'searchLocation=$(search_location)' \
 		--template-file bicep/main.bicep \
 	 	--name $(name)
 
@@ -109,7 +127,7 @@ deploy:
 	$(MAKE) eventgrid-register \
 		endpoint=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value') \
 		name=$(name) \
-		phone_number=$(shell cat config.yaml | yq '.communication_service.phone_number') \
+		phone_number=$(bot_phone_number) \
 		source=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
 
 	@echo "🚀 Claim AI is running on $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')"
@@ -132,7 +150,7 @@ eventgrid-register:
 
 	@echo "⚙️ Creating event grid subscription..."
 	az eventgrid event-subscription create \
-		--advanced-filter data.to.PhoneNumber.Value StringBeginsWith $(phone_number) \
+		--advanced-filter data.to.PhoneNumber.Value StringBeginsWith $(bot_phone_number) \
 		--enable-advanced-filtering-on-arrays true \
 		--endpoint $(endpoint)/call/inbound \
 		--event-delivery-schema eventgridschema \
@@ -153,9 +171,9 @@ copy-resources:
 		--source resources
 
 watch-call:
-	@echo "👀 Watching status of $(phone_number)..."
+	@echo "👀 Watching status of $(bot_phone_number)..."
 	while true; do \
 		clear; \
-		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .phone_number, "claim": .claim, "reminders": .reminders}'; \
+		curl -s "$(endpoint)/call?phone_number=%2B$(bot_phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .phone_number, "claim": .claim, "reminders": .reminders}'; \
 		sleep 3; \
 	done

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 
-class OpenAiModel(BaseSettings, env_prefix="openai_"):
+class OpenAiModel(BaseSettings):
     api_key: Optional[SecretStr] = None
     endpoint: str
     gpt_deployment: str

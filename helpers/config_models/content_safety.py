@@ -3,7 +3,7 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
-class ContentSafetyModel(BaseSettings, env_prefix="content_safety_"):
+class ContentSafetyModel(BaseSettings):
     access_key: SecretStr
     blocklists: List[str]
     endpoint: str
