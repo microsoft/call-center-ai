@@ -220,7 +220,7 @@ resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01
   location: location
   tags: tags
   sku: {
-    name: 'F0'
+    name: 'S0'
   }
   kind: 'ContentSafety'
   properties: {
