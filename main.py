@@ -814,7 +814,7 @@ async def llm_chat(
         ChatCompletionToolParam(
             type="function",
             function={
-                "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
+                "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Never use this action directly after a recall. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
                 "name": IndentAction.TALK_TO_HUMAN.value,
                 "parameters": {
                     "properties": {},
@@ -826,7 +826,7 @@ async def llm_chat(
         ChatCompletionToolParam(
             type="function",
             function={
-                "description": "Use this if the user wants to end the call, or if the user said goodbye in the current call. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
+                "description": "Use this if the user wants to end the call, or if the user said goodbye in the current call. Be warnging that the call will be ended immediately. Never use this action directly after a recall. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
                 "name": IndentAction.END_CALL.value,
                 "parameters": {
                     "properties": {},
