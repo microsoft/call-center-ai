@@ -385,11 +385,13 @@ async def communication_event_worker(
         error_code = result_information["subCode"]
 
         # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
-        if error_code == 8535:  # Action failed, file format is invalid
+        if error_code == 8535:  # Action failed, file format
             _logger.warn("Error during media play, file format is invalid")
-        elif error_code == 8536:  # Action failed, file could not be downloaded
+        elif error_code == 8536:  # Action failed, file downloaded
             _logger.warn("Error during media play, file could not be downloaded")
-        elif error_code == 9999:  # Unknown internal server error
+        elif error_code == 8565:  # Action failed, AI services config
+            _logger.error("Error during media play, impossible to connect with Azure AI services")
+        elif error_code == 9999:  # Unknown
             _logger.warn("Error during media play, unknown internal server error")
         else:
             _logger.warn(f"Error during media play, unknown error code {error_code}")
