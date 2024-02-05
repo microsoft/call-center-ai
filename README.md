@@ -222,7 +222,7 @@ prompts:
 
 Steps to deploy:
 
-1. Create an Communication Services resource plus a Phone Number with inbound call capability
+1. Create an Communication Services resource, a Phone Number with inbound call capability, make sure the resource have a managed identity
 2. Create the local `config.yaml` file (like the example above)
 3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
