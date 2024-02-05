@@ -202,6 +202,20 @@ resource eventgridTopic 'Microsoft.EventGrid/systemTopics@2023-12-15-preview' = 
   }
 }
 
+resource roleCognitiveUser 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'a97b65f3-24c7-4388-baec-2e87135dc908'
+}
+
+resource appUserCommunication 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, deployment().name, 'appUserCommunication')
+  scope: cognitiveCommunication
+  properties: {
+    principalId: communication.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleCognitiveUser.id
+  }
+}
+
 resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
   name: '${prefix}-communication'
   location: location
@@ -215,12 +229,25 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01
   }
 }
 
+resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+  name: '${prefix}-document'
+  location: location
+  tags: tags
+  sku: {
+    name: 'S0'
+  }
+  kind: 'FormRecognizer'
+  properties: {
+    customSubDomainName: '${prefix}-document'
+  }
+}
+
 resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
   name: '${prefix}-contentsafety'
   location: location
   tags: tags
   sku: {
-    name: 'F0'
+    name: 'S0'
   }
   kind: 'ContentSafety'
   properties: {
