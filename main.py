@@ -344,22 +344,29 @@ async def communication_event_worker(
         # 8512 = Unknown internal server error
         # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
         if (
-            error_code in (8510, 8532, 8512) and call.recognition_retry < 10
+            error_code in (8510, 8532, 8512)
         ):  # Timeout retry
-            await handle_recognize_text(
-                call=call,
-                client=client,
-                text=CONFIG.prompts.tts.timeout_silence(),
-            )
-            call.recognition_retry += 1
+            if call.recognition_retry < 10:
+                await handle_recognize_text(
+                    call=call,
+                    client=client,
+                    text=CONFIG.prompts.tts.timeout_silence(),
+                )
+                call.recognition_retry += 1
+            else:
+                await handle_play(
+                    call=call,
+                    client=client,
+                    context=Context.GOODBYE,
+                    text=CONFIG.prompts.tts.goodbye(),
+                )
 
-        else:  # Timeout reached or other error
-            _logger.warn(f"Recognition failed with unknown error code {error_code}, ending call ({call.call_id})")
+        else:  # Other recognition error
+            _logger.warn(f"Recognition failed with unknown error code {error_code}, answering with default error ({call.call_id})")
             await handle_play(
                 call=call,
                 client=client,
-                context=Context.GOODBYE,
-                text=CONFIG.prompts.tts.goodbye(),
+                text=CONFIG.prompts.tts.error(),
             )
 
     elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
