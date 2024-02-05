@@ -20,6 +20,9 @@ class AiSearchSearch(ISearch):
 
     def __init__(self, config: AiSearchModel):
         _logger.info(f"Using AI Search {config.endpoint} with index {config.index}")
+        _logger.info(
+            f"Note: At 300 characters per document, each LLM call will use approx {300 * config.top_k * config.expansion_k / 4} tokens."
+        )
         self._config = config
 
     async def training_asearch_all(self, text: str) -> Optional[List[TrainingModel]]:

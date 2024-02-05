@@ -8,6 +8,4 @@ class AiSearchModel(BaseSettings):
     expansion_k: int = 5
     index: str
     semantic_configuration: str
-    top_k: int = (
-        5  # More than 5, responses latency is high (> 30 secs) with GPT-4 Turbo
-    )
+    top_k: int = 15
