@@ -731,7 +731,7 @@ async def llm_chat(
         trainings_tasks = await asyncio.gather(
             *[
                 search.training_asearch_all(message.content)
-                for message in call.messages[-5:]
+                for message in call.messages[-CONFIG.ai_search.expansion_k:]
             ],
         )
         trainings = sorted(
