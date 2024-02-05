@@ -326,9 +326,19 @@ make dev
 
 ## Advanced usage
 
-### Add my custom training data
+### Add my custom training data with AI Search
 
 Training data is stored on AI Search to be retrieved by the bot, on demand.
+
+Required index schema:
+
+| **Field Name** | `Type` | Retrievable | Searchable | Dimensions | Vectorizer |
+|-|-|-|-|-|-|
+| **id** | `Edm.String` | Yes | No | | |
+| **content** | `Edm.String` | Yes | Yes | | |
+| **source_uri** | `Edm.String` | Yes | No | | |
+| **title** | `Edm.String` | Yes | Yes| | |
+| **vectors** | `Collection(Edm.Single)` | No | No | 1536 | *OpenAI ADA* |
 
 An exampe is [available at `examples/import-training.ipynb`](examples/import-training.ipynb). It shows how to import training data from a PDF files dataset.
 
