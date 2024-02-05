@@ -99,7 +99,8 @@ async def completion_stream(
         **extra,
     )
     async for chunck in stream:
-        yield chunck.choices[0].delta
+        if chunck.choices:  # Skip empty chunks, happens with GPT-4 Turbo
+            yield chunck.choices[0].delta
 
 
 @retry(
