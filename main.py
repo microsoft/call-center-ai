@@ -385,11 +385,13 @@ async def communication_event_worker(
         error_code = result_information["subCode"]
 
         # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
-        if error_code == 8535:  # Action failed, file format is invalid
+        if error_code == 8535:  # Action failed, file format
             _logger.warn("Error during media play, file format is invalid")
-        elif error_code == 8536:  # Action failed, file could not be downloaded
+        elif error_code == 8536:  # Action failed, file downloaded
             _logger.warn("Error during media play, file could not be downloaded")
-        elif error_code == 9999:  # Unknown internal server error
+        elif error_code == 8565:  # Action failed, AI services config
+            _logger.error("Error during media play, impossible to connect with Azure AI services")
+        elif error_code == 9999:  # Unknown
             _logger.warn("Error during media play, unknown internal server error")
         else:
             _logger.warn(f"Error during media play, unknown error code {error_code}")
@@ -812,7 +814,7 @@ async def llm_chat(
         ChatCompletionToolParam(
             type="function",
             function={
-                "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
+                "description": "Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Never use this action directly after a recall. Example: 'I want to talk to a human', 'I want to talk to a real person'.",
                 "name": IndentAction.TALK_TO_HUMAN.value,
                 "parameters": {
                     "properties": {},
@@ -824,7 +826,7 @@ async def llm_chat(
         ChatCompletionToolParam(
             type="function",
             function={
-                "description": "Use this if the user wants to end the call, or if the user said goodbye in the current call. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
+                "description": "Use this if the user wants to end the call, or if the user said goodbye in the current call. Be warnging that the call will be ended immediately. Never use this action directly after a recall. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.",
                 "name": IndentAction.END_CALL.value,
                 "parameters": {
                     "properties": {},

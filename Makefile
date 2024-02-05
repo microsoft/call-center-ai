@@ -6,7 +6,7 @@ version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
 # DevTunnel configuration
 tunnel_name := claim-ai-phone-bot-$(shell hostname | tr '[:upper:]' '[:lower:]')
-tunnel_url ?= $(shell devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*')
+tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
 app_location := westeurope
 openai_location := swedencentral
@@ -70,9 +70,10 @@ dev:
 		--no-server-header \
 		--port 8080 \
 		--proxy-headers \
-		--timeout-keep-alive 60 \
-		--reload
-
+		--reload \
+		--reload-include .env \
+		--reload-include config.yaml \
+		--timeout-keep-alive 60
 
 build:
 	$(docker) build \
@@ -98,10 +99,10 @@ start:
 		endpoint=$(tunnel_url) \
 		name=$(tunnel_name) \
 		phone_number=$(bot_phone_number) \
-		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/claim-ai/providers/Microsoft.Communication/communicationServices/claim-ai"
+		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/$(name)/providers/Microsoft.Communication/communicationServices/$(name)"
 
 	@echo "🚀 Claim AI is running on $(tunnel_url)"
-	$(docker) attach --name claim-ai
+	$(docker) attach claim-ai
 
 stop:
 	@echo "Stopping container..."
@@ -134,6 +135,13 @@ deploy:
 	$(MAKE) logs name=$(name)
 
 destroy:
+	@echo "🧐 Are you sure you want to delete? Type 'delete now $(name)' to confirm."
+	@read -r confirm && [ "$$confirm" = "delete now $(name)" ] || (echo "Confirmation failed. Aborting."; exit 1)
+
+	@echo "❗️ Deleting RG..."
+	az group delete --name $(name) --yes --no-wait
+
+	@echo "❗️ Deleting deployment..."
 	az deployment sub delete --name $(name)
 
 logs:
