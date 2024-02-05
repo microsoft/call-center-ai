@@ -70,8 +70,10 @@ dev:
 		--no-server-header \
 		--port 8080 \
 		--proxy-headers \
-		--timeout-keep-alive 60 \
-		--reload
+		--reload \
+		--reload-include .env \
+		--reload-include config.yaml \
+		--timeout-keep-alive 60
 
 
 build:
