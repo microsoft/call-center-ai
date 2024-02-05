@@ -6,7 +6,7 @@ version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
 # DevTunnel configuration
 tunnel_name := claim-ai-phone-bot-$(shell hostname | tr '[:upper:]' '[:lower:]')
-tunnel_url ?= $(shell devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*')
+tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
 app_location := westeurope
 openai_location := swedencentral
@@ -75,7 +75,6 @@ dev:
 		--reload-include config.yaml \
 		--timeout-keep-alive 60
 
-
 build:
 	$(docker) build \
 		--build-arg VERSION=$(version_full) \
@@ -100,10 +99,10 @@ start:
 		endpoint=$(tunnel_url) \
 		name=$(tunnel_name) \
 		phone_number=$(bot_phone_number) \
-		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/claim-ai/providers/Microsoft.Communication/communicationServices/claim-ai"
+		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/$(name)/providers/Microsoft.Communication/communicationServices/$(name)"
 
 	@echo "🚀 Claim AI is running on $(tunnel_url)"
-	$(docker) attach --name claim-ai
+	$(docker) attach claim-ai
 
 stop:
 	@echo "Stopping container..."
