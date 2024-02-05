@@ -13,7 +13,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
-class RootModel(BaseSettings):
+class RootModel(BaseSettings, env_prefix=""):
     # Immutable fields
     version: str = Field(frozen=True)
     # Editable fields
