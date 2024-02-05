@@ -44,8 +44,9 @@ class AiSearchSearch(ISearch):
                     # Vector search
                     vector_queries=[
                         VectorizableTextQuery(
+                            exhaustive=True,
                             fields="vectors",
-                            k=self._config.top_k,
+                            k_nearest_neighbors=self._config.top_k,
                             text=text,
                         )
                     ],
