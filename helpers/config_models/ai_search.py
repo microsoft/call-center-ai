@@ -7,4 +7,4 @@ class AiSearchModel(BaseSettings):
     endpoint: str
     index: str
     semantic_configuration: str
-    top_k: int = 5
+    top_k: int = 10

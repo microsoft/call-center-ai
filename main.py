@@ -353,6 +353,7 @@ async def communication_event_worker(
             call.recognition_retry += 1
 
         else:  # Timeout reached or other error
+            _logger.warn(f"Recognition failed with unknown error code {error_code}, ending call ({call.call_id})")
             await handle_play(
                 call=call,
                 client=client,
