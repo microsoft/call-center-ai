@@ -134,6 +134,13 @@ deploy:
 	$(MAKE) logs name=$(name)
 
 destroy:
+	@echo "🧐 Are you sure you want to delete? Type 'delete now $(name)' to confirm."
+	@read -r confirm && [ "$$confirm" = "delete now $(name)" ] || (echo "Confirmation failed. Aborting."; exit 1)
+
+	@echo "❗️ Deleting RG..."
+	az group delete --name $(name) --yes --no-wait
+
+	@echo "❗️ Deleting deployment..."
 	az deployment sub delete --name $(name)
 
 logs:
