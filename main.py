@@ -300,6 +300,7 @@ async def communication_event_worker(
         )
 
         if len(call.messages) == 1:  # First call
+            await asyncio.sleep(1)  # Wait for the call to be ready, sometimes an error "(8501) Action is invalid when call is not in Established state" is raised
             await handle_recognize_text(
                 call=call,
                 client=client,
