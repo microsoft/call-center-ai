@@ -215,6 +215,19 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01
   }
 }
 
+resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+  name: '${prefix}-document'
+  location: location
+  tags: tags
+  sku: {
+    name: 'S0'
+  }
+  kind: 'FormRecognizer'
+  properties: {
+    customSubDomainName: '${prefix}-document'
+  }
+}
+
 resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
   name: '${prefix}-contentsafety'
   location: location
