@@ -1,4 +1,4 @@
-aiohttp==3.9.1  # Required for azure-search-documents, azure-ai-contentsafety, azure-cosmos
+aiohttp==3.9.2  # Required for azure-search-documents, azure-ai-contentsafety, azure-cosmos
 aiosqlite==0.19.0
 azure-ai-contentsafety==1.0.0
 azure-communication-callautomation==1.1.0
