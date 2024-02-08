@@ -7,7 +7,6 @@ param botPhoneNumber string
 param botVoiceName string
 param gptModel string
 param gptVersion string
-param imageVersion string
 param location string
 param moderationBlocklists array
 param openaiLocation string
@@ -15,7 +14,7 @@ param searchLocation string
 param tags object
 
 var prefix = deployment().name
-var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
+var appUrl = 'https://claim-ai.${hostingPlan.name}.azurewebsites.net'
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 var adaModelFullName = toLower('${adaModel}-${adaVersion}')
 var config = {
@@ -86,68 +85,52 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10
   }
 }
 
-resource acaEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
+resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
+  name: prefix
+  location: location
+  sku: {
+    name: 'Y1'
+    tier: 'Dynamic'
+  }
+  properties: {}
+}
+
+resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   name: prefix
   location: location
   tags: tags
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalyticsWorkspace.properties.customerId
-        sharedKey: logAnalyticsWorkspace.listKeys().primarySharedKey
-      }
-    }
-    workloadProfiles: [
-      {
-        // Consumption workload profile name must be 'Consumption'
-        name: 'Consumption'
-        workloadProfileType: 'Consumption'
-      }
-    ]
-  }
-}
-
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
-  name: 'claim-ai'
-  location: location
-  tags: tags
+  kind: 'functionapp'
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
-    configuration: {
-      activeRevisionsMode: 'Single'
-      ingress: {
-        external: true
-        targetPort: 8080
-      }
-    }
-    environmentId: acaEnv.id
-    template: {
-      containers: [
+    serverFarmId: hostingPlan.id
+    siteConfig: {
+      linuxFxVersion: 'Python|3.12'
+      appSettings: [
         {
-          image: 'ghcr.io/clemlesne/claim-ai-phone-bot:${imageVersion}'
-          name: 'claim-ai'
-          env: [
-            {
-              name: 'CONFIG_JSON'
-              value: string(config)
-            }
-          ]
-          resources: {
-            cpu: 1
-            memory: '2Gi'
-          }
-          probes: [
-            {
-              type: 'Liveness'
-              httpGet: {
-                path: '/health/liveness'
-                port: 8080
-              }
-            }
-          ]
+          name: 'AzureWebJobsStorage'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+        }
+        {
+          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+          value: logAnalyticsWorkspace.properties.customerId
+        }
+        {
+          name: 'FUNCTIONS_EXTENSION_VERSION'
+          value: '~4'
+        }
+        {
+          name: 'FUNCTIONS_WORKER_RUNTIME'
+          value: 'python'
+        }
+        {
+          name: 'AzureWebJobsFeatureFlags'
+          value: 'EnableWorkerIndexing'
+        }
+        {
+          name: 'CONFIG_JSON'
+          value: string(config)
         }
       ]
     }
@@ -162,6 +145,26 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     name: 'Standard_ZRS'
   }
   kind: 'StorageV2'
+}
+
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource postCallSmsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'post-call-sms'
+}
+
+resource postCallSynthesisQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'post-call-synthesis'
+}
+
+resource postCallNextQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'post-call-next'
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
@@ -182,7 +185,7 @@ resource appContribCommunication 'Microsoft.Authorization/roleAssignments@2022-0
   name: guid(subscription().id, deployment().name, 'appContribCommunication')
   scope: communication
   properties: {
-    principalId: containerApp.identity.principalId
+    principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: roleCommunicationContributor.id
   }
@@ -267,7 +270,7 @@ resource appContribOpenai 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   name: guid(subscription().id, deployment().name, 'appContribOpenai')
   scope: cognitiveOpenai
   properties: {
-    principalId: containerApp.identity.principalId
+    principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: roleOpenaiContributor.id
   }

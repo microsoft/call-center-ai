@@ -8,6 +8,8 @@ _logger.info(f"claim-ai v{CONFIG.version}")
 
 
 # General imports
+from http import HTTPStatus
+from azure.functions import HttpResponse, FunctionApp, AuthLevel, HttpRequest, EventGridEvent, QueueMessage, Out
 from typing import Any, Callable, Coroutine, Generator, List, Optional, Tuple, Type
 from azure.communication.callautomation import (
     CallAutomationClient,
@@ -22,11 +24,9 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ClientAuthenticationError
 from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
 from azure.core.messaging import CloudEvent
-from azure.eventgrid import EventGridEvent, SystemEventNames
+from azure.eventgrid import SystemEventNames
 from azure.identity import DefaultAzureCredential
 from enum import Enum
-from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config_models.database import Mode as DatabaseMode
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, Indent as IndentAction
@@ -48,6 +48,7 @@ from openai.types.chat import (
 from persistence.ai_search import AiSearchSearch, TrainingModel as AiSearchTrainingModel
 from persistence.cosmos import CosmosStore
 from persistence.sqlite import SqliteStore
+from persistence.storage import StorageQueue
 from urllib.parse import quote_plus
 import asyncio
 import html
@@ -59,14 +60,15 @@ from models.message import (
     Style as MessageStyle,
     ToolModel as MessageToolModel,
 )
-from contextlib import asynccontextmanager
 from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close, completion_model_sync, ModelType, SafetyCheckError
 from models.claim import ClaimModel
 from pydantic import ValidationError
-from uuid import UUID
 import json
 import mistune
 
+
+# Functions App
+app = FunctionApp()
 
 # Jinja configuration
 jinja = Environment(
@@ -99,34 +101,10 @@ db = (
     else CosmosStore(CONFIG.database.cosmos_db)
 )
 search = AiSearchSearch(CONFIG.ai_search)
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    yield
-    await llm_close()
-
-
-# FastAPI
-_logger.info(f'Using root path "{CONFIG.api.root_path}"')
-api = FastAPI(
-    contact={
-        "url": "https://github.com/clemlesne/claim-ai-phone-bot",
-    },
-    description="AI-powered call center solution with Azure and OpenAI GPT.",
-    license_info={
-        "name": "Apache-2.0",
-        "url": "https://github.com/clemlesne/claim-ai-phone-bot/blob/master/LICENCE",
-    },
-    lifespan=lifespan,
-    root_path=CONFIG.api.root_path,
-    title="claim-ai-phone-bot",
-    version=CONFIG.version,
-)
+queue = StorageQueue(CONFIG.storage_queue)
 
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
-CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
 SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
 MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
 MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
@@ -139,20 +117,22 @@ class Context(str, Enum):
     GOODBYE = "goodbye"
 
 
-@api.get(
-    "/health/liveness",
-    status_code=status.HTTP_204_NO_CONTENT,
-    description="Liveness healthckeck, always returns 204, used to check if the API is up.",
+@app.route(
+    auth_level=AuthLevel.ANONYMOUS,
+    methods=["GET"],
+    route="/health/liveness",
 )
-async def health_liveness_get() -> None:
-    pass
+async def health_liveness_get() -> HttpResponse:
+    return HttpResponse(status_code=HTTPStatus.NO_CONTENT)
 
 
-@api.get(
-    "/report/{phone_number}",
-    description="Display the history of calls in a web page.",
+@app.route(
+    auth_level=AuthLevel.ANONYMOUS,
+    methods=["GET"],
+    route="/report/{phone_number}",
 )
-async def report_history_get(phone_number: str) -> HTMLResponse:
+async def report_history_get(req: HttpRequest) -> HttpResponse:
+    phone_number = req.route_params.get("phone_number")
     calls = await db.call_asearch_all(phone_number) or []
 
     template = jinja.get_template("history.html.jinja")
@@ -163,14 +143,21 @@ async def report_history_get(phone_number: str) -> HTMLResponse:
         phone_number=phone_number,
         version=CONFIG.version,
     )
-    return HTMLResponse(content=render)
+    return HttpResponse(
+        body=render,
+        mimetype="text/html",
+        status_code=HTTPStatus.OK,
+    )
 
 
-@api.get(
-    "/report/{phone_number}/{call_id}",
-    description="Display the call report in a web page.",
+@app.route(
+    auth_level=AuthLevel.ANONYMOUS,
+    methods=["GET"],
+    route="/report/{phone_number}/{call_id:guid}",
 )
-async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
+async def report_call_get(req: HttpRequest) -> HttpResponse:
+    phone_number = req.route_params.get("phone_number")
+    call_id = req.route_params.get("call_id")
     call = await db.call_aget(call_id)
     if not call or call.phone_number != phone_number:
         raise HTTPException(
@@ -186,23 +173,35 @@ async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
         next_actions=[action for action in NextAction],
         version=CONFIG.version,
     )
-    return HTMLResponse(content=render)
+    return HttpResponse(
+        body=render,
+        mimetype="text/html",
+        status_code=HTTPStatus.OK,
+    )
 
 
-@api.get(
-    "/call",
-    description="Get all calls by phone number.",
+@app.route(
+    auth_level=AuthLevel.ANONYMOUS,
+    methods=["GET"],
+    route="/call",
 )
-async def call_get(phone_number: str) -> List[CallModel]:
-    return await db.call_asearch_all(phone_number) or []
+async def call_get(req: HttpRequest) -> HttpResponse:
+    phone_number = req.params.get("phone_number")
+    calls = await db.call_asearch_all(phone_number) or []
+    return HttpResponse(
+        body=json.dumps([call.model_dump(mode="json") for call in calls]),
+        mimetype="application/json",
+        status_code=HTTPStatus.OK,
+    )
 
 
-@api.get(
-    "/call/initiate",
-    status_code=status.HTTP_204_NO_CONTENT,
-    description="Initiate an outbound call to a phone number.",
+@app.route(
+    auth_level=AuthLevel.ANONYMOUS,
+    methods=["GET"],
+    route="/call/initiate",
 )
-async def call_initiate_get(phone_number: str) -> None:
+async def call_initiate_get(req: HttpRequest) -> HttpResponse:
+    phone_number = req.params.get("phone_number")
     _logger.info(f"Initiating outbound call to {phone_number}")
     call_connection_properties = call_automation_client.create_call(
         callback_url=await callback_url(phone_number),
@@ -213,81 +212,92 @@ async def call_initiate_get(phone_number: str) -> None:
     _logger.info(
         f"Created call with connection id: {call_connection_properties.call_connection_id}"
     )
+    return HttpResponse(status_code=HTTPStatus.NO_CONTENT)
 
 
-@api.post(
-    "/call/inbound",
-    description="Handle incoming call from a Azure Event Grid event originating from Azure Communication Services.",
-)
-async def call_inbound_post(request: Request):
-    for event_dict in await request.json():
-        event = EventGridEvent.from_dict(event_dict)
-        event_type = event.event_type
+@app.event_grid_trigger(arg_name="event")
+async def call_inbound(event: EventGridEvent) -> None:
+    data = event.get_json()
+    type = event.event_type
+    _logger.debug(f"Call inbound event {type} with data {data}")
 
-        _logger.debug(f"Call inbound event {event_type} with data {event.data}")
+    if type == SystemEventNames.AcsIncomingCallEventName:
+        if data["from"]["kind"] == "phoneNumber":
+            phone_number = data["from"]["phoneNumber"]["value"]
+        else:
+            phone_number = data["from"]["rawId"]
 
-        if event_type == SystemEventNames.EventGridSubscriptionValidationEventName:
-            validation_code = event.data["validationCode"]
-            _logger.info(f"Validating Event Grid subscription ({validation_code})")
-            return JSONResponse(
-                content={"validationResponse": event.data["validationCode"]},
-                status_code=status.HTTP_200_OK,
-            )
-
-        elif event_type == SystemEventNames.AcsIncomingCallEventName:
-            if event.data["from"]["kind"] == "phoneNumber":
-                phone_number = event.data["from"]["phoneNumber"]["value"]
-            else:
-                phone_number = event.data["from"]["rawId"]
-
-            _logger.debug(f"Incoming call handler caller ID: {phone_number}")
-            call_context = event.data["incomingCallContext"]
-            answer_call_result = call_automation_client.answer_call(
-                callback_url=await callback_url(phone_number),
-                cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
-                incoming_call_context=call_context,
-            )
-            _logger.info(
-                f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
-            )
-
-
-@api.post(
-    "/call/event/{phone_number}",
-    description="Handle callbacks from Azure Communication Services.",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-# TODO: Secure this endpoint with a secret
-# See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
-async def call_event_post(
-    request: Request, background_tasks: BackgroundTasks, phone_number: str
-) -> None:
-    for event_dict in await request.json():
-        background_tasks.add_task(
-            communication_event_worker, background_tasks, event_dict, phone_number
+        _logger.debug(f"Incoming call handler caller ID: {phone_number}")
+        call_context = data["incomingCallContext"]
+        answer_call_result = call_automation_client.answer_call(
+            callback_url=await callback_url(phone_number),
+            cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
+            incoming_call_context=call_context,
+        )
+        _logger.info(
+            f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
         )
 
 
-async def communication_event_worker(
-    background_tasks: BackgroundTasks, event_dict: dict, phone_number: str
+@app.route(
+    auth_level=AuthLevel.ANONYMOUS,
+    methods=["POST"],
+    route="/call/event/{phone_number}",
+)
+@app.queue_output(
+    arg_name="post_call_next_queue",
+    connection="AzureWebJobsStorage",
+    queue_name="post_call_next",
+)
+@app.queue_output(
+    arg_name="post_call_sms_queue",
+    connection="AzureWebJobsStorage",
+    queue_name="post_call_sms",
+)
+@app.queue_output(
+    arg_name="post_call_synthesis_queue",
+    connection="AzureWebJobsStorage",
+    queue_name="post_call_synthesis",
+)
+async def call_event_post(
+    req: HttpRequest,
+    post_call_next_queue: Out[str],
+    post_call_sms_queue: Out[str],
+    post_call_synthesis_queue: Out[str],
+) -> HttpResponse:
+    phone_number = req.route_params.get("phone_number")
+    for event_dict in await req.get_json():
+        await communication_event_processor(event_dict, phone_number, post_call_next_queue, post_call_sms_queue, post_call_synthesis_queue)
+    return HttpResponse(status_code=HTTPStatus.NO_CONTENT)
+
+
+async def communication_event_processor(
+    event_dict: dict,
+    phone_number: str,
+    post_call_next_queue: Out[str],
+    post_call_sms_queue: Out[str],
+    post_call_synthesis_queue: Out[str],
 ) -> None:
     call = await db.call_asearch_one(phone_number)
     if not call:
         _logger.warn(f"Call with {phone_number} not found")
         return
 
+    # Parse event
     event = CloudEvent.from_dict(event_dict)
-    connection_id = event.data["callConnectionId"]
-    operation_context = event.data.get("operationContext", None)
+    data = event.data or {}
+    type = event.type
+
+    # Process content
+    connection_id = data["callConnectionId"]
+    operation_context = data.get("operationContext", None)
     client = call_automation_client.get_call_connection(
         call_connection_id=connection_id
     )
-    event_type = event.type
+    _logger.debug(f"Call event received {type} for call {call}")
+    _logger.debug(data)
 
-    _logger.debug(f"Call event received {event_type} for call {call}")
-    _logger.debug(event.data)
-
-    if event_type == "Microsoft.Communication.CallConnected":  # Call answered
+    if type == "Microsoft.Communication.CallConnected":  # Call answered
         _logger.info(f"Call connected ({call.call_id})")
         call.recognition_retry = 0  # Reset recognition retry counter
 
@@ -313,29 +323,29 @@ async def communication_event_worker(
                 client=client,
                 text=CONFIG.prompts.tts.welcome_back(),
             )
-            call = await intelligence(background_tasks, call, client)
+            call = await intelligence(call, client, post_call_next_queue, post_call_synthesis_queue)
 
-    elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
+    elif type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         _logger.info(f"Call disconnected ({call.call_id})")
-        await handle_hangup(call=call, client=client)
+        await handle_hangup(client, call, post_call_next_queue, post_call_sms_queue, post_call_synthesis_queue)
 
     elif (
-        event_type == "Microsoft.Communication.RecognizeCompleted"
+        type == "Microsoft.Communication.RecognizeCompleted"
     ):  # Speech recognized
-        if event.data["recognitionType"] == "speech":
-            speech_text = event.data["speechResult"]["speech"]
+        if data["recognitionType"] == "speech":
+            speech_text = data["speechResult"]["speech"]
             _logger.info(f"Recognition completed ({call.call_id}): {speech_text}")
 
             if speech_text is not None and len(speech_text) > 0:
                 call.messages.append(
                     MessageModel(content=speech_text, persona=MessagePersona.HUMAN)
                 )
-                call = await intelligence(background_tasks, call, client)
+                call = await intelligence(call, client, post_call_next_queue, post_call_synthesis_queue)
 
     elif (
-        event_type == "Microsoft.Communication.RecognizeFailed"
+        type == "Microsoft.Communication.RecognizeFailed"
     ):  # Speech recognition failed
-        result_information = event.data["resultInformation"]
+        result_information = data["resultInformation"]
         error_code = result_information["subCode"]
 
         # Error codes:
@@ -369,7 +379,7 @@ async def communication_event_worker(
                 text=CONFIG.prompts.tts.error(),
             )
 
-    elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
+    elif type == "Microsoft.Communication.PlayCompleted":  # Media played
         _logger.debug(f"Play completed ({call.call_id})")
 
         if (
@@ -377,7 +387,7 @@ async def communication_event_worker(
             or operation_context == Context.GOODBYE
         ):  # Call ended
             _logger.info(f"Ending call ({call.call_id})")
-            await handle_hangup(call=call, client=client)
+            await handle_hangup(client, call, post_call_next_queue, post_call_sms_queue, post_call_synthesis_queue)
 
         elif operation_context == Context.CONNECT_AGENT:  # Call transfer
             _logger.info(f"Initiating transfer call initiated ({call.call_id})")
@@ -386,10 +396,10 @@ async def communication_event_worker(
             )
             client.transfer_call_to_participant(target_participant=agent_caller)
 
-    elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
+    elif type == "Microsoft.Communication.PlayFailed":  # Media play failed
         _logger.debug(f"Play failed ({call.call_id})")
 
-        result_information = event.data["resultInformation"]
+        result_information = data["resultInformation"]
         error_code = result_information["subCode"]
 
         # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
@@ -405,16 +415,16 @@ async def communication_event_worker(
             _logger.warn(f"Error during media play, unknown error code {error_code}")
 
     elif (
-        event_type == "Microsoft.Communication.CallTransferAccepted"
+        type == "Microsoft.Communication.CallTransferAccepted"
     ):  # Call transfer accepted
         _logger.info(f"Call transfer accepted event ({call.call_id})")
         # TODO: Is there anything to do here?
 
     elif (
-        event_type == "Microsoft.Communication.CallTransferFailed"
+        type == "Microsoft.Communication.CallTransferFailed"
     ):  # Call transfer failed
         _logger.debug(f"Call transfer failed event ({call.call_id})")
-        result_information = event.data["resultInformation"]
+        result_information = data["resultInformation"]
         sub_code = result_information["subCode"]
         _logger.info(f"Error during call transfer, subCode {sub_code} ({call.call_id})")
         await handle_play(
@@ -428,7 +438,10 @@ async def communication_event_worker(
 
 
 async def intelligence(
-    background_tasks: BackgroundTasks, call: CallModel, client: CallConnectionClient
+    call: CallModel,
+    client: CallConnectionClient,
+    post_call_next_queue: Out[str],
+    post_call_synthesis_queue: Out[str],
 ) -> CallModel:
     """
     Handle the intelligence of the call, including: LLM chat, TTS, and media play.
@@ -453,7 +466,7 @@ async def intelligence(
             text=text,
         )
 
-    chat_task = asyncio.create_task(llm_chat(background_tasks, call, tts_callback))
+    chat_task = asyncio.create_task(llm_chat(call, tts_callback, post_call_next_queue, post_call_synthesis_queue))
     soft_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
     )
@@ -541,7 +554,7 @@ async def intelligence(
         # Save in DB for new claims and allowing demos to be more "real-time"
         await db.call_aset(call)
         # Recursively call intelligence to continue the conversation
-        call = await intelligence(background_tasks, call, client)
+        call = await intelligence(call, client, post_call_next_queue, post_call_synthesis_queue)
 
     else:
         await handle_recognize_text(
@@ -676,9 +689,10 @@ def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletio
 
 
 async def llm_chat(
-    background_tasks: BackgroundTasks,
     call: CallModel,
     user_callback: Callable[[str, MessageStyle], Coroutine[Any, Any, None]],
+    post_call_next_queue: Out[str],
+    post_call_synthesis_queue: Out[str],
     _retry_attempt: int = 0,
     _trainings: List[AiSearchTrainingModel] = [],
 ) -> Tuple[CallModel, ActionModel]:
@@ -993,7 +1007,7 @@ async def llm_chat(
                 _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached')
                 return await _error_response()
             _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
+            return await llm_chat(call, user_callback, post_call_next_queue, post_call_synthesis_queue, _retry_attempt + 1, trainings)
 
         # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
         if not full_content and not tool_calls:
@@ -1002,7 +1016,7 @@ async def llm_chat(
                 _logger.warn(f'LLM send back empty content, retry limit reached')
                 return await _error_response()
             _logger.warn(f'LLM send back empty content, retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
+            return await llm_chat(call, user_callback, post_call_next_queue, post_call_synthesis_queue, _retry_attempt + 1, trainings)
 
         intent = IndentAction.CONTINUE
         models = []
@@ -1078,9 +1092,9 @@ async def llm_chat(
                         await user_callback(local_content, default_style)
 
                     # Generate next action
-                    background_tasks.add_task(post_call_next, call)
-                    # Generate synthesis
-                    background_tasks.add_task(post_call_synthesis, call)
+                    await db.call_aset(call)
+                    post_call_next_queue.set(call.model_dump_json())
+                    post_call_synthesis_queue.set(call.model_dump_json())
 
                     # Add context of the last message, if not, LLM messed up and loop on this action
                     last_message = call.messages[-1]
@@ -1235,7 +1249,13 @@ async def handle_media(
             raise e
 
 
-async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
+async def handle_hangup(
+    client: CallConnectionClient,
+    call: CallModel,
+    post_call_next_queue: Out[str],
+    post_call_sms_queue: Out[str],
+    post_call_synthesis_queue: Out[str],
+) -> None:
     _logger.debug(f"Hanging up call ({call.call_id})")
     try:
         client.hang_up(is_for_everyone=True)
@@ -1254,19 +1274,23 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
             action=MessageAction.HANGUP,
         )
     )
+    await db.call_aset(call)
 
-    # Start post-call intelligence
-    await asyncio.gather(
-        post_call_next(call),
-        post_call_sms(call),
-        post_call_synthesis(call),
-    )
+    post_call_next_queue.set(call.model_dump_json())
+    post_call_sms_queue.set(call.model_dump_json())
+    post_call_synthesis_queue.set(call.model_dump_json())
 
 
-async def post_call_sms(call: CallModel) -> None:
+@app.queue_trigger(
+    arg_name="msg",
+    connection="AzureWebJobsStorage",
+    queue_name="post_call_sms",
+)
+async def post_call_sms(msg: QueueMessage) -> None:
     """
     Send an SMS report to the customer.
     """
+    call = CallModel.model_validate_json(msg.get_body())
     content = await llm_completion(
         system=CONFIG.prompts.llm.sms_summary_system(
             claim=call.claim,
@@ -1343,10 +1367,16 @@ async def callback_url(caller_id: str) -> str:
     return f"{CALL_EVENT_URL}/{html.escape(call.phone_number)}"
 
 
-async def post_call_synthesis(call: CallModel) -> None:
+@app.queue_trigger(
+    arg_name="msg",
+    connection="AzureWebJobsStorage",
+    queue_name="post_call_synthesis",
+)
+async def post_call_synthesis(msg: QueueMessage) -> None:
     """
     Synthesize the call and store it to the model.
     """
+    call = CallModel.model_validate_json(msg.get_body())
     _logger.debug(f"Synthesizing call ({call.call_id})")
 
     short, long = await asyncio.gather(
@@ -1390,10 +1420,16 @@ async def post_call_synthesis(call: CallModel) -> None:
     await db.call_aset(call)
 
 
-async def post_call_next(call: CallModel) -> None:
+@app.queue_trigger(
+    arg_name="msg",
+    connection="AzureWebJobsStorage",
+    queue_name="post_call_next",
+)
+async def post_call_next(msg: QueueMessage) -> None:
     """
     Generate next action for the call.
     """
+    call = CallModel.model_validate_json(msg.get_body())
     next = await llm_model(
         call=call,
         model=NextModel,

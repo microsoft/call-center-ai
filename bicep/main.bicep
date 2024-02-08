@@ -6,7 +6,6 @@ param botName string
 param botPhoneNumber string
 param gptModel string = 'gpt-4'
 param gptVersion string = '1106-Preview'
-param imageVersion string = 'main'
 param instance string = deployment().name
 param location string = deployment().location
 param openaiLocation string
@@ -23,7 +22,6 @@ var tags = {
   instance: instance
   managed_by: 'Bicep'
   sources: 'https://github.com/clemlesne/claim-ai-phone-bot'
-  version: imageVersion
 }
 
 resource sub 'Microsoft.Resources/resourceGroups@2021-04-01' = {
@@ -45,7 +43,6 @@ module app 'app.bicep' = {
     botVoiceName: 'fr-FR-DeniseNeural'
     gptModel: gptModel
     gptVersion: gptVersion
-    imageVersion: imageVersion
     location: location
     moderationBlocklists: []
     openaiLocation: openaiLocation

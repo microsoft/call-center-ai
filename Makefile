@@ -65,15 +65,9 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) API_EVENTS_DOMAIN=$(tunnel_url) python3 -m uvicorn main:api \
-		--header x-version:$${VERSION} \
-		--no-server-header \
+	VERSION=$(version_full) API_EVENTS_DOMAIN=$(tunnel_url) func start \
 		--port 8080 \
-		--proxy-headers \
-		--reload \
-		--reload-include .env \
-		--reload-include config.yaml \
-		--timeout-keep-alive 60
+		--timeout 60
 
 build:
 	$(docker) build \
