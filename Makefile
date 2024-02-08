@@ -46,6 +46,9 @@ upgrade:
 	@echo "➡️ Upgrading Python dev dependencies..."
 	python3 -m pur -r requirements-dev.txt
 
+	@echo "➡️ Upgrading Azure Bicep CLI..."
+	az bicep upgrade
+
 test:
 	@echo "➡️ Running Black..."
 	python3 -m black --check .
@@ -116,9 +119,14 @@ deploy:
 		--template-file bicep/main.bicep \
 	 	--name $(name)
 
+	@echo "Copying public resources..."
 	$(MAKE) copy-resources \
 		name=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
 
+	@echo "Updating Function App..."
+	func azure functionapp publish $(name)
+
+	@echo "Registering Event Grid subscription..."
 	$(MAKE) eventgrid-register \
 		endpoint=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value') \
 		name=$(name) \
@@ -147,10 +155,10 @@ logs:
 		--tail 100
 
 eventgrid-register:
-	@echo "⚙️ Deleting previous event grid subscription..."
+	@echo "⚙️ Deleting previous Event Grid subscription..."
 	az eventgrid event-subscription delete --name $(name) || true
 
-	@echo "⚙️ Creating event grid subscription..."
+	@echo "⚙️ Creating Event Grid subscription..."
 	az eventgrid event-subscription create \
 		--advanced-filter data.to.PhoneNumber.Value StringBeginsWith $(bot_phone_number) \
 		--enable-advanced-filtering-on-arrays true \
