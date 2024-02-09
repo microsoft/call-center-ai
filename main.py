@@ -76,7 +76,7 @@ jinja = Environment(
 )
 # Jinja custom functions
 jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
-jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else "" # type: ignore
+jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
 
 # Azure Communication Services
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
@@ -322,9 +322,11 @@ async def communication_event_worker(
     elif (
         event_type == "Microsoft.Communication.RecognizeCompleted"
     ):  # Speech recognized
-        if event.data["recognitionType"] == "speech":
+        recognition_result = event.data["recognitionType"]
+
+        if recognition_result == "speech":  # Handle voice
             speech_text = event.data["speechResult"]["speech"]
-            _logger.info(f"Recognition completed ({call.call_id}): {speech_text}")
+            _logger.info(f"Voice recognition ({call.call_id}): {speech_text}")
 
             if speech_text is not None and len(speech_text) > 0:
                 call.messages.append(
@@ -343,9 +345,7 @@ async def communication_event_worker(
         # 8532 = Action failed, inter-digit silence timeout reached
         # 8512 = Unknown internal server error
         # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
-        if (
-            error_code in (8510, 8532, 8512)
-        ):  # Timeout retry
+        if error_code in (8510, 8532, 8512):  # Timeout retry
             if call.recognition_retry < 10:
                 await handle_recognize_text(
                     call=call,
@@ -398,7 +398,9 @@ async def communication_event_worker(
         elif error_code == 8536:  # Action failed, file downloaded
             _logger.warn("Error during media play, file could not be downloaded")
         elif error_code == 8565:  # Action failed, AI services config
-            _logger.error("Error during media play, impossible to connect with Azure AI services")
+            _logger.error(
+                "Error during media play, impossible to connect with Azure AI services"
+            )
         elif error_code == 9999:  # Unknown
             _logger.warn("Error during media play, unknown internal server error")
         else:
@@ -634,7 +636,9 @@ async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str
     return content
 
 
-async def llm_model(system: Optional[str], call: CallModel, model: Type[ModelType]) -> Optional[ModelType]:
+async def llm_model(
+    system: Optional[str], call: CallModel, model: Type[ModelType]
+) -> Optional[ModelType]:
     """
     Run LLM completion from a system prompt, a Call model, and an expected model type as a return.
 
@@ -660,7 +664,9 @@ async def llm_model(system: Optional[str], call: CallModel, model: Type[ModelTyp
     return res
 
 
-def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletionMessageParam]:
+def _oai_completion_messages(
+    system: str, call: CallModel
+) -> List[ChatCompletionMessageParam]:
     messages: List[ChatCompletionMessageParam] = [
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.default_system(
@@ -711,7 +717,9 @@ async def llm_chat(
 
     async def _buffer_user_callback(buffer: str, style: MessageStyle) -> MessageStyle:
         # Remove tool calls from buffer content and detect style
-        local_style, local_content = _extract_message_style(_remove_message_actions(buffer))
+        local_style, local_content = _extract_message_style(
+            _remove_message_actions(buffer)
+        )
         new_style = local_style or style
         # Batch current user return
         if local_content:
@@ -743,11 +751,15 @@ async def llm_chat(
         trainings_tasks = await asyncio.gather(
             *[
                 search.training_asearch_all(message.content)
-                for message in call.messages[-CONFIG.ai_search.expansion_k:]
+                for message in call.messages[-CONFIG.ai_search.expansion_k :]
             ],
         )
         trainings = sorted(
-            set(training for trainings in trainings_tasks for training in trainings or [])
+            set(
+                training
+                for trainings in trainings_tasks
+                for training in trainings or []
+            )
         )  # Flatten, remove duplicates, and sort by score
 
     _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
@@ -971,8 +983,12 @@ async def llm_chat(
                 full_content += delta.content
                 buffer_content += delta.content
                 for local_content in _sentence_split(buffer_content):
-                    buffer_content = buffer_content[len(local_content) :]  # Remove consumed content from buffer
-                    default_style = await _buffer_user_callback(local_content, default_style)
+                    buffer_content = buffer_content[
+                        len(local_content) :
+                    ]  # Remove consumed content from buffer
+                    default_style = await _buffer_user_callback(
+                        local_content, default_style
+                    )
 
         if buffer_content:
             default_style = await _buffer_user_callback(buffer_content, default_style)
@@ -987,24 +1003,32 @@ async def llm_chat(
         # TODO: Tries to detect this error earlier
         # See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653
         if any(
-            tool_call["function"]["name"] == "multi_tool_use.parallel"
-            for _, tool_call in tool_calls.items()
+            x["function"]["name"] == "multi_tool_use.parallel"
+            for _, x in tool_calls.items()
         ):
             _logger.debug(f"Invalid tool schema: {tool_calls}")
             if _retry_attempt > 3:
-                _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached')
+                _logger.warn(
+                    f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
+                )
                 return await _error_response()
-            _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
+            _logger.warn(
+                f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
+            )
+            return await llm_chat(
+                background_tasks, call, user_callback, _retry_attempt + 1, trainings
+            )
 
         # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
         if not full_content and not tool_calls:
             _logger.debug(f"Empty content, retrying")
             if _retry_attempt > 3:
-                _logger.warn(f'LLM send back empty content, retry limit reached')
+                _logger.warn(f"LLM send back empty content, retry limit reached")
                 return await _error_response()
-            _logger.warn(f'LLM send back empty content, retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
+            _logger.warn(f"LLM send back empty content, retrying")
+            return await llm_chat(
+                background_tasks, call, user_callback, _retry_attempt + 1, trainings
+            )
 
         intent = IndentAction.CONTINUE
         models = []
@@ -1047,17 +1071,21 @@ async def llm_chat(
                         full_content += local_content + " "
                         await user_callback(local_content, default_style)
 
-                    if not parameters["field"] in ClaimModel.editable_fields():
-                        content = f'Failed to update a non-editable field "{parameters['field']}".'
+                    field = parameters["field"]
+                    value = parameters["value"]
+                    if not field in ClaimModel.editable_fields():
+                        content = f'Failed to update a non-editable field "{field}".'
                     else:
                         try:
                             # Define the field and force to trigger validation
                             copy = call.claim.model_dump()
-                            copy[parameters["field"]] = parameters["value"]
+                            copy[field] = value
                             call.claim = ClaimModel.model_validate(copy)
-                            content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
+                            content = (
+                                f'Updated claim field "{field}" with value "{value}".'
+                            )
                         except ValidationError as e:  # Catch error to inform LLM
-                            content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
+                            content = f'Failed to edit field "{field}": {e.json()}'
                     model.content = content
 
                 elif name == IndentAction.NEW_CLAIM.value:
@@ -1110,15 +1138,18 @@ async def llm_chat(
                         await user_callback(local_content, default_style)
 
                     updated = False
+                    title = parameters["title"]
                     for reminder in call.reminders:
-                        if reminder.title == parameters["title"]:
+                        if reminder.title == title:
                             try:
                                 reminder.description = parameters["description"]
                                 reminder.due_date_time = parameters["due_date_time"]
                                 reminder.owner = parameters["owner"]
-                                content = f'Reminder "{parameters['title']}" updated.'
+                                content = f'Reminder "{title}" updated.'
                             except ValidationError as e:  # Catch error to inform LLM
-                                content = f'Failed to edit reminder "{parameters["title"]}": {e.json()}'
+                                content = (
+                                    f'Failed to edit reminder "{title}": {e.json()}'
+                                )
                             model.content = content
                             updated = True
                             break
@@ -1128,13 +1159,13 @@ async def llm_chat(
                             reminder = ReminderModel(
                                 description=parameters["description"],
                                 due_date_time=parameters["due_date_time"],
-                                title=parameters["title"],
+                                title=title,
                                 owner=parameters["owner"],
                             )
                             call.reminders.append(reminder)
-                            content = f'Reminder "{parameters['title']}" created.'
+                            content = f'Reminder "{title}" created.'
                         except ValidationError as e:  # Catch error to inform LLM
-                            content = f'Failed to create reminder "{parameters["title"]}": {e.json()}'
+                            content = f'Failed to create reminder "{title}": {e.json()}'
                         model.content = content
 
                 models.append(model)

@@ -182,7 +182,7 @@ async def safety_check(text: str) -> None:
     try:
         res = await _contentsafety_analysis(text)
     except HttpResponseError as e:
-        _logger.error(f"Failed to run safety check: {e.message}")
+        _logger.error(f"Failed to run safety check: {e}")
         return  # Assume safe
 
     if not res:

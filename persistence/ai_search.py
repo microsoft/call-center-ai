@@ -77,9 +77,9 @@ class AiSearchSearch(ISearch):
                     except ValidationError as e:
                         _logger.warn(f"Error parsing training: {e.errors()}")
         except HttpResponseError as e:
-            _logger.error(f"Error requesting AI Search, {e.message}")
+            _logger.error(f"Error requesting AI Search, {e}")
         except ServiceRequestError as e:
-            _logger.error(f"Error connecting to AI Search, {e.message}")
+            _logger.error(f"Error connecting to AI Search, {e}")
         return trainings or None
 
     @asynccontextmanager
