@@ -63,7 +63,14 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 
 
 class SafetyCheckError(Exception):
-    pass
+    message: str
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return self.message
 
 
 @retry(
@@ -139,8 +146,7 @@ async def completion_sync(
     content = res.choices[0].message.content
 
     if not json_output:
-        if not await safety_check(content):
-            raise SafetyCheckError()
+        await safety_check(content)
 
     return content
 
@@ -165,23 +171,23 @@ async def completion_model_sync(
     return model.model_validate_json(res)
 
 
-async def safety_check(text: str) -> bool:
+async def safety_check(text: str) -> None:
     """
-    Returns `True` if the text is safe, `False` otherwise.
+    Raise `SafetyCheckError` if the text is safe, nothing otherwise.
 
     Text can be returned both safe and censored, before containing unsafe content.
     """
     if not text:
-        return True
+        return
     try:
         res = await _contentsafety_analysis(text)
     except HttpResponseError as e:
         _logger.error(f"Failed to run safety check: {e.message}")
-        return True  # Assume safe
+        return  # Assume safe
 
     if not res:
         _logger.error("Failed to run safety check: No result")
-        return True  # Assume safe
+        return  # Assume safe
 
     for match in res.blocklists_match or []:
         _logger.debug(f"Matched blocklist item: {match.blocklist_item_text}")
@@ -190,22 +196,33 @@ async def safety_check(text: str) -> bool:
         )
 
     hate_result = _contentsafety_category_test(
-        res.categories_analysis, TextCategory.HATE
+        res.categories_analysis,
+        TextCategory.HATE,
+        CONFIG.content_safety.category_hate_score,
     )
     self_harm_result = _contentsafety_category_test(
-        res.categories_analysis, TextCategory.SELF_HARM
+        res.categories_analysis,
+        TextCategory.SELF_HARM,
+        CONFIG.content_safety.category_self_harm_score,
     )
     sexual_result = _contentsafety_category_test(
-        res.categories_analysis, TextCategory.SEXUAL
+        res.categories_analysis,
+        TextCategory.SEXUAL,
+        CONFIG.content_safety.category_sexual_score,
     )
     violence_result = _contentsafety_category_test(
-        res.categories_analysis, TextCategory.VIOLENCE
+        res.categories_analysis,
+        TextCategory.VIOLENCE,
+        CONFIG.content_safety.category_violence_score,
     )
 
     safety = hate_result and self_harm_result and sexual_result and violence_result
     _logger.debug(f'Text safety "{safety}" for text: {text}')
 
-    return safety
+    if not safety:
+        raise SafetyCheckError(
+            f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}"
+        )
 
 
 async def close() -> None:
@@ -224,21 +241,28 @@ async def close() -> None:
 async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
     return await _contentsafety.analyze_text(
         AnalyzeTextOptions(
-            text=text,
             blocklist_names=CONFIG.content_safety.blocklists,
             halt_on_blocklist_hit=False,
+            output_type="EightSeverityLevels",
+            text=text,
         )
     )
 
 
 def _contentsafety_category_test(
-    res: List[TextCategoriesAnalysis], category: TextCategory
+    res: List[TextCategoriesAnalysis],
+    category: TextCategory,
+    score: int,
 ) -> bool:
     """
     Returns `True` if the category is safe or the severity is low, `False` otherwise, meaning the category is unsafe.
     """
+    if score == 0:
+        return True  # No need to check severity
+
     detection = next(item for item in res if item.category == category)
-    if detection and detection.severity and detection.severity > 2:
+
+    if detection and detection.severity and detection.severity > score:
         _logger.debug(f"Matched {category} with severity {detection.severity}")
         return False
     return True
