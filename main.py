@@ -440,8 +440,10 @@ async def intelligence(
     async def tts_callback(text: str, style: MessageStyle) -> None:
         nonlocal has_started
 
-        if not await safety_check(text):
-            _logger.warn(f"Unsafe text detected, not playing ({call.call_id})")
+        try:
+            await safety_check(text)
+        except SafetyCheckError as e:
+            _logger.warn(f"Unsafe text detected, not playing ({call.call_id}): {e}")
             return
 
         has_started = True
@@ -626,8 +628,8 @@ async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str
         )
     except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
-    except SafetyCheckError:
-        _logger.warn(f"Safety check error", exc_info=True)
+    except SafetyCheckError as e:
+        _logger.warn(f"OpenAI safety check error: {e}")
 
     return content
 

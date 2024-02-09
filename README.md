@@ -401,6 +401,23 @@ prompts:
       {reminders}
 ```
 
+### Customize the moderation levels
+
+Levels are defined for each category of Content Safety. The higher the score, the more strict the moderation is, from 0 to 7.
+
+Moderation is applied on all bot data, including the web page and the conversation.
+
+```yaml
+# config.yaml
+[...]
+
+content_safety:
+  category_hate_score: 0
+  category_self_harm_score: 0
+  category_sexual_score: 5
+  category_violence_score: 0
+```
+
 ### Customize the claim data schema
 
 Customization of the data schema is not supported yet through the configuration file. However, you can customize the data schema by modifying the application source code.
