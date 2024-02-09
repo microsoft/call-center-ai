@@ -2,7 +2,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 
-class Action(str, Enum):
+class ActionEnum(str, Enum):
     CASE_CLOSED = "case_closed"
     COMMERCIAL_OFFER = "commercial_offer"
     CUSTOMER_WILL_SEND_INFO = "customer_will_send_info"
@@ -12,5 +12,5 @@ class Action(str, Enum):
 
 
 class NextModel(BaseModel):
-    action: Action
+    action: ActionEnum
     justification: str

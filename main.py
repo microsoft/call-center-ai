@@ -27,11 +27,11 @@ from azure.identity import DefaultAzureCredential
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
-from helpers.config_models.database import Mode as DatabaseMode
+from helpers.config_models.database import ModeEnum as DatabaseMode
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from models.action import ActionModel, Indent as IndentAction
+from models.action import ActionModel, IndentEnum as IndentAction
 from models.call import CallModel
-from models.next import Action as NextAction
+from models.next import ActionEnum as NextAction
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
@@ -53,10 +53,10 @@ import asyncio
 import html
 import re
 from models.message import (
-    Action as MessageAction,
+    ActionEnum as MessageAction,
     MessageModel,
-    Persona as MessagePersona,
-    Style as MessageStyle,
+    PersonaEnum as MessagePersona,
+    StyleEnum as MessageStyle,
     ToolModel as MessageToolModel,
 )
 from contextlib import asynccontextmanager
@@ -133,7 +133,7 @@ MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
 
-class Context(str, Enum):
+class ContextEnum(str, Enum):
     TRANSFER_FAILED = "transfer_failed"
     CONNECT_AGENT = "connect_agent"
     GOODBYE = "goodbye"
@@ -357,7 +357,7 @@ async def communication_event_worker(
                 await handle_play(
                     call=call,
                     client=client,
-                    context=Context.GOODBYE,
+                    context=ContextEnum.GOODBYE,
                     text=CONFIG.prompts.tts.goodbye(),
                 )
 
@@ -373,13 +373,13 @@ async def communication_event_worker(
         _logger.debug(f"Play completed ({call.call_id})")
 
         if (
-            operation_context == Context.TRANSFER_FAILED
-            or operation_context == Context.GOODBYE
+            operation_context == ContextEnum.TRANSFER_FAILED
+            or operation_context == ContextEnum.GOODBYE
         ):  # Call ended
             _logger.info(f"Ending call ({call.call_id})")
             await handle_hangup(call=call, client=client)
 
-        elif operation_context == Context.CONNECT_AGENT:  # Call transfer
+        elif operation_context == ContextEnum.CONNECT_AGENT:  # Call transfer
             _logger.info(f"Initiating transfer call initiated ({call.call_id})")
             agent_caller = PhoneNumberIdentifier(
                 str(CONFIG.workflow.agent_phone_number)
@@ -420,7 +420,7 @@ async def communication_event_worker(
         await handle_play(
             call=call,
             client=client,
-            context=Context.TRANSFER_FAILED,
+            context=ContextEnum.TRANSFER_FAILED,
             text=CONFIG.prompts.tts.calltransfer_failure(),
         )
 
@@ -523,7 +523,7 @@ async def intelligence(
         await handle_play(
             call=call,
             client=client,
-            context=Context.CONNECT_AGENT,
+            context=ContextEnum.CONNECT_AGENT,
             text=CONFIG.prompts.tts.end_call_to_connect_agent(),
         )
 
@@ -531,7 +531,7 @@ async def intelligence(
         await handle_play(
             call=call,
             client=client,
-            context=Context.GOODBYE,
+            context=ContextEnum.GOODBYE,
             text=CONFIG.prompts.tts.goodbye(),
         )
 

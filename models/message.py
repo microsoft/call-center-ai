@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List
 
 
-class Style(str, Enum):
+class StyleEnum(str, Enum):
     """
     Voice styles the Azure AI Speech Service supports.
 
@@ -18,14 +18,14 @@ class Style(str, Enum):
     SAD = "sad"
 
 
-class Action(str, Enum):
+class ActionEnum(str, Enum):
     CALL = "call"
     HANGUP = "hangup"
     SMS = "sms"
     TALK = "talk"
 
 
-class Persona(str, Enum):
+class PersonaEnum(str, Enum):
     ASSISTANT = "assistant"
     HUMAN = "human"
     TOOL = "tool"
@@ -42,8 +42,8 @@ class MessageModel(BaseModel):
     # Immutable fields
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
     # Editable fields
-    action: Action = Action.TALK
+    action: ActionEnum = ActionEnum.TALK
     content: str
-    persona: Persona
-    style: Style = Style.NONE
+    persona: PersonaEnum
+    style: StyleEnum = StyleEnum.NONE
     tool_calls: List[ToolModel] = []

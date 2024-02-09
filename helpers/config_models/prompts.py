@@ -4,12 +4,13 @@ from functools import cached_property
 from logging import Logger
 from models.claim import ClaimModel
 from models.message import (
-    Action as MessageAction,
+    ActionEnum as MessageAction,
     MessageModel,
-    Persona as MessagePersona,
-    Style as MessageStyle,
+    PersonaEnum as MessagePersona,
+    StyleEnum as MessageStyle,
 )
 from models.next import Action as NextAction
+from models.next import ActionEnum as NextAction
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import computed_field, BaseModel
