@@ -4,7 +4,7 @@ azure-ai-contentsafety==1.0.0
 azure-communication-callautomation==1.1.0
 azure-communication-sms==1.0.1
 azure-cosmos==4.5.1
-azure-eventgrid==4.16.0
+azure-eventgrid==4.17.0
 azure-identity==1.15.0  # Required for all Azure SDKs
 azure-search-documents==11.6.0b1
 email-validator==2.1.0.post1  # Required for pydantic
