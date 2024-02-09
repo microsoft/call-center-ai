@@ -2,7 +2,7 @@ from enum import Enum
 from pydantic_settings import BaseSettings
 
 
-class LoggingLevel(str, Enum):
+class LoggingLevelEnum(str, Enum):
     # Copied from https://docs.python.org/3.12/library/logging.html#logging-levels
     CRITICAL = "CRITICAL"
     DEBUG = "DEBUG"
@@ -13,8 +13,8 @@ class LoggingLevel(str, Enum):
 
 
 class LoggingMonitoringModel(BaseSettings):
-    app_level: LoggingLevel = LoggingLevel.INFO
-    sys_level: LoggingLevel = LoggingLevel.WARNING
+    app_level: LoggingLevelEnum = LoggingLevelEnum.INFO
+    sys_level: LoggingLevelEnum = LoggingLevelEnum.WARNING
 
 
 class MonitoringModel(BaseSettings):

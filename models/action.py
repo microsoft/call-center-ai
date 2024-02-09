@@ -2,7 +2,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 
-class Indent(str, Enum):
+class IndentEnum(str, Enum):
     CONTINUE = "continue"
     END_CALL = "end_call"
     NEW_CLAIM = "new_claim"
@@ -13,4 +13,4 @@ class Indent(str, Enum):
 
 class ActionModel(BaseModel):
     content: str
-    intent: Indent
+    intent: IndentEnum

@@ -4,7 +4,6 @@ param agentPhoneNumber string
 param botCompany string
 param botName string
 param botPhoneNumber string
-param botVoiceName string
 param gptModel string
 param gptVersion string
 param imageVersion string
@@ -38,12 +37,12 @@ var config = {
     agent_phone_number: agentPhoneNumber
     bot_company: botCompany
     bot_name: botName
+    lang: loadYamlContent('../config.yaml').workflow.lang
   }
   communication_service: {
     access_key: communication.listKeys().primaryKey
     endpoint: communication.properties.hostName
     phone_number: botPhoneNumber
-    voice_name: botVoiceName
   }
   cognitive_service: {
     endpoint: cognitiveCommunication.properties.endpoint
@@ -68,6 +67,10 @@ var config = {
     llm: loadYamlContent('../config.yaml').prompts.llm
     tts: loadYamlContent('../config.yaml').prompts.tts
   }
+  ai_translation: {
+    access_key: translate.listKeys().key1
+    endpoint: 'https://${translate.name}.cognitiveservices.azure.com/'
+  }
 }
 
 output appUrl string = appUrl
@@ -81,7 +84,7 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10
   properties: {
     retentionInDays: 30
     sku: {
-      name: 'PerGB2018'
+      name: 'PerGB2018'  // Pay-as-you-go
     }
   }
 }
@@ -221,7 +224,7 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01
   location: location
   tags: tags
   sku: {
-    name: 'S0'
+    name: 'S0'  // Only one available
   }
   kind: 'CognitiveServices'
   properties: {
@@ -234,7 +237,7 @@ resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2023-10-01-prev
   location: location
   tags: tags
   sku: {
-    name: 'S0'
+    name: 'S0'  // Pay-as-you-go
   }
   kind: 'FormRecognizer'
   properties: {
@@ -247,7 +250,7 @@ resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01
   location: location
   tags: tags
   sku: {
-    name: 'S0'
+    name: 'S0'  // Pay-as-you-go
   }
   kind: 'ContentSafety'
   properties: {
@@ -278,7 +281,7 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-previe
   location: openaiLocation
   tags: tags
   sku: {
-    name: 'S0'
+    name: 'S0'  // Pay-as-you-go
   }
   kind: 'OpenAI'
   properties: {
@@ -291,7 +294,7 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   name: gptModelFullName
   sku: {
     capacity: 50
-    name: 'Standard'
+    name: 'Standard'  // Pay-as-you-go
   }
   properties: {
     // raiPolicyName: contentfilter.name
@@ -367,7 +370,7 @@ resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   name: adaModelFullName
   sku: {
     capacity: 50
-    name: 'Standard'
+    name: 'Standard'  // Pay-as-you-go
   }
   properties: {
     // raiPolicyName: contentfilter.name
@@ -460,12 +463,25 @@ resource search 'Microsoft.Search/searchServices@2023-11-01' = {
   location: searchLocation
   tags: tags
   sku: {
-    name: 'basic'
+    name: 'basic'  // Smallest with semantic search
   }
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
     semanticSearch: 'standard'
+  }
+}
+
+resource translate 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+  name: '${prefix}-translate'
+  location: location
+  tags: tags
+  sku: {
+    name: 'S1'  // Pay-as-you-go
+  }
+  kind: 'TextTranslation'
+  properties: {
+    customSubDomainName: '${prefix}-translate'
   }
 }

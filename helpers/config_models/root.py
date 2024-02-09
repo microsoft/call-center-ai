@@ -1,4 +1,5 @@
 from helpers.config_models.ai_search import AiSearchModel
+from helpers.config_models.ai_translation import AiTranslationModel
 from helpers.config_models.api import ApiModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_service import CommunicationServiceModel
@@ -18,6 +19,7 @@ class RootModel(BaseSettings, env_prefix=""):
     version: str = Field(frozen=True)
     # Editable fields
     ai_search: AiSearchModel
+    ai_translation: AiTranslationModel
     api: ApiModel
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel

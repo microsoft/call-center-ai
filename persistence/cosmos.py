@@ -39,7 +39,7 @@ class CosmosStore(IStore):
         except StopAsyncIteration:
             return None
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB, {e.message}")
+            _logger.error(f"Error accessing CosmosDB, {e}")
 
     async def call_aset(self, call: CallModel) -> bool:
         data = jsonable_encoder(call.model_dump(), exclude_none=True)
@@ -50,7 +50,7 @@ class CosmosStore(IStore):
                 await db.upsert_item(body=data)
             return True
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e.message}")
+            _logger.error(f"Error accessing CosmosDB: {e}")
             return False
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
@@ -84,7 +84,7 @@ class CosmosStore(IStore):
         except StopAsyncIteration:
             return None
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e.message}")
+            _logger.error(f"Error accessing CosmosDB: {e}")
 
     async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
@@ -108,7 +108,7 @@ class CosmosStore(IStore):
                     except ValidationError as e:
                         _logger.warn(f"Error parsing call: {e.errors()}")
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB, {e.message}")
+            _logger.error(f"Error accessing CosmosDB, {e}")
         return calls or None
 
     @asynccontextmanager

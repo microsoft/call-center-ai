@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 
-class Mode(str, Enum):
+class ModeEnum(str, Enum):
     COSMOS_DB = "cosmos_db"
     SQLITE = "sqlite"
 
@@ -32,17 +32,17 @@ class SqliteModel(BaseSettings):
 
 class DatabaseModel(BaseSettings):
     cosmos_db: Optional[CosmosDbModel] = None
-    mode: Mode = Mode.SQLITE
+    mode: ModeEnum = ModeEnum.SQLITE
     sqlite: Optional[SqliteModel] = None
 
     @validator("cosmos_db", always=True)
     def check_cosmos_db(cls, v, values, **kwargs):
-        if not v and values.get("mode", None) == Mode.COSMOS_DB:
+        if not v and values.get("mode", None) == ModeEnum.COSMOS_DB:
             raise ValueError("Cosmos DB config required")
         return v
 
     @validator("sqlite", always=True)
     def check_sqlite(cls, v, values, **kwargs):
-        if not v and values.get("mode", None) == Mode.SQLITE:
+        if not v and values.get("mode", None) == ModeEnum.SQLITE:
             raise ValueError("Sqlite config required")
         return v
