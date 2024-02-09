@@ -59,8 +59,14 @@ from models.message import (
     StyleEnum as MessageStyle,
     ToolModel as MessageToolModel,
 )
-from contextlib import asynccontextmanager
-from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close, completion_model_sync, ModelType, SafetyCheckError
+from helpers.llm import (
+    completion_stream,
+    completion_sync,
+    safety_check,
+    completion_model_sync,
+    ModelType,
+    SafetyCheckError,
+)
 from models.claim import ClaimModel
 from pydantic import ValidationError
 from uuid import UUID
@@ -100,13 +106,6 @@ db = (
 )
 search = AiSearchSearch(CONFIG.ai_search)
 
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    yield
-    await llm_close()
-
-
 # FastAPI
 _logger.info(f'Using root path "{CONFIG.api.root_path}"')
 api = FastAPI(
@@ -118,7 +117,6 @@ api = FastAPI(
         "name": "Apache-2.0",
         "url": "https://github.com/clemlesne/claim-ai-phone-bot/blob/master/LICENCE",
     },
-    lifespan=lifespan,
     root_path=CONFIG.api.root_path,
     title="claim-ai-phone-bot",
     version=CONFIG.version,
