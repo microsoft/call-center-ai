@@ -19,4 +19,4 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.1
 pyyaml==6.0.1
 tenacity==8.2.3
-uvicorn==0.25.0
+uvicorn==0.27.0.post1
