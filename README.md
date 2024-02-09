@@ -411,18 +411,26 @@ The data schema is defined in `models/claim.py`. All the fields are required to 
 # models/claim.py
 class ClaimModel(BaseModel):
     # Immutable fields
-    [...]
+    # [...]
     # Editable fields
-    employee_department: Optional[str] = None
-    employee_email: Optional[str] = None
-    employee_location: Optional[str] = None
-    employee_name: Optional[str] = None
-    employee_phone_number: Optional[str] = None
-    issue_business_impact: Optional[str] = None
-    issue_date_time: Optional[str] = None
+    additional_notes: Optional[str] = None
+    device_info: Optional[str] = None
+    error_messages: Optional[str] = None
+    follow_up_required: Optional[bool] = None
+    incident_date_time: Optional[datetime] = None
     issue_description: Optional[str] = None
-    issue_error_messages: Optional[str] = None
-    issue_reproduction_steps: Optional[str] = None
+    resolution_details: Optional[str] = None
+    steps_taken: Optional[str] = None
+    ticket_id: Optional[str] = None
+    user_email: Optional[EmailStr] = None
+    user_name: Optional[str] = None
+    user_phone: Optional[PhoneNumber] = None
+
+    # Depending on requirements, you might also include fields for:
+    # - Software version
+    # - Operating system
+    # - Network details (if relevant to the issue)
+    # - Any attachments like screenshots or log files (consider how to handle binary data)
 
     # Built-in functions
     [...]

@@ -363,7 +363,7 @@ async def communication_event_worker(
 
         else:  # Other recognition error
             _logger.warn(f"Recognition failed with unknown error code {error_code}, answering with default error ({call.call_id})")
-            await handle_play(
+            await handle_recognize_text(
                 call=call,
                 client=client,
                 text=CONFIG.prompts.tts.error(),
