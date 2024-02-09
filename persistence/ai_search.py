@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.logging import build_logger
+from models.call import CallModel
 from models.training import TrainingModel
 from persistence.isearch import ISearch
 from pydantic import ValidationError
@@ -25,7 +26,9 @@ class AiSearchSearch(ISearch):
         )
         self._config = config
 
-    async def training_asearch_all(self, text: str) -> Optional[List[TrainingModel]]:
+    async def training_asearch_all(
+        self, text: str, call: CallModel
+    ) -> Optional[List[TrainingModel]]:
         _logger.debug(f'Searching training data for "{text}"')
         if not text:
             return None
@@ -42,7 +45,7 @@ class AiSearchSearch(ISearch):
                     ],
                     search_text=text,
                     # Spell correction
-                    query_language=CONFIG.workflow.conversation_lang,
+                    query_language=call.lang.short_code,
                     query_speller="lexicon",
                     # Vector search
                     vector_queries=[

@@ -42,7 +42,6 @@ module app 'app.bicep' = {
     botCompany: botCompany
     botName: botName
     botPhoneNumber: botPhoneNumber
-    botVoiceName: 'fr-FR-DeniseNeural'
     gptModel: gptModel
     gptVersion: gptVersion
     imageVersion: imageVersion

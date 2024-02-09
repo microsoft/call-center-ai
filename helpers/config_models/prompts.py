@@ -9,7 +9,8 @@ from models.message import (
     PersonaEnum as MessagePersona,
     StyleEnum as MessageStyle,
 )
-from models.next import Action as NextAction
+from azure.core.exceptions import HttpResponseError
+from models.call import CallModel
 from models.next import ActionEnum as NextAction
 from models.reminder import ReminderModel
 from models.training import TrainingModel
@@ -78,7 +79,7 @@ class LlmModel(BaseSettings):
 
         # Rules
         - Answer directly to the customer's questions
-        - Answers in {conversation_lang}, even if the customer speaks in English
+        - Answers in {default_lang}, even if the customer speaks another language
         - Aways answer with at least one full sentence
         - Be proactive in the reminders you create, customer assistance is your priority
         - Do not ask for something which is already stored in the claim
@@ -138,7 +139,7 @@ class LlmModel(BaseSettings):
         Assistant will summarize the call with the customer in a single SMS. The customer cannot reply to this SMS.
 
         # Rules
-        - Answers in {conversation_lang}, even if the customer speaks in English
+        - Answers in {default_lang}, even if the customer speaks another language
         - Briefly summarize the call with the customer
         - Can include personal details about the customer
         - Cannot talk about any topic besides insurance claims
@@ -165,7 +166,7 @@ class LlmModel(BaseSettings):
         Assistant will summarize the call with the customer in a few words. The customer cannot reply to this message, but will read it in their web portal.
 
         # Rules
-        - Answers in {conversation_lang}, even if the customer speaks in English
+        - Answers in {default_lang}, even if the customer speaks another language
         - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
         - Prefix the answer with a determiner (e.g., "the theft of your car", "your broken window")
         - Consider all the conversation history, from the beginning
@@ -192,7 +193,7 @@ class LlmModel(BaseSettings):
         Assistant will summarize the call with the customer in a paragraph. The customer cannot reply to this message, but will read it in their web portal.
 
         # Rules
-        - Answers in {conversation_lang}, even if the customer speaks in English
+        - Answers in {default_lang}, even if the customer speaks another language
         - Do not include details of the call process
         - Do not include personal details (e.g., name, phone number, address)
         - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
@@ -309,80 +310,48 @@ class LlmModel(BaseSettings):
             )
         )
 
-    def chat_system(
-        self,
-        claim: ClaimModel,
-        reminders: List[ReminderModel],
-        trainings: List[TrainingModel],
-    ) -> str:
+    def chat_system(self, call: CallModel, trainings: List[TrainingModel]) -> str:
         from helpers.config import CONFIG
 
         return self._return(
             self.chat_system_tpl,
             actions=", ".join([action.value for action in MessageAction]),
             bot_company=CONFIG.workflow.bot_company,
-            claim=_pydantic_to_str(claim),
-            conversation_lang=CONFIG.workflow.conversation_lang,
-            reminders=_pydantic_to_str(reminders),
+            claim=_pydantic_to_str(call.claim),
+            default_lang=call.lang.human_name,
+            reminders=_pydantic_to_str(call.reminders),
             styles=", ".join([style.value for style in MessageStyle]),
             trainings=trainings,
         )
 
-    def sms_summary_system(
-        self,
-        claim: ClaimModel,
-        messages: List[MessageModel],
-        reminders: List[ReminderModel],
-    ) -> str:
-        from helpers.config import CONFIG
-
+    def sms_summary_system(self, call: CallModel) -> str:
         return self._return(
             self.sms_summary_system_tpl,
-            claim=_pydantic_to_str(claim),
-            conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(messages),
-            reminders=_pydantic_to_str(reminders),
+            claim=_pydantic_to_str(call.claim),
+            default_lang=call.lang.human_name,
+            messages=_pydantic_to_str(call.messages),
+            reminders=_pydantic_to_str(call.reminders),
         )
 
-    def synthesis_short_system(
-        self,
-        claim: ClaimModel,
-        messages: List[MessageModel],
-        reminders: List[ReminderModel],
-    ) -> str:
-        from helpers.config import CONFIG
-
+    def synthesis_short_system(self, call: CallModel) -> str:
         return self._return(
             self.synthesis_short_system_tpl,
-            claim=_pydantic_to_str(claim),
-            conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(messages),
-            reminders=_pydantic_to_str(reminders),
+            claim=_pydantic_to_str(call.claim),
+            default_lang=call.lang.human_name,
+            messages=_pydantic_to_str(call.messages),
+            reminders=_pydantic_to_str(call.reminders),
         )
 
-    def synthesis_long_system(
-        self,
-        claim: ClaimModel,
-        messages: List[MessageModel],
-        reminders: List[ReminderModel],
-    ) -> str:
-        from helpers.config import CONFIG
-
+    def synthesis_long_system(self, call: CallModel) -> str:
         return self._return(
             self.synthesis_long_system_tpl,
-            claim=_pydantic_to_str(claim),
-            conversation_lang=CONFIG.workflow.conversation_lang,
-            messages=_pydantic_to_str(messages),
-            reminders=_pydantic_to_str(reminders),
+            claim=_pydantic_to_str(call.claim),
+            default_lang=call.lang.human_name,
+            messages=_pydantic_to_str(call.messages),
+            reminders=_pydantic_to_str(call.reminders),
         )
 
-    def citations_system(
-        self,
-        claim: ClaimModel,
-        messages: List[MessageModel],
-        reminders: List[ReminderModel],
-        text: Optional[str],
-    ) -> Optional[str]:
+    def citations_system(self, call: CallModel, text: Optional[str]) -> Optional[str]:
         """
         Return the formatted prompt. Prompt is used to add citations to the text, without cluttering the content itself.
 
@@ -393,31 +362,26 @@ class LlmModel(BaseSettings):
 
         return self._return(
             self.citations_system_tpl,
-            claim=_pydantic_to_str(claim),
+            claim=_pydantic_to_str(call.claim),
             messages=_pydantic_to_str(
                 [
                     message
-                    for message in messages
+                    for message in call.messages
                     if message.persona is not MessagePersona.TOOL
                 ],
                 exclude={"tool_calls"},
             ),  # Filter out tool messages, to avoid LLM to cite itself
-            reminders=_pydantic_to_str(reminders),
+            reminders=_pydantic_to_str(call.reminders),
             text=text,
         )
 
-    def next_system(
-        self,
-        claim: ClaimModel,
-        messages: List[MessageModel],
-        reminders: List[ReminderModel],
-    ) -> str:
+    def next_system(self, call: CallModel) -> str:
         return self._return(
             self.next_system_tpl,
             actions=", ".join([action.value for action in NextAction]),
-            claim=_pydantic_to_str(claim),
-            messages=_pydantic_to_str(messages),
-            reminders=_pydantic_to_str(reminders),
+            claim=_pydantic_to_str(call.claim),
+            messages=_pydantic_to_str(call.messages),
+            reminders=_pydantic_to_str(call.reminders),
         )
 
     def _return(
@@ -444,83 +408,133 @@ class LlmModel(BaseSettings):
 
 
 class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
-    calltransfer_failure_tpl: str = "Il semble que je ne puisse pas vous mettre en relation avec un agent pour l'instant, mais le prochain agent disponible vous rappellera dès que possible."
-    connect_agent_tpl: str = "Je suis désolé, je n'ai pas été en mesure de répondre à votre demande. Permettez-moi de vous transférer à un agent qui pourra vous aider davantage. Veuillez rester en ligne et je vous recontacterai sous peu."
+    tts_lang: str = "en-US"
+    calltransfer_failure_tpl: str = (
+        "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
+    )
+    connect_agent_tpl: str = (
+        "I'm sorry, I wasn't able to answer your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly."
+    )
     end_call_to_connect_agent_tpl: str = (
-        "Bien sûr, restez en ligne. Je vais vous transférer à un agent."
+        "Of course, stay on the line. I'll transfer you to an agent."
     )
-    error_tpl: str = (
-        "Je suis désolé, j'ai rencontré une erreur. Pouvez-vous répéter votre demande ?"
-    )
+    error_tpl: str = "I'm sorry, I've made a mistake. Could you repeat your request?"
     goodbye_tpl: str = (
-        "Merci de votre appel, j'espère avoir pu vous aider. Vous pouvez rappeler, j'ai tout mémorisé. {bot_company} vous souhaite une excellente journée !"
+        "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
     )
     hello_tpl: str = """
-        Bonjour, je suis {bot_name}, l'assistant virtuel {bot_company} ! Je suis spécialiste des sinistres. Je ne peux pas travailler et écouter simultanément.
+        Hello, I'm {bot_name}, the virtual assistant {bot_company}! I'm a claims specialist. I can't work and listen at the same time.
 
-        Voici comment je fonctionne : pendant que je traite vos informations, vous pourriez entendre une légère musique de fond. Dès que vous entendez le bip, c'est à vous de parler. N'hésitez pas à me parler de façon naturelle, je suis conçu pour comprendre vos requêtes.
+        Here's how I work: while I'm processing your information, you might hear some light background music. As soon as you hear the beep, it's your turn to talk. Feel free to speak to me in a natural way - I'm designed to understand your requests.
 
-        Exemples de questions que vous pouvez me poser :
-        - "Je suis tombé de vélo hier, je me suis cassé le bras, ma voisine m'a emmené à l'hôpital"
-        - "J'ai eu un accident ce matin, je faisais des courses"
+        Examples of questions you can ask me:
+        - "I fell off my bike yesterday, broke my arm, my neighbor took me to hospital"
+        - "I had an accident this morning, I was shopping".
 
-        Quel est votre problème ?
+        What's your problem?
 """
-    timeout_silence_tpl: str = "Je suis désolé, je n'ai rien entendu. Si vous avez besoin d'aide, dites-moi comment je peux vous aider."
+    timeout_silence_tpl: str = (
+        "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
+    )
     welcome_back_tpl: str = (
-        "Bonjour, je suis {bot_name}, l'assistant {bot_company} ! Je vois que vous avez déjà appelé il y a moins de {conversation_timeout_hour} heures. Laissez-moi quelques secondes pour récupérer votre dossier…"
+        "Hello, I'm {bot_name}, assistant {bot_company}! I see you've already called less than {conversation_timeout_hour} hours ago. Please allow me a few seconds to retrieve your file…"
     )
     timeout_loading_tpl: str = (
-        "Je mets plus de temps que prévu à vous répondre. Merci de votre patience…"
+        "It's taking me longer than expected to reply. Thank you for your patience…"
     )
+    ivr_language_tpl: str = "To continue in {label}, press {index}."
 
-    def calltransfer_failure(self) -> str:
-        return self._return(self.calltransfer_failure_tpl)
+    async def calltransfer_failure(self, call: CallModel) -> str:
+        return await self._translate(self.calltransfer_failure_tpl, call)
 
-    def connect_agent(self) -> str:
-        return self._return(self.connect_agent_tpl)
+    async def connect_agent(self, call: CallModel) -> str:
+        return await self._translate(self.connect_agent_tpl, call)
 
-    def end_call_to_connect_agent(self) -> str:
-        return self._return(self.end_call_to_connect_agent_tpl)
+    async def end_call_to_connect_agent(self, call: CallModel) -> str:
+        return await self._translate(self.end_call_to_connect_agent_tpl, call)
 
-    def error(self) -> str:
-        return self._return(self.error_tpl)
+    async def error(self, call: CallModel) -> str:
+        return await self._translate(self.error_tpl, call)
 
-    def goodbye(self) -> str:
+    async def goodbye(self, call: CallModel) -> str:
         from helpers.config import CONFIG
 
-        return self._return(
+        return await self._translate(
             self.goodbye_tpl,
+            call,
             bot_company=CONFIG.workflow.bot_company,
         )
 
-    def hello(self) -> str:
+    async def hello(self, call: CallModel) -> str:
         from helpers.config import CONFIG
 
-        return self._return(
+        return await self._translate(
             self.hello_tpl,
+            call,
             bot_company=CONFIG.workflow.bot_company,
             bot_name=CONFIG.workflow.bot_name,
         )
 
-    def timeout_silence(self) -> str:
-        return self._return(self.timeout_silence_tpl)
+    async def timeout_silence(self, call: CallModel) -> str:
+        return await self._translate(self.timeout_silence_tpl, call)
 
-    def welcome_back(self) -> str:
+    async def welcome_back(self, call: CallModel) -> str:
         from helpers.config import CONFIG
 
-        return self._return(
+        return await self._translate(
             self.welcome_back_tpl,
+            call,
             bot_company=CONFIG.workflow.bot_company,
             bot_name=CONFIG.workflow.bot_name,
             conversation_timeout_hour=CONFIG.workflow.conversation_timeout_hour,
         )
 
-    def timeout_loading(self) -> str:
-        return self._return(self.timeout_loading_tpl)
+    async def timeout_loading(self, call: CallModel) -> str:
+        return await self._translate(self.timeout_loading_tpl, call)
+
+    async def ivr_language(self, call: CallModel) -> str:
+        from helpers.config import CONFIG
+
+        res = ""
+        for i, lang in enumerate(CONFIG.workflow.lang.availables):
+            res += (
+                self._return(
+                    self.ivr_language_tpl,
+                    index=i + 1,
+                    label=lang.human_name,
+                )
+                + " "
+            )
+        return await self._translate(res.strip(), call)
 
     def _return(self, prompt_tpl: str, **kwargs) -> str:
         return dedent(prompt_tpl.format(**kwargs)).strip()
+
+    async def _translate(self, prompt_tpl: str, call: CallModel, **kwargs) -> str:
+        """
+        Format the prompt and translate it to the TTS language.
+
+        If the translation fails, the initial prompt is returned.
+        """
+        from helpers.translation import translate_text
+
+        initial = self._return(prompt_tpl, **kwargs)
+        translation = None
+        try:
+            translation = await translate_text(
+                initial, self.tts_lang, call.lang.short_code
+            )
+        except HttpResponseError as e:
+            self._logger.warning(f"Failed to translate TTS prompt: {e}")
+            pass
+        return translation or initial
+
+    @computed_field
+    @cached_property
+    def _logger(self) -> Logger:
+        from helpers.logging import build_logger
+
+        return build_logger(__name__)
 
 
 class PromptsModel(BaseSettings, env_prefix="prompts_"):

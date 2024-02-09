@@ -12,8 +12,10 @@ from typing import Any, Callable, Coroutine, Generator, List, Optional, Tuple, T
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
+    DtmfTone,
     FileSource,
     PhoneNumberIdentifier,
+    RecognitionChoice,
     RecognizeInputType,
     SsmlSource,
 )
@@ -28,6 +30,7 @@ from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config_models.database import ModeEnum as DatabaseMode
+from helpers.logging import build_logger
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, IndentEnum as IndentAction
 from models.call import CallModel
@@ -240,14 +243,24 @@ async def call_inbound_post(request: Request):
 
             _logger.debug(f"Incoming call handler caller ID: {phone_number}")
             call_context = event.data["incomingCallContext"]
-            answer_call_result = call_automation_client.answer_call(
-                callback_url=await callback_url(phone_number),
-                cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
-                incoming_call_context=call_context,
-            )
-            _logger.info(
-                f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
-            )
+
+            try:
+                answer_call_result = call_automation_client.answer_call(
+                    callback_url=await callback_url(phone_number),
+                    cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
+                    incoming_call_context=call_context,
+                )
+                _logger.info(
+                    f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
+                )
+            except HttpResponseError as e:
+                if (
+                    "lifetime validation of the signed http request failed"
+                    in e.message.lower()
+                ):
+                    _logger.debug("Old call event received, ignoring")
+                else:
+                    raise e
 
 
 @api.post(
@@ -297,21 +310,12 @@ async def communication_event_worker(
             )
         )
 
-        if len(call.messages) == 1:  # First call
-            await asyncio.sleep(1)  # Wait for the call to be ready, sometimes an error "(8501) Action is invalid when call is not in Established state" is raised
-            await handle_recognize_text(
-                call=call,
-                client=client,
-                text=CONFIG.prompts.tts.hello(),
-            )
-
-        else:  # Returning call
-            await handle_play(
-                call=call,
-                client=client,
-                text=CONFIG.prompts.tts.welcome_back(),
-            )
-            call = await intelligence(background_tasks, call, client)
+        await asyncio.sleep(
+            0.5
+        )  # Wait for the call to be ready, sometimes an error "(8501) Action is invalid when call is not in Established state" is raised
+        await handle_ivr_language(
+            call=call, client=client
+        )  # Every time a call is answered, confirm the language
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         _logger.info(f"Call disconnected ({call.call_id})")
@@ -332,6 +336,44 @@ async def communication_event_worker(
                 )
                 call = await intelligence(background_tasks, call, client)
 
+        elif recognition_result == "choices":  # Handle IVR
+            label_detected = event.data["choiceResult"]["label"]
+
+            try:
+                lang = next(
+                    (
+                        x
+                        for x in CONFIG.workflow.lang.availables
+                        if x.short_code == label_detected
+                    ),
+                    CONFIG.workflow.lang.default_lang,
+                )
+                _logger.info(f"IVR recognition ({call.call_id}): {lang}")
+            except ValueError:
+                _logger.warn(f"Unknown IVR {label_detected}, code not implemented")
+                return
+
+            _logger.info(f"Setting call language to {lang} ({call.call_id})")
+            call.lang = lang
+            await db.call_aset(
+                call
+            )  # Persist language change, if the user calls back before the first message, the language will be set
+
+            if len(call.messages) == 1:  # First call
+                await handle_recognize_text(
+                    call=call,
+                    client=client,
+                    text=await CONFIG.prompts.tts.hello(call),
+                )
+
+            if len(call.messages) > 1:  # Returning call
+                await handle_play(
+                    call=call,
+                    client=client,
+                    text=await CONFIG.prompts.tts.welcome_back(call),
+                )
+                call = await intelligence(background_tasks, call, client)
+
     elif (
         event_type == "Microsoft.Communication.RecognizeFailed"
     ):  # Speech recognition failed
@@ -348,7 +390,7 @@ async def communication_event_worker(
                 await handle_recognize_text(
                     call=call,
                     client=client,
-                    text=CONFIG.prompts.tts.timeout_silence(),
+                    text=await CONFIG.prompts.tts.timeout_silence(call),
                 )
                 call.recognition_retry += 1
             else:
@@ -356,15 +398,20 @@ async def communication_event_worker(
                     call=call,
                     client=client,
                     context=ContextEnum.GOODBYE,
-                    text=CONFIG.prompts.tts.goodbye(),
+                    text=await CONFIG.prompts.tts.goodbye(call),
                 )
 
         else:  # Other recognition error
-            _logger.warn(f"Recognition failed with unknown error code {error_code}, answering with default error ({call.call_id})")
+            if error_code == 8511:  # Failure while trying to play the prompt
+                _logger.warn(f"Failed to play prompt ({call.call_id})")
+            else:
+                _logger.warn(
+                    f"Recognition failed with unknown error code {error_code}, answering with default error ({call.call_id})"
+                )
             await handle_recognize_text(
                 call=call,
                 client=client,
-                text=CONFIG.prompts.tts.error(),
+                text=await CONFIG.prompts.tts.error(call),
             )
 
     elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
@@ -421,7 +468,7 @@ async def communication_event_worker(
             call=call,
             client=client,
             context=ContextEnum.TRANSFER_FAILED,
-            text=CONFIG.prompts.tts.calltransfer_failure(),
+            text=await CONFIG.prompts.tts.calltransfer_failure(call),
         )
 
     await db.call_aset(call)
@@ -494,7 +541,7 @@ async def intelligence(
                     await handle_play(
                         call=call,
                         client=client,
-                        text=CONFIG.prompts.tts.timeout_loading(),
+                        text=await CONFIG.prompts.tts.timeout_loading(call),
                     )
                 else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
                     await handle_media(
@@ -513,7 +560,7 @@ async def intelligence(
             f"Error loading intelligence ({call.call_id}), answering with default error"
         )
         chat_action = ActionModel(
-            content=CONFIG.prompts.tts.error(),
+            content=await CONFIG.prompts.tts.error(call),
             intent=IndentAction.CONTINUE,
         )
 
@@ -524,7 +571,7 @@ async def intelligence(
             call=call,
             client=client,
             context=ContextEnum.CONNECT_AGENT,
-            text=CONFIG.prompts.tts.end_call_to_connect_agent(),
+            text=await CONFIG.prompts.tts.end_call_to_connect_agent(call),
         )
 
     elif chat_action.intent == IndentAction.END_CALL:
@@ -532,7 +579,7 @@ async def intelligence(
             call=call,
             client=client,
             context=ContextEnum.GOODBYE,
-            text=CONFIG.prompts.tts.goodbye(),
+            text=await CONFIG.prompts.tts.goodbye(call),
         )
 
     elif chat_action.intent in (
@@ -596,7 +643,7 @@ async def handle_play(
             _logger.debug(f"Playing chunk: {chunk}")
             client.play_media(
                 operation_context=context,
-                play_source=audio_from_text(chunk, style),
+                play_source=audio_from_text(chunk, style, call),
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
@@ -725,7 +772,7 @@ async def llm_chat(
         return new_style
 
     async def _error_response() -> Tuple[CallModel, ActionModel]:
-        content = CONFIG.prompts.tts.error()
+        content = await CONFIG.prompts.tts.error(call)
         style = MessageStyle.NONE
         await user_callback(content, style)
         call.messages.append(
@@ -748,7 +795,7 @@ async def llm_chat(
         # Query expansion from last messages
         trainings_tasks = await asyncio.gather(
             *[
-                search.training_asearch_all(message.content)
+                search.training_asearch_all(message.content, call)
                 for message in call.messages[-CONFIG.ai_search.expansion_k :]
             ],
         )
@@ -772,8 +819,7 @@ async def llm_chat(
         ),
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.chat_system(
-                claim=call.claim,
-                reminders=call.reminders,
+                call=call,
                 trainings=trainings,
             ),
             role="system",
@@ -1212,7 +1258,6 @@ async def handle_recognize_text(
             text=text,
         )
 
-    _logger.debug(f"Recognizing ({call.call_id})")
     await handle_recognize_media(
         call=call,
         client=client,
@@ -1229,12 +1274,13 @@ async def handle_recognize_media(
     """
     Play a media to a call participant and start recognizing the response.
     """
+    _logger.debug(f"Recognizing media ({call.call_id})")
     try:
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
             play_prompt=FileSource(url=sound_url),
-            speech_language=CONFIG.workflow.conversation_lang,
+            speech_language=call.lang.short_code,
             target_participant=PhoneNumberIdentifier(call.phone_number),
         )
     except ResourceNotFoundError:
@@ -1299,11 +1345,7 @@ async def post_call_sms(call: CallModel) -> None:
     Send an SMS report to the customer.
     """
     content = await llm_completion(
-        system=CONFIG.prompts.llm.sms_summary_system(
-            claim=call.claim,
-            messages=call.messages,
-            reminders=call.reminders,
-        ),
+        system=CONFIG.prompts.llm.sms_summary_system(call),
         call=call,
     )
 
@@ -1345,7 +1387,7 @@ async def post_call_sms(call: CallModel) -> None:
         )
 
 
-def audio_from_text(text: str, style: MessageStyle) -> SsmlSource:
+def audio_from_text(text: str, style: MessageStyle, call: CallModel) -> SsmlSource:
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
@@ -1357,7 +1399,7 @@ def audio_from_text(text: str, style: MessageStyle) -> SsmlSource:
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
-    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><mstts:express-as style="{style.value}" styledegree="0.5"><prosody rate="0.95">{text}</prosody></mstts:express-as></voice></speak>'
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{call.lang.short_code}"><voice name="{call.lang.voice}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><mstts:express-as style="{style.value}" styledegree="0.5"><prosody rate="0.95">{text}</prosody></mstts:express-as></voice></speak>'
     return SsmlSource(ssml_text=ssml)
 
 
@@ -1383,25 +1425,15 @@ async def post_call_synthesis(call: CallModel) -> None:
     short, long = await asyncio.gather(
         llm_completion(
             call=call,
-            system=CONFIG.prompts.llm.synthesis_short_system(
-                claim=call.claim,
-                messages=call.messages,
-                reminders=call.reminders,
-            ),
+            system=CONFIG.prompts.llm.synthesis_short_system(call),
         ),
         llm_completion(
             call=call,
             system=CONFIG.prompts.llm.citations_system(
-                claim=call.claim,
-                messages=call.messages,
-                reminders=call.reminders,
+                call=call,
                 text=await llm_completion(
                     call=call,
-                    system=CONFIG.prompts.llm.synthesis_long_system(
-                        claim=call.claim,
-                        messages=call.messages,
-                        reminders=call.reminders,
-                    ),
+                    system=CONFIG.prompts.llm.synthesis_long_system(call),
                 ),
             ),
         ),
@@ -1428,11 +1460,7 @@ async def post_call_next(call: CallModel) -> None:
     next = await llm_model(
         call=call,
         model=NextModel,
-        system=CONFIG.prompts.llm.next_system(
-            claim=call.claim,
-            messages=call.messages,
-            reminders=call.reminders,
-        ),
+        system=CONFIG.prompts.llm.next_system(call),
     )
 
     if not next:
@@ -1453,3 +1481,55 @@ def _sentence_split(text: str) -> Generator[str, None, None]:
     for i, separator in enumerate(separators):
         local_content = splits[i] + separator
         yield local_content
+
+
+async def handle_recognize_ivr(
+    client: CallConnectionClient,
+    call: CallModel,
+    text: str,
+    choices: List[RecognitionChoice],
+) -> None:
+    _logger.info(f"Playing text before IVR ({call.call_id}): {text}")
+    _logger.debug(f"Recognizing IVR ({call.call_id})")
+    try:
+        client.start_recognizing_media(
+            choices=choices,
+            input_type=RecognizeInputType.CHOICES,
+            play_prompt=audio_from_text(text, MessageStyle.NONE, call),
+            speech_language=call.lang.short_code,
+            target_participant=PhoneNumberIdentifier(call.phone_number),
+        )
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before recognizing ({call.call_id})")
+
+
+async def handle_ivr_language(
+    client: CallConnectionClient,
+    call: CallModel,
+) -> None:
+    tones = [
+        DtmfTone.ONE,
+        DtmfTone.TWO,
+        DtmfTone.THREE,
+        DtmfTone.FOUR,
+        DtmfTone.FIVE,
+        DtmfTone.SIX,
+        DtmfTone.SEVEN,
+        DtmfTone.EIGHT,
+        DtmfTone.NINE,
+    ]
+    choices = []
+    for i, lang in enumerate(CONFIG.workflow.lang.availables):
+        choices.append(
+            RecognitionChoice(
+                label=lang.short_code,
+                phrases=lang.pronunciations_en,
+                tone=tones[i],
+            )
+        )
+    await handle_recognize_ivr(
+        call=call,
+        client=client,
+        choices=choices,
+        text=await CONFIG.prompts.tts.ivr_language(call),
+    )
