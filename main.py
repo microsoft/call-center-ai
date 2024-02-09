@@ -1494,6 +1494,7 @@ async def handle_recognize_ivr(
     try:
         client.start_recognizing_media(
             choices=choices,
+            end_silence_timeout=10,
             input_type=RecognizeInputType.CHOICES,
             play_prompt=audio_from_text(text, MessageStyle.NONE, call),
             speech_language=call.lang.short_code,
