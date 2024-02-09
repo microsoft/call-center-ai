@@ -9,6 +9,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from helpers.config import CONFIG
+from contextlib import asynccontextmanager
 from helpers.logging import build_logger
 from openai import (
     AsyncAzureOpenAI,
@@ -35,29 +36,8 @@ import asyncio
 
 
 _logger = build_logger(__name__)
-
 _logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")
-_oai = AsyncAzureOpenAI(
-    api_version="2023-12-01-preview",
-    azure_deployment=CONFIG.openai.gpt_deployment,
-    azure_endpoint=CONFIG.openai.endpoint,
-    # Authentication, either RBAC or API key
-    api_key=CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,
-    azure_ad_token_provider=(
-        get_bearer_token_provider(
-            DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
-        )
-        if not CONFIG.openai.api_key
-        else None
-    ),
-)
-
 _logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
-_contentsafety = ContentSafetyClient(
-    credential=AzureKeyCredential(CONFIG.content_safety.access_key.get_secret_value()),
-    endpoint=CONFIG.content_safety.endpoint,
-)
-
 
 ModelType = TypeVar("ModelType", bound=BaseModel)
 
@@ -97,17 +77,18 @@ async def completion_stream(
     if tools:
         extra["tools"] = tools
 
-    stream: AsyncStream[ChatCompletionChunk] = await _oai.chat.completions.create(
-        max_tokens=max_tokens,
-        messages=messages,
-        model=CONFIG.openai.gpt_model,
-        stream=True,
-        temperature=0,  # Most focused and deterministic
-        **extra,
-    )
-    async for chunck in stream:
-        if chunck.choices:  # Skip empty chunks, happens with GPT-4 Turbo
-            yield chunck.choices[0].delta
+    async with _use_oai() as client:
+        stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
+            max_tokens=max_tokens,
+            messages=messages,
+            model=CONFIG.openai.gpt_model,
+            stream=True,
+            temperature=0,  # Most focused and deterministic
+            **extra,
+        )
+        async for chunck in stream:
+            if chunck.choices:  # Skip empty chunks, happens with GPT-4 Turbo
+                yield chunck.choices[0].delta
 
 
 @retry(
@@ -125,7 +106,7 @@ async def completion_sync(
     messages: List[ChatCompletionMessageParam],
     max_tokens: int,
     json_output: bool = False,
-) -> str:
+) -> Optional[str]:
     """
     Returns a completion result.
 
@@ -136,18 +117,22 @@ async def completion_sync(
     if json_output:
         extra["response_format"] = {"type": "json_object"}
 
-    res = await _oai.chat.completions.create(
-        max_tokens=max_tokens,
-        messages=messages,
-        model=CONFIG.openai.gpt_model,
-        temperature=0,  # Most focused and deterministic
-        **extra,
-    )
-    content = res.choices[0].message.content
+    content = None
+    async with _use_oai() as client:
+        res = await client.chat.completions.create(
+            max_tokens=max_tokens,
+            messages=messages,
+            model=CONFIG.openai.gpt_model,
+            temperature=0,  # Most focused and deterministic
+            **extra,
+        )
+        content = res.choices[0].message.content
+
+    if not content:
+        return None
 
     if not json_output:
         await safety_check(content)
-
     return content
 
 
@@ -161,13 +146,15 @@ async def completion_model_sync(
     messages: List[ChatCompletionMessageParam],
     max_tokens: int,
     model: Type[ModelType],
-) -> ModelType:
+) -> Optional[ModelType]:
     """
     Returns an object validated against a given model, from a completion result.
 
     Catch errors for a maximum of 3 times, but not `SafetyCheckError`.
     """
     res = await completion_sync(messages, max_tokens, json_output=True)
+    if not res:
+        return None
     return model.model_validate_json(res)
 
 
@@ -182,7 +169,7 @@ async def safety_check(text: str) -> None:
     try:
         res = await _contentsafety_analysis(text)
     except HttpResponseError as e:
-        _logger.error(f"Failed to run safety check: {e.message}")
+        _logger.error(f"Failed to run safety check: {e}")
         return  # Assume safe
 
     if not res:
@@ -225,13 +212,6 @@ async def safety_check(text: str) -> None:
         )
 
 
-async def close() -> None:
-    """
-    Safely close the OpenAI and Content Safety clients.
-    """
-    await asyncio.gather(_oai.close(), _contentsafety.close())
-
-
 @retry(
     reraise=True,
     retry=retry_if_exception_type(HttpResponseError),
@@ -239,14 +219,15 @@ async def close() -> None:
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
-    return await _contentsafety.analyze_text(
-        AnalyzeTextOptions(
-            blocklist_names=CONFIG.content_safety.blocklists,
-            halt_on_blocklist_hit=False,
-            output_type="EightSeverityLevels",
-            text=text,
+    async with _use_contentsafety() as client:
+        return await client.analyze_text(
+            AnalyzeTextOptions(
+                blocklist_names=CONFIG.content_safety.blocklists,
+                halt_on_blocklist_hit=False,
+                output_type="EightSeverityLevels",
+                text=text,
+            )
         )
-    )
 
 
 def _contentsafety_category_test(
@@ -266,3 +247,37 @@ def _contentsafety_category_test(
         _logger.debug(f"Matched {category} with severity {detection.severity}")
         return False
     return True
+
+
+@asynccontextmanager
+async def _use_oai() -> AsyncGenerator[AsyncAzureOpenAI, None]:
+    client = AsyncAzureOpenAI(
+        api_version="2023-12-01-preview",
+        azure_deployment=CONFIG.openai.gpt_deployment,
+        azure_endpoint=CONFIG.openai.endpoint,
+        # Authentication, either RBAC or API key
+        api_key=(
+            CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None
+        ),
+        azure_ad_token_provider=(
+            get_bearer_token_provider(
+                DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+            )
+            if not CONFIG.openai.api_key
+            else None
+        ),
+    )
+    yield client
+    await client.close()
+
+
+@asynccontextmanager
+async def _use_contentsafety() -> AsyncGenerator[ContentSafetyClient, None]:
+    client = ContentSafetyClient(
+        credential=AzureKeyCredential(
+            CONFIG.content_safety.access_key.get_secret_value()
+        ),
+        endpoint=CONFIG.content_safety.endpoint,
+    )
+    yield client
+    await client.close()

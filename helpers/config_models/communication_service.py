@@ -11,4 +11,3 @@ class CommunicationServiceModel(BaseSettings):
     access_key: SecretStr
     endpoint: str
     phone_number: PhoneNumber
-    voice_name: str

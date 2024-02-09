@@ -12,8 +12,10 @@ from typing import Any, Callable, Coroutine, Generator, List, Optional, Tuple, T
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
+    DtmfTone,
     FileSource,
     PhoneNumberIdentifier,
+    RecognitionChoice,
     RecognizeInputType,
     SsmlSource,
 )
@@ -27,11 +29,12 @@ from azure.identity import DefaultAzureCredential
 from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
-from helpers.config_models.database import Mode as DatabaseMode
+from helpers.config_models.database import ModeEnum as DatabaseMode
+from helpers.logging import build_logger
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from models.action import ActionModel, Indent as IndentAction
+from models.action import ActionModel, IndentEnum as IndentAction
 from models.call import CallModel
-from models.next import Action as NextAction
+from models.next import ActionEnum as NextAction
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
@@ -53,14 +56,20 @@ import asyncio
 import html
 import re
 from models.message import (
-    Action as MessageAction,
+    ActionEnum as MessageAction,
     MessageModel,
-    Persona as MessagePersona,
-    Style as MessageStyle,
+    PersonaEnum as MessagePersona,
+    StyleEnum as MessageStyle,
     ToolModel as MessageToolModel,
 )
-from contextlib import asynccontextmanager
-from helpers.llm import completion_stream, completion_sync, safety_check, close as llm_close, completion_model_sync, ModelType, SafetyCheckError
+from helpers.llm import (
+    completion_stream,
+    completion_sync,
+    safety_check,
+    completion_model_sync,
+    ModelType,
+    SafetyCheckError,
+)
 from models.claim import ClaimModel
 from pydantic import ValidationError
 from uuid import UUID
@@ -76,7 +85,7 @@ jinja = Environment(
 )
 # Jinja custom functions
 jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
-jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else "" # type: ignore
+jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
 
 # Azure Communication Services
 source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
@@ -100,13 +109,6 @@ db = (
 )
 search = AiSearchSearch(CONFIG.ai_search)
 
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    yield
-    await llm_close()
-
-
 # FastAPI
 _logger.info(f'Using root path "{CONFIG.api.root_path}"')
 api = FastAPI(
@@ -118,7 +120,6 @@ api = FastAPI(
         "name": "Apache-2.0",
         "url": "https://github.com/clemlesne/claim-ai-phone-bot/blob/master/LICENCE",
     },
-    lifespan=lifespan,
     root_path=CONFIG.api.root_path,
     title="claim-ai-phone-bot",
     version=CONFIG.version,
@@ -133,7 +134,7 @@ MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 
 
-class Context(str, Enum):
+class ContextEnum(str, Enum):
     TRANSFER_FAILED = "transfer_failed"
     CONNECT_AGENT = "connect_agent"
     GOODBYE = "goodbye"
@@ -242,14 +243,24 @@ async def call_inbound_post(request: Request):
 
             _logger.debug(f"Incoming call handler caller ID: {phone_number}")
             call_context = event.data["incomingCallContext"]
-            answer_call_result = call_automation_client.answer_call(
-                callback_url=await callback_url(phone_number),
-                cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
-                incoming_call_context=call_context,
-            )
-            _logger.info(
-                f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
-            )
+
+            try:
+                answer_call_result = call_automation_client.answer_call(
+                    callback_url=await callback_url(phone_number),
+                    cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
+                    incoming_call_context=call_context,
+                )
+                _logger.info(
+                    f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
+                )
+            except HttpResponseError as e:
+                if (
+                    "lifetime validation of the signed http request failed"
+                    in e.message.lower()
+                ):
+                    _logger.debug("Old call event received, ignoring")
+                else:
+                    raise e
 
 
 @api.post(
@@ -299,21 +310,12 @@ async def communication_event_worker(
             )
         )
 
-        if len(call.messages) == 1:  # First call
-            await asyncio.sleep(1)  # Wait for the call to be ready, sometimes an error "(8501) Action is invalid when call is not in Established state" is raised
-            await handle_recognize_text(
-                call=call,
-                client=client,
-                text=CONFIG.prompts.tts.hello(),
-            )
-
-        else:  # Returning call
-            await handle_play(
-                call=call,
-                client=client,
-                text=CONFIG.prompts.tts.welcome_back(),
-            )
-            call = await intelligence(background_tasks, call, client)
+        await asyncio.sleep(
+            0.5
+        )  # Wait for the call to be ready, sometimes an error "(8501) Action is invalid when call is not in Established state" is raised
+        await handle_ivr_language(
+            call=call, client=client
+        )  # Every time a call is answered, confirm the language
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         _logger.info(f"Call disconnected ({call.call_id})")
@@ -322,13 +324,53 @@ async def communication_event_worker(
     elif (
         event_type == "Microsoft.Communication.RecognizeCompleted"
     ):  # Speech recognized
-        if event.data["recognitionType"] == "speech":
+        recognition_result = event.data["recognitionType"]
+
+        if recognition_result == "speech":  # Handle voice
             speech_text = event.data["speechResult"]["speech"]
-            _logger.info(f"Recognition completed ({call.call_id}): {speech_text}")
+            _logger.info(f"Voice recognition ({call.call_id}): {speech_text}")
 
             if speech_text is not None and len(speech_text) > 0:
                 call.messages.append(
                     MessageModel(content=speech_text, persona=MessagePersona.HUMAN)
+                )
+                call = await intelligence(background_tasks, call, client)
+
+        elif recognition_result == "choices":  # Handle IVR
+            label_detected = event.data["choiceResult"]["label"]
+
+            try:
+                lang = next(
+                    (
+                        x
+                        for x in CONFIG.workflow.lang.availables
+                        if x.short_code == label_detected
+                    ),
+                    CONFIG.workflow.lang.default_lang,
+                )
+                _logger.info(f"IVR recognition ({call.call_id}): {lang}")
+            except ValueError:
+                _logger.warn(f"Unknown IVR {label_detected}, code not implemented")
+                return
+
+            _logger.info(f"Setting call language to {lang} ({call.call_id})")
+            call.lang = lang
+            await db.call_aset(
+                call
+            )  # Persist language change, if the user calls back before the first message, the language will be set
+
+            if len(call.messages) == 1:  # First call
+                await handle_recognize_text(
+                    call=call,
+                    client=client,
+                    text=await CONFIG.prompts.tts.hello(call),
+                )
+
+            if len(call.messages) > 1:  # Returning call
+                await handle_play(
+                    call=call,
+                    client=client,
+                    text=await CONFIG.prompts.tts.welcome_back(call),
                 )
                 call = await intelligence(background_tasks, call, client)
 
@@ -343,43 +385,46 @@ async def communication_event_worker(
         # 8532 = Action failed, inter-digit silence timeout reached
         # 8512 = Unknown internal server error
         # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
-        if (
-            error_code in (8510, 8532, 8512)
-        ):  # Timeout retry
+        if error_code in (8510, 8532, 8512):  # Timeout retry
             if call.recognition_retry < 10:
                 await handle_recognize_text(
                     call=call,
                     client=client,
-                    text=CONFIG.prompts.tts.timeout_silence(),
+                    text=await CONFIG.prompts.tts.timeout_silence(call),
                 )
                 call.recognition_retry += 1
             else:
                 await handle_play(
                     call=call,
                     client=client,
-                    context=Context.GOODBYE,
-                    text=CONFIG.prompts.tts.goodbye(),
+                    context=ContextEnum.GOODBYE,
+                    text=await CONFIG.prompts.tts.goodbye(call),
                 )
 
         else:  # Other recognition error
-            _logger.warn(f"Recognition failed with unknown error code {error_code}, answering with default error ({call.call_id})")
+            if error_code == 8511:  # Failure while trying to play the prompt
+                _logger.warn(f"Failed to play prompt ({call.call_id})")
+            else:
+                _logger.warn(
+                    f"Recognition failed with unknown error code {error_code}, answering with default error ({call.call_id})"
+                )
             await handle_recognize_text(
                 call=call,
                 client=client,
-                text=CONFIG.prompts.tts.error(),
+                text=await CONFIG.prompts.tts.error(call),
             )
 
     elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
         _logger.debug(f"Play completed ({call.call_id})")
 
         if (
-            operation_context == Context.TRANSFER_FAILED
-            or operation_context == Context.GOODBYE
+            operation_context == ContextEnum.TRANSFER_FAILED
+            or operation_context == ContextEnum.GOODBYE
         ):  # Call ended
             _logger.info(f"Ending call ({call.call_id})")
             await handle_hangup(call=call, client=client)
 
-        elif operation_context == Context.CONNECT_AGENT:  # Call transfer
+        elif operation_context == ContextEnum.CONNECT_AGENT:  # Call transfer
             _logger.info(f"Initiating transfer call initiated ({call.call_id})")
             agent_caller = PhoneNumberIdentifier(
                 str(CONFIG.workflow.agent_phone_number)
@@ -398,7 +443,9 @@ async def communication_event_worker(
         elif error_code == 8536:  # Action failed, file downloaded
             _logger.warn("Error during media play, file could not be downloaded")
         elif error_code == 8565:  # Action failed, AI services config
-            _logger.error("Error during media play, impossible to connect with Azure AI services")
+            _logger.error(
+                "Error during media play, impossible to connect with Azure AI services"
+            )
         elif error_code == 9999:  # Unknown
             _logger.warn("Error during media play, unknown internal server error")
         else:
@@ -420,8 +467,8 @@ async def communication_event_worker(
         await handle_play(
             call=call,
             client=client,
-            context=Context.TRANSFER_FAILED,
-            text=CONFIG.prompts.tts.calltransfer_failure(),
+            context=ContextEnum.TRANSFER_FAILED,
+            text=await CONFIG.prompts.tts.calltransfer_failure(call),
         )
 
     await db.call_aset(call)
@@ -494,7 +541,7 @@ async def intelligence(
                     await handle_play(
                         call=call,
                         client=client,
-                        text=CONFIG.prompts.tts.timeout_loading(),
+                        text=await CONFIG.prompts.tts.timeout_loading(call),
                     )
                 else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
                     await handle_media(
@@ -513,7 +560,7 @@ async def intelligence(
             f"Error loading intelligence ({call.call_id}), answering with default error"
         )
         chat_action = ActionModel(
-            content=CONFIG.prompts.tts.error(),
+            content=await CONFIG.prompts.tts.error(call),
             intent=IndentAction.CONTINUE,
         )
 
@@ -523,16 +570,16 @@ async def intelligence(
         await handle_play(
             call=call,
             client=client,
-            context=Context.CONNECT_AGENT,
-            text=CONFIG.prompts.tts.end_call_to_connect_agent(),
+            context=ContextEnum.CONNECT_AGENT,
+            text=await CONFIG.prompts.tts.end_call_to_connect_agent(call),
         )
 
     elif chat_action.intent == IndentAction.END_CALL:
         await handle_play(
             call=call,
             client=client,
-            context=Context.GOODBYE,
-            text=CONFIG.prompts.tts.goodbye(),
+            context=ContextEnum.GOODBYE,
+            text=await CONFIG.prompts.tts.goodbye(call),
         )
 
     elif chat_action.intent in (
@@ -596,7 +643,7 @@ async def handle_play(
             _logger.debug(f"Playing chunk: {chunk}")
             client.play_media(
                 operation_context=context,
-                play_source=audio_from_text(chunk, style),
+                play_source=audio_from_text(chunk, style, call),
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing ({call.call_id})")
@@ -634,7 +681,9 @@ async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str
     return content
 
 
-async def llm_model(system: Optional[str], call: CallModel, model: Type[ModelType]) -> Optional[ModelType]:
+async def llm_model(
+    system: Optional[str], call: CallModel, model: Type[ModelType]
+) -> Optional[ModelType]:
     """
     Run LLM completion from a system prompt, a Call model, and an expected model type as a return.
 
@@ -660,7 +709,9 @@ async def llm_model(system: Optional[str], call: CallModel, model: Type[ModelTyp
     return res
 
 
-def _oai_completion_messages(system: str, call: CallModel) -> List[ChatCompletionMessageParam]:
+def _oai_completion_messages(
+    system: str, call: CallModel
+) -> List[ChatCompletionMessageParam]:
     messages: List[ChatCompletionMessageParam] = [
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.default_system(
@@ -711,7 +762,9 @@ async def llm_chat(
 
     async def _buffer_user_callback(buffer: str, style: MessageStyle) -> MessageStyle:
         # Remove tool calls from buffer content and detect style
-        local_style, local_content = _extract_message_style(_remove_message_actions(buffer))
+        local_style, local_content = _extract_message_style(
+            _remove_message_actions(buffer)
+        )
         new_style = local_style or style
         # Batch current user return
         if local_content:
@@ -719,7 +772,7 @@ async def llm_chat(
         return new_style
 
     async def _error_response() -> Tuple[CallModel, ActionModel]:
-        content = CONFIG.prompts.tts.error()
+        content = await CONFIG.prompts.tts.error(call)
         style = MessageStyle.NONE
         await user_callback(content, style)
         call.messages.append(
@@ -742,12 +795,16 @@ async def llm_chat(
         # Query expansion from last messages
         trainings_tasks = await asyncio.gather(
             *[
-                search.training_asearch_all(message.content)
-                for message in call.messages[-CONFIG.ai_search.expansion_k:]
+                search.training_asearch_all(message.content, call)
+                for message in call.messages[-CONFIG.ai_search.expansion_k :]
             ],
         )
         trainings = sorted(
-            set(training for trainings in trainings_tasks for training in trainings or [])
+            set(
+                training
+                for trainings in trainings_tasks
+                for training in trainings or []
+            )
         )  # Flatten, remove duplicates, and sort by score
 
     _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
@@ -762,8 +819,7 @@ async def llm_chat(
         ),
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.chat_system(
-                claim=call.claim,
-                reminders=call.reminders,
+                call=call,
                 trainings=trainings,
             ),
             role="system",
@@ -971,8 +1027,12 @@ async def llm_chat(
                 full_content += delta.content
                 buffer_content += delta.content
                 for local_content in _sentence_split(buffer_content):
-                    buffer_content = buffer_content[len(local_content) :]  # Remove consumed content from buffer
-                    default_style = await _buffer_user_callback(local_content, default_style)
+                    buffer_content = buffer_content[
+                        len(local_content) :
+                    ]  # Remove consumed content from buffer
+                    default_style = await _buffer_user_callback(
+                        local_content, default_style
+                    )
 
         if buffer_content:
             default_style = await _buffer_user_callback(buffer_content, default_style)
@@ -987,24 +1047,32 @@ async def llm_chat(
         # TODO: Tries to detect this error earlier
         # See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653
         if any(
-            tool_call["function"]["name"] == "multi_tool_use.parallel"
-            for _, tool_call in tool_calls.items()
+            x["function"]["name"] == "multi_tool_use.parallel"
+            for _, x in tool_calls.items()
         ):
             _logger.debug(f"Invalid tool schema: {tool_calls}")
             if _retry_attempt > 3:
-                _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached')
+                _logger.warn(
+                    f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
+                )
                 return await _error_response()
-            _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
+            _logger.warn(
+                f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
+            )
+            return await llm_chat(
+                background_tasks, call, user_callback, _retry_attempt + 1, trainings
+            )
 
         # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
         if not full_content and not tool_calls:
             _logger.debug(f"Empty content, retrying")
             if _retry_attempt > 3:
-                _logger.warn(f'LLM send back empty content, retry limit reached')
+                _logger.warn(f"LLM send back empty content, retry limit reached")
                 return await _error_response()
-            _logger.warn(f'LLM send back empty content, retrying')
-            return await llm_chat(background_tasks, call, user_callback, _retry_attempt + 1, trainings)
+            _logger.warn(f"LLM send back empty content, retrying")
+            return await llm_chat(
+                background_tasks, call, user_callback, _retry_attempt + 1, trainings
+            )
 
         intent = IndentAction.CONTINUE
         models = []
@@ -1047,17 +1115,21 @@ async def llm_chat(
                         full_content += local_content + " "
                         await user_callback(local_content, default_style)
 
-                    if not parameters["field"] in ClaimModel.editable_fields():
-                        content = f'Failed to update a non-editable field "{parameters['field']}".'
+                    field = parameters["field"]
+                    value = parameters["value"]
+                    if not field in ClaimModel.editable_fields():
+                        content = f'Failed to update a non-editable field "{field}".'
                     else:
                         try:
                             # Define the field and force to trigger validation
                             copy = call.claim.model_dump()
-                            copy[parameters["field"]] = parameters["value"]
+                            copy[field] = value
                             call.claim = ClaimModel.model_validate(copy)
-                            content = f'Updated claim field "{parameters['field']}" with value "{parameters['value']}".'
+                            content = (
+                                f'Updated claim field "{field}" with value "{value}".'
+                            )
                         except ValidationError as e:  # Catch error to inform LLM
-                            content = f'Failed to edit field "{parameters["field"]}": {e.json()}'
+                            content = f'Failed to edit field "{field}": {e.json()}'
                     model.content = content
 
                 elif name == IndentAction.NEW_CLAIM.value:
@@ -1110,15 +1182,18 @@ async def llm_chat(
                         await user_callback(local_content, default_style)
 
                     updated = False
+                    title = parameters["title"]
                     for reminder in call.reminders:
-                        if reminder.title == parameters["title"]:
+                        if reminder.title == title:
                             try:
                                 reminder.description = parameters["description"]
                                 reminder.due_date_time = parameters["due_date_time"]
                                 reminder.owner = parameters["owner"]
-                                content = f'Reminder "{parameters['title']}" updated.'
+                                content = f'Reminder "{title}" updated.'
                             except ValidationError as e:  # Catch error to inform LLM
-                                content = f'Failed to edit reminder "{parameters["title"]}": {e.json()}'
+                                content = (
+                                    f'Failed to edit reminder "{title}": {e.json()}'
+                                )
                             model.content = content
                             updated = True
                             break
@@ -1128,13 +1203,13 @@ async def llm_chat(
                             reminder = ReminderModel(
                                 description=parameters["description"],
                                 due_date_time=parameters["due_date_time"],
-                                title=parameters["title"],
+                                title=title,
                                 owner=parameters["owner"],
                             )
                             call.reminders.append(reminder)
-                            content = f'Reminder "{parameters['title']}" created.'
+                            content = f'Reminder "{title}" created.'
                         except ValidationError as e:  # Catch error to inform LLM
-                            content = f'Failed to create reminder "{parameters["title"]}": {e.json()}'
+                            content = f'Failed to create reminder "{title}": {e.json()}'
                         model.content = content
 
                 models.append(model)
@@ -1183,7 +1258,6 @@ async def handle_recognize_text(
             text=text,
         )
 
-    _logger.debug(f"Recognizing ({call.call_id})")
     await handle_recognize_media(
         call=call,
         client=client,
@@ -1200,12 +1274,13 @@ async def handle_recognize_media(
     """
     Play a media to a call participant and start recognizing the response.
     """
+    _logger.debug(f"Recognizing media ({call.call_id})")
     try:
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
             input_type=RecognizeInputType.SPEECH,
             play_prompt=FileSource(url=sound_url),
-            speech_language=CONFIG.workflow.conversation_lang,
+            speech_language=call.lang.short_code,
             target_participant=PhoneNumberIdentifier(call.phone_number),
         )
     except ResourceNotFoundError:
@@ -1270,11 +1345,7 @@ async def post_call_sms(call: CallModel) -> None:
     Send an SMS report to the customer.
     """
     content = await llm_completion(
-        system=CONFIG.prompts.llm.sms_summary_system(
-            claim=call.claim,
-            messages=call.messages,
-            reminders=call.reminders,
-        ),
+        system=CONFIG.prompts.llm.sms_summary_system(call),
         call=call,
     )
 
@@ -1316,7 +1387,7 @@ async def post_call_sms(call: CallModel) -> None:
         )
 
 
-def audio_from_text(text: str, style: MessageStyle) -> SsmlSource:
+def audio_from_text(text: str, style: MessageStyle, call: CallModel) -> SsmlSource:
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
@@ -1328,7 +1399,7 @@ def audio_from_text(text: str, style: MessageStyle) -> SsmlSource:
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
-    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{CONFIG.workflow.conversation_lang}"><voice name="{CONFIG.communication_service.voice_name}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><mstts:express-as style="{style.value}" styledegree="0.5"><prosody rate="0.95">{text}</prosody></mstts:express-as></voice></speak>'
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{call.lang.short_code}"><voice name="{call.lang.voice}" effect="eq_telecomhp8k"><lexicon uri="{CONFIG.resources.public_url}/lexicon.xml"/><mstts:express-as style="{style.value}" styledegree="0.5"><prosody rate="0.95">{text}</prosody></mstts:express-as></voice></speak>'
     return SsmlSource(ssml_text=ssml)
 
 
@@ -1354,25 +1425,15 @@ async def post_call_synthesis(call: CallModel) -> None:
     short, long = await asyncio.gather(
         llm_completion(
             call=call,
-            system=CONFIG.prompts.llm.synthesis_short_system(
-                claim=call.claim,
-                messages=call.messages,
-                reminders=call.reminders,
-            ),
+            system=CONFIG.prompts.llm.synthesis_short_system(call),
         ),
         llm_completion(
             call=call,
             system=CONFIG.prompts.llm.citations_system(
-                claim=call.claim,
-                messages=call.messages,
-                reminders=call.reminders,
+                call=call,
                 text=await llm_completion(
                     call=call,
-                    system=CONFIG.prompts.llm.synthesis_long_system(
-                        claim=call.claim,
-                        messages=call.messages,
-                        reminders=call.reminders,
-                    ),
+                    system=CONFIG.prompts.llm.synthesis_long_system(call),
                 ),
             ),
         ),
@@ -1399,11 +1460,7 @@ async def post_call_next(call: CallModel) -> None:
     next = await llm_model(
         call=call,
         model=NextModel,
-        system=CONFIG.prompts.llm.next_system(
-            claim=call.claim,
-            messages=call.messages,
-            reminders=call.reminders,
-        ),
+        system=CONFIG.prompts.llm.next_system(call),
     )
 
     if not next:
@@ -1424,3 +1481,55 @@ def _sentence_split(text: str) -> Generator[str, None, None]:
     for i, separator in enumerate(separators):
         local_content = splits[i] + separator
         yield local_content
+
+
+async def handle_recognize_ivr(
+    client: CallConnectionClient,
+    call: CallModel,
+    text: str,
+    choices: List[RecognitionChoice],
+) -> None:
+    _logger.info(f"Playing text before IVR ({call.call_id}): {text}")
+    _logger.debug(f"Recognizing IVR ({call.call_id})")
+    try:
+        client.start_recognizing_media(
+            choices=choices,
+            input_type=RecognizeInputType.CHOICES,
+            play_prompt=audio_from_text(text, MessageStyle.NONE, call),
+            speech_language=call.lang.short_code,
+            target_participant=PhoneNumberIdentifier(call.phone_number),
+        )
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before recognizing ({call.call_id})")
+
+
+async def handle_ivr_language(
+    client: CallConnectionClient,
+    call: CallModel,
+) -> None:
+    tones = [
+        DtmfTone.ONE,
+        DtmfTone.TWO,
+        DtmfTone.THREE,
+        DtmfTone.FOUR,
+        DtmfTone.FIVE,
+        DtmfTone.SIX,
+        DtmfTone.SEVEN,
+        DtmfTone.EIGHT,
+        DtmfTone.NINE,
+    ]
+    choices = []
+    for i, lang in enumerate(CONFIG.workflow.lang.availables):
+        choices.append(
+            RecognitionChoice(
+                label=lang.short_code,
+                phrases=lang.pronunciations_en,
+                tone=tones[i],
+            )
+        )
+    await handle_recognize_ivr(
+        call=call,
+        client=client,
+        choices=choices,
+        text=await CONFIG.prompts.tts.ivr_language(call),
+    )

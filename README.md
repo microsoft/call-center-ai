@@ -47,6 +47,7 @@ Extract of the data stored during the call:
 
 - [x] Access the claim on a public website
 - [x] Access to customer conversation history
+- [x] Allow user to change the language of the conversation
 - [x] Bot can be called from a phone number
 - [x] Bot use multiple voice tones (e.g. happy, sad, neutral) to keep the conversation engaging
 - [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
@@ -106,9 +107,11 @@ graph LR
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
+    translation["Translation\n(Cognitive Services)"]
   end
 
   api -- Answer with text --> communication_service
+  api -- Ask for translation --> translation
   api -- Few-shot training --> ai_search
   api -- Generate completion --> gpt
   api -- Save conversation --> db
@@ -211,6 +214,7 @@ workflow:
   agent_phone_number: "+33612345678"
   bot_company: Contoso
   bot_name: Robert
+  lang: {}
 
 communication_service:
   phone_number: "+33612345678"
@@ -264,11 +268,9 @@ communication_service:
   access_key: xxx
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
-  voice_name: fr-FR-DeniseNeural
 
 cognitive_service:
   # Must be of type "AI services multi-service account"
-  # See: https://learn.microsoft.com/en-us/azure/ai-services/multi-service-resource?tabs=macos&pivots=azportal#create-a-new-multi-service-resource
   endpoint: https://xxx.cognitiveservices.azure.com
 
 openai:
@@ -373,7 +375,7 @@ prompts:
       Assistant will provide internal IT support to employees. Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
 
       # Rules
-      - Answers in {conversation_lang}, even if the employee speaks in a different language
+      - Answers in {default_lang}, even if the customer speaks another language
       - Cannot talk about any topic other than IT support
       - Is polite, helpful, and professional
       - Rephrase the employee's questions as statements and answer them
@@ -399,6 +401,28 @@ prompts:
 
       # Reminders
       {reminders}
+```
+
+### Customize the languages
+
+The bot can be used in multiple languages. It can understand the language the user chose.
+
+See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages) for the Text-to-Speech service.
+
+```yaml
+# config.yaml
+[...]
+
+workflow:
+  lang:
+    default_short_code: "fr-FR"
+    availables:
+      - pronunciations_en: ["French", "FR", "France"]
+        short_code: "fr-FR"
+        voice_name: "fr-FR-DeniseNeural"
+      - pronunciations_en: ["Chinese", "ZH", "China"]
+        short_code: "zh-CN"
+        voice_name: "zh-CN-XiaoxiaoNeural"
 ```
 
 ### Customize the moderation levels
