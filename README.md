@@ -10,7 +10,7 @@ AI-powered call center solution with Azure and OpenAI GPT.
 
 A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
 
-[![French demo](https://img.youtube.com/vi/gnnin34V7Zg/maxresdefault.jpg)](https://www.youtube.com/watch?v=gnnin34V7Zg)
+[![French demo](https://img.youtube.com/vi/4r5s-NZ9CuY/maxresdefault.jpg)](https://youtube.com/watch?v=4r5s-NZ9CuY)
 
 Main interactions shown in the demo:
 
