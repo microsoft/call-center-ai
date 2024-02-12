@@ -53,15 +53,6 @@ class SafetyCheckError(Exception):
         return self.message
 
 
-@retry(
-    reraise=True,
-    retry=(
-        retry_if_exception_type(APIResponseValidationError)
-        | retry_if_exception_type(APIStatusError)
-    ),
-    stop=stop_after_attempt(3),
-    wait=wait_random_exponential(multiplier=0.5, max=30),
-)
 async def completion_stream(
     messages: List[ChatCompletionMessageParam],
     max_tokens: int,
@@ -69,8 +60,6 @@ async def completion_stream(
 ) -> AsyncGenerator[ChoiceDelta, None]:
     """
     Returns a stream of completion results.
-
-    Catch errors for a maximum of 3 times. Won't retry on connection errors (like timeouts) as the stream will be already partially consumed.
     """
     extra = {}
 
@@ -93,12 +82,7 @@ async def completion_stream(
 
 @retry(
     reraise=True,
-    retry=(
-        retry_if_exception_type(APIConnectionError)
-        | retry_if_exception_type(APIResponseValidationError)
-        | retry_if_exception_type(APIStatusError)
-        | retry_if_exception_type(SafetyCheckError)
-    ),
+    retry=retry_if_exception_type(SafetyCheckError),
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
@@ -252,6 +236,10 @@ def _contentsafety_category_test(
 @asynccontextmanager
 async def _use_oai() -> AsyncGenerator[AsyncAzureOpenAI, None]:
     client = AsyncAzureOpenAI(
+        # Reliability
+        max_retries=3,
+        timeout=60,
+        # Azure deployment
         api_version="2023-12-01-preview",
         azure_deployment=CONFIG.openai.gpt_deployment,
         azure_endpoint=CONFIG.openai.endpoint,
