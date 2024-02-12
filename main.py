@@ -8,7 +8,16 @@ _logger.info(f"claim-ai v{CONFIG.version}")
 
 
 # General imports
-from typing import Any, Callable, Coroutine, Generator, List, Optional, Tuple, Type
+from typing import (
+    Any,
+    Callable,
+    Coroutine,
+    Generator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+)
 from azure.communication.callautomation import (
     CallAutomationClient,
     CallConnectionClient,
@@ -27,7 +36,7 @@ from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential
 from enum import Enum
-from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config_models.database import ModeEnum as DatabaseMode
 from helpers.logging import build_logger
@@ -126,8 +135,7 @@ api = FastAPI(
 )
 
 
-CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
-CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
+CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event/{{phone_number}}/{{callback_secret}}'
 SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
 MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
 MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
@@ -221,69 +229,86 @@ async def call_initiate_get(phone_number: str) -> None:
     description="Handle incoming call from a Azure Event Grid event originating from Azure Communication Services.",
 )
 async def call_inbound_post(request: Request):
-    for event_dict in await request.json():
-        event = EventGridEvent.from_dict(event_dict)
-        event_type = event.event_type
+    responses = await asyncio.gather(
+        *[call_inbound_worker(event_dict) for event_dict in await request.json()]
+    )
+    for response in responses:
+        if response:
+            return response
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-        _logger.debug(f"Call inbound event {event_type} with data {event.data}")
 
-        if event_type == SystemEventNames.EventGridSubscriptionValidationEventName:
-            validation_code = event.data["validationCode"]
-            _logger.info(f"Validating Event Grid subscription ({validation_code})")
-            return JSONResponse(
-                content={"validationResponse": event.data["validationCode"]},
-                status_code=status.HTTP_200_OK,
+async def call_inbound_worker(event_dict: dict[str, Any]) -> Optional[JSONResponse]:
+    event = EventGridEvent.from_dict(event_dict)
+    event_type = event.event_type
+
+    _logger.debug(f"Call inbound event {event_type} with data {event.data}")
+
+    if event_type == SystemEventNames.EventGridSubscriptionValidationEventName:
+        validation_code = event.data["validationCode"]
+        _logger.info(f"Validating Event Grid subscription ({validation_code})")
+        return JSONResponse(
+            content={"validationResponse": event.data["validationCode"]},
+            status_code=status.HTTP_200_OK,
+        )
+
+    elif event_type == SystemEventNames.AcsIncomingCallEventName:
+        if event.data["from"]["kind"] == "phoneNumber":
+            phone_number = event.data["from"]["phoneNumber"]["value"]
+        else:
+            phone_number = event.data["from"]["rawId"]
+
+        _logger.debug(f"Incoming call handler caller ID: {phone_number}")
+        call_context = event.data["incomingCallContext"]
+
+        try:
+            answer_call_result = call_automation_client.answer_call(
+                callback_url=await callback_url(phone_number),
+                cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
+                incoming_call_context=call_context,
             )
-
-        elif event_type == SystemEventNames.AcsIncomingCallEventName:
-            if event.data["from"]["kind"] == "phoneNumber":
-                phone_number = event.data["from"]["phoneNumber"]["value"]
+            _logger.info(
+                f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
+            )
+        except HttpResponseError as e:
+            if (
+                "lifetime validation of the signed http request failed"
+                in e.message.lower()
+            ):
+                _logger.debug("Old call event received, ignoring")
             else:
-                phone_number = event.data["from"]["rawId"]
-
-            _logger.debug(f"Incoming call handler caller ID: {phone_number}")
-            call_context = event.data["incomingCallContext"]
-
-            try:
-                answer_call_result = call_automation_client.answer_call(
-                    callback_url=await callback_url(phone_number),
-                    cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
-                    incoming_call_context=call_context,
-                )
-                _logger.info(
-                    f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
-                )
-            except HttpResponseError as e:
-                if (
-                    "lifetime validation of the signed http request failed"
-                    in e.message.lower()
-                ):
-                    _logger.debug("Old call event received, ignoring")
-                else:
-                    raise e
+                raise e
 
 
 @api.post(
-    "/call/event/{phone_number}",
+    "/call/event/{phone_number}/{secret}",
     description="Handle callbacks from Azure Communication Services.",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-# TODO: Secure this endpoint with a secret
-# See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(
-    request: Request, background_tasks: BackgroundTasks, phone_number: str
+    request: Request,
+    background_tasks: BackgroundTasks,
+    phone_number: str,
+    secret: str,
 ) -> None:
-    for event_dict in await request.json():
-        background_tasks.add_task(
-            communication_event_worker, background_tasks, event_dict, phone_number
-        )
+    await asyncio.gather(
+        *[
+            communication_event_worker(
+                background_tasks, event_dict, phone_number, secret
+            )
+            for event_dict in await request.json()
+        ]
+    )
 
 
 async def communication_event_worker(
-    background_tasks: BackgroundTasks, event_dict: dict, phone_number: str
+    background_tasks: BackgroundTasks,
+    event_dict: dict,
+    phone_number: str,
+    secret: str,
 ) -> None:
     call = await db.call_asearch_one(phone_number)
-    if not call:
+    if not call or call.callback_secret.get_secret_value() != secret:
         _logger.warn(f"Call with {phone_number} not found")
         return
 
@@ -310,16 +335,13 @@ async def communication_event_worker(
             )
         )
 
-        await asyncio.sleep(
-            0.5
-        )  # Wait for the call to be ready, sometimes an error "(8501) Action is invalid when call is not in Established state" is raised
         await handle_ivr_language(
             call=call, client=client
         )  # Every time a call is answered, confirm the language
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         _logger.info(f"Call disconnected ({call.call_id})")
-        await handle_hangup(call=call, client=client)
+        await handle_hangup(background_tasks, client, call)
 
     elif (
         event_type == "Microsoft.Communication.RecognizeCompleted"
@@ -422,7 +444,7 @@ async def communication_event_worker(
             or operation_context == ContextEnum.GOODBYE
         ):  # Call ended
             _logger.info(f"Ending call ({call.call_id})")
-            await handle_hangup(call=call, client=client)
+            await handle_hangup(background_tasks, client, call)
 
         elif operation_context == ContextEnum.CONNECT_AGENT:  # Call transfer
             _logger.info(f"Initiating transfer call initiated ({call.call_id})")
@@ -1312,7 +1334,9 @@ async def handle_media(
             raise e
 
 
-async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
+async def handle_hangup(
+    background_tasks: BackgroundTasks, client: CallConnectionClient, call: CallModel
+) -> None:
     _logger.debug(f"Hanging up call ({call.call_id})")
     try:
         client.hang_up(is_for_everyone=True)
@@ -1333,11 +1357,9 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
     )
 
     # Start post-call intelligence
-    await asyncio.gather(
-        post_call_next(call),
-        post_call_sms(call),
-        post_call_synthesis(call),
-    )
+    background_tasks.add_task(post_call_next, call)
+    background_tasks.add_task(post_call_sms, call)
+    background_tasks.add_task(post_call_synthesis, call)
 
 
 async def post_call_sms(call: CallModel) -> None:
@@ -1413,7 +1435,10 @@ async def callback_url(caller_id: str) -> str:
     if not call:
         call = CallModel(phone_number=caller_id)
         await db.call_aset(call)
-    return f"{CALL_EVENT_URL}/{html.escape(call.phone_number)}"
+    return CALL_EVENT_URL.format(
+        callback_secret=html.escape(call.callback_secret.get_secret_value()),
+        phone_number=html.escape(call.phone_number),
+    )
 
 
 async def post_call_synthesis(call: CallModel) -> None:
@@ -1496,6 +1521,7 @@ async def handle_recognize_ivr(
             choices=choices,
             end_silence_timeout=10,
             input_type=RecognizeInputType.CHOICES,
+            interrupt_prompt=True,
             play_prompt=audio_from_text(text, MessageStyle.NONE, call),
             speech_language=call.lang.short_code,
             target_participant=PhoneNumberIdentifier(call.phone_number),
