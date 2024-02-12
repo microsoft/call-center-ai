@@ -14,9 +14,7 @@ from helpers.logging import build_logger
 from openai import (
     AsyncAzureOpenAI,
     AsyncStream,
-    APIConnectionError,
-    APIResponseValidationError,
-    APIStatusError,
+    RateLimitError,
 )
 from openai.types.chat import (
     ChatCompletionChunk,
@@ -53,6 +51,12 @@ class SafetyCheckError(Exception):
         return self.message
 
 
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(RateLimitError),
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=0.5, max=30),
+)
 async def completion_stream(
     messages: List[ChatCompletionMessageParam],
     max_tokens: int,
@@ -60,6 +64,8 @@ async def completion_stream(
 ) -> AsyncGenerator[ChoiceDelta, None]:
     """
     Returns a stream of completion results.
+
+    Catch errors for a maximum of 3 times (internal + `RateLimitError`).
     """
     extra = {}
 
@@ -82,7 +88,10 @@ async def completion_stream(
 
 @retry(
     reraise=True,
-    retry=retry_if_exception_type(SafetyCheckError),
+    retry=(
+        retry_if_exception_type(SafetyCheckError)
+        | retry_if_exception_type(RateLimitError)
+    ),
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
@@ -94,7 +103,7 @@ async def completion_sync(
     """
     Returns a completion result.
 
-    Catch errors for a maximum of 3 times. This includes `SafetyCheckError`, only for text responses (not JSON).
+    Catch errors for a maximum of 3 times (internal + `RateLimitError` + `SafetyCheckError`). Safety check is only performed for text responses (= not JSON).
     """
     extra = {}
 
