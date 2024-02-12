@@ -98,7 +98,6 @@ start:
 	$(MAKE) eventgrid-register \
 		endpoint=$(tunnel_url) \
 		name=$(tunnel_name) \
-		phone_number=$(bot_phone_number) \
 		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/$(name)/providers/Microsoft.Communication/communicationServices/$(name)"
 
 	@echo "🚀 Claim AI is running on $(tunnel_url)"
@@ -128,7 +127,6 @@ deploy:
 	$(MAKE) eventgrid-register \
 		endpoint=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value') \
 		name=$(name) \
-		phone_number=$(bot_phone_number) \
 		source=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
 
 	@echo "🚀 Claim AI is running on $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')"

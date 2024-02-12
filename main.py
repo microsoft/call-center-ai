@@ -127,7 +127,6 @@ api = FastAPI(
 
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
-CALL_INBOUND_URL = f'{CONFIG.api.events_domain.strip("/")}/call/inbound'
 SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
 MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
 MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
@@ -310,9 +309,6 @@ async def communication_event_worker(
             )
         )
 
-        await asyncio.sleep(
-            0.5
-        )  # Wait for the call to be ready, sometimes an error "(8501) Action is invalid when call is not in Established state" is raised
         await handle_ivr_language(
             call=call, client=client
         )  # Every time a call is answered, confirm the language
