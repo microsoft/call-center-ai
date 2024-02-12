@@ -274,10 +274,12 @@ async def _use_oai() -> AsyncGenerator[AsyncAzureOpenAI, None]:
 @asynccontextmanager
 async def _use_contentsafety() -> AsyncGenerator[ContentSafetyClient, None]:
     client = ContentSafetyClient(
+        # Azure deployment
+        endpoint=CONFIG.content_safety.endpoint,
+        # Authentication with API key
         credential=AzureKeyCredential(
             CONFIG.content_safety.access_key.get_secret_value()
         ),
-        endpoint=CONFIG.content_safety.endpoint,
     )
     yield client
     await client.close()

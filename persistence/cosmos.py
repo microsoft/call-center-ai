@@ -114,9 +114,12 @@ class CosmosStore(IStore):
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
         client = CosmosClient(
+            # Reliability
             connection_timeout=5,
-            credential=self._config.access_key.get_secret_value(),
+            # Azure deployment
             url=self._config.endpoint,
+            # Authentication with API key
+            credential=self._config.access_key.get_secret_value(),
         )
         database = client.get_database_client(self._config.database)
         yield database.get_container_client(self._config.container)
