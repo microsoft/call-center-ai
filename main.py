@@ -1020,7 +1020,7 @@ async def llm_chat(
     tool_calls = {}
     try:
         async for delta in completion_stream(
-            max_tokens=400,
+            max_tokens=350,
             messages=messages,
             tools=tools,
         ):
