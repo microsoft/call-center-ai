@@ -5,15 +5,25 @@ from models.message import MessageModel
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, SecretStr
 from typing import List, Optional
 from uuid import UUID, uuid4
+import random
+import string
 
 
 class CallModel(BaseModel):
     # Immutable fields
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    callback_secret: SecretStr = Field(
+        default=SecretStr(
+            "".join(
+                random.choice(string.ascii_letters + string.digits) for _ in range(16)
+            )
+        ),
+        frozen=True,
+    )
     # Private fields
     lang_short_code: Optional[str] = None
     # Editable fields

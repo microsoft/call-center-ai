@@ -126,7 +126,7 @@ api = FastAPI(
 )
 
 
-CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event'
+CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event/{{phone_number}}/{{callback_secret}}'
 SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
 MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
 MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
@@ -263,26 +263,34 @@ async def call_inbound_post(request: Request):
 
 
 @api.post(
-    "/call/event/{phone_number}",
+    "/call/event/{phone_number}/{secret}",
     description="Handle callbacks from Azure Communication Services.",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-# TODO: Secure this endpoint with a secret
-# See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/secure-webhook-endpoint.md
 async def call_event_post(
-    request: Request, background_tasks: BackgroundTasks, phone_number: str
+    request: Request,
+    background_tasks: BackgroundTasks,
+    phone_number: str,
+    secret: str,
 ) -> None:
     for event_dict in await request.json():
         background_tasks.add_task(
-            communication_event_worker, background_tasks, event_dict, phone_number
+            communication_event_worker,
+            background_tasks,
+            event_dict,
+            phone_number,
+            secret,
         )
 
 
 async def communication_event_worker(
-    background_tasks: BackgroundTasks, event_dict: dict, phone_number: str
+    background_tasks: BackgroundTasks,
+    event_dict: dict,
+    phone_number: str,
+    secret: str,
 ) -> None:
     call = await db.call_asearch_one(phone_number)
-    if not call:
+    if not call or call.callback_secret.get_secret_value() != secret:
         _logger.warn(f"Call with {phone_number} not found")
         return
 
@@ -1409,7 +1417,10 @@ async def callback_url(caller_id: str) -> str:
     if not call:
         call = CallModel(phone_number=caller_id)
         await db.call_aset(call)
-    return f"{CALL_EVENT_URL}/{html.escape(call.phone_number)}"
+    return CALL_EVENT_URL.format(
+        callback_secret=html.escape(call.callback_secret.get_secret_value()),
+        phone_number=html.escape(call.phone_number),
+    )
 
 
 async def post_call_synthesis(call: CallModel) -> None:
