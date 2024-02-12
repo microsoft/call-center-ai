@@ -1503,6 +1503,7 @@ async def handle_recognize_ivr(
             choices=choices,
             end_silence_timeout=10,
             input_type=RecognizeInputType.CHOICES,
+            interrupt_prompt=True,
             play_prompt=audio_from_text(text, MessageStyle.NONE, call),
             speech_language=call.lang.short_code,
             target_participant=PhoneNumberIdentifier(call.phone_number),
