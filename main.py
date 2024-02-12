@@ -273,14 +273,14 @@ async def call_event_post(
     phone_number: str,
     secret: str,
 ) -> None:
-    for event_dict in await request.json():
-        background_tasks.add_task(
-            communication_event_worker,
-            background_tasks,
-            event_dict,
-            phone_number,
-            secret,
-        )
+    await asyncio.gather(
+        *[
+            communication_event_worker(
+                background_tasks, event_dict, phone_number, secret
+            )
+            for event_dict in await request.json()
+        ]
+    )
 
 
 async def communication_event_worker(
@@ -323,7 +323,7 @@ async def communication_event_worker(
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         _logger.info(f"Call disconnected ({call.call_id})")
-        await handle_hangup(call=call, client=client)
+        await handle_hangup(background_tasks, client, call)
 
     elif (
         event_type == "Microsoft.Communication.RecognizeCompleted"
@@ -426,7 +426,7 @@ async def communication_event_worker(
             or operation_context == ContextEnum.GOODBYE
         ):  # Call ended
             _logger.info(f"Ending call ({call.call_id})")
-            await handle_hangup(call=call, client=client)
+            await handle_hangup(background_tasks, client, call)
 
         elif operation_context == ContextEnum.CONNECT_AGENT:  # Call transfer
             _logger.info(f"Initiating transfer call initiated ({call.call_id})")
@@ -1316,7 +1316,9 @@ async def handle_media(
             raise e
 
 
-async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
+async def handle_hangup(
+    background_tasks: BackgroundTasks, client: CallConnectionClient, call: CallModel
+) -> None:
     _logger.debug(f"Hanging up call ({call.call_id})")
     try:
         client.hang_up(is_for_everyone=True)
@@ -1337,11 +1339,9 @@ async def handle_hangup(client: CallConnectionClient, call: CallModel) -> None:
     )
 
     # Start post-call intelligence
-    await asyncio.gather(
-        post_call_next(call),
-        post_call_sms(call),
-        post_call_synthesis(call),
-    )
+    background_tasks.add_task(post_call_next, call)
+    background_tasks.add_task(post_call_sms, call)
+    background_tasks.add_task(post_call_synthesis, call)
 
 
 async def post_call_sms(call: CallModel) -> None:
