@@ -1,6 +1,7 @@
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.config_models.ai_translation import AiTranslationModel
 from helpers.config_models.api import ApiModel
+from helpers.config_models.cache import CacheModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_service import CommunicationServiceModel
 from helpers.config_models.content_safety import ContentSafetyModel
@@ -21,6 +22,7 @@ class RootModel(BaseSettings, env_prefix=""):
     ai_search: AiSearchModel
     ai_translation: AiTranslationModel
     api: ApiModel
+    cache: CacheModel
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
     content_safety: ContentSafetyModel

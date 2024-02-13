@@ -71,6 +71,14 @@ var config = {
     access_key: translate.listKeys().key1
     endpoint: 'https://${translate.name}.cognitiveservices.azure.com/'
   }
+  cache: {
+    mode: 'redis'
+    redis: {
+      host: redis.properties.hostName
+      password: redis.listKeys().primaryKey
+      port: redis.properties.sslPort
+    }
+  }
 }
 
 output appUrl string = appUrl
@@ -488,5 +496,18 @@ resource translate 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
   kind: 'TextTranslation'
   properties: {
     customSubDomainName: '${prefix}-translate'
+  }
+}
+
+resource redis 'Microsoft.Cache/redis@2023-08-01' = {
+  name: prefix
+  location: location
+  tags: tags
+  properties: {
+    sku: {
+      capacity: 0
+      family: 'C'
+      name: 'Basic'
+    }
   }
 }

@@ -59,6 +59,7 @@ Extract of the data stored during the call:
 - [x] Follow a specific data schema for the claim
 - [x] Has access to a documentation database (few-shot training / RAG)
 - [x] Help the user to find the information needed to complete the claim
+- [x] Lower AI Search cost by usign a Redis cache
 - [x] Responses are streamed from the LLM to the user, to avoid long pauses
 - [x] Send a SMS report after the call
 - [x] Take back a conversation after a disengagement
@@ -107,6 +108,7 @@ graph LR
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
+    redis["Cache\n(Redis)"]
     translation["Translation\n(Cognitive Services)"]
   end
 
@@ -114,6 +116,7 @@ graph LR
   api -- Ask for translation --> translation
   api -- Few-shot training --> ai_search
   api -- Generate completion --> gpt
+  api -- Get cached data --> redis
   api -- Save conversation --> db
   api -- Send SMS report --> communication_service_sms
   api -- Test for profanity --> constent_safety
@@ -255,6 +258,13 @@ database:
   #   database: claim-ai
   #   endpoint: https://xxx.documents.azure.com:443
   sqlite: {}
+
+cache:
+  # mode: redis
+  # redis:
+  #   host: claim-ai.redis.cache.windows.net
+  #   password: xxx
+  memory: {}
 
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
