@@ -108,7 +108,7 @@ graph LR
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
-    redis["Cache\n(Redis)"]
+    redis[("Cache\n(Redis)")]
     translation["Translation\n(Cognitive Services)"]
   end
 
