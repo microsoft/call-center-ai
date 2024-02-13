@@ -39,6 +39,7 @@ from enum import Enum
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config_models.database import ModeEnum as DatabaseMode
+from helpers.config_models.cache import ModeEnum as CacheMode
 from helpers.logging import build_logger
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.action import ActionModel, IndentEnum as IndentAction
@@ -59,6 +60,8 @@ from openai.types.chat import (
 )
 from persistence.ai_search import AiSearchSearch, TrainingModel as AiSearchTrainingModel
 from persistence.cosmos import CosmosStore
+from persistence.memory import MemoryCache
+from persistence.redis import RedisCache
 from persistence.sqlite import SqliteStore
 from urllib.parse import quote_plus
 import asyncio
@@ -111,12 +114,17 @@ sms_client = SmsClient(
 )
 
 # Persistence
+cache = (
+    MemoryCache(CONFIG.cache.memory)
+    if CONFIG.cache.mode == CacheMode.MEMORY
+    else RedisCache(CONFIG.cache.redis)
+)
 db = (
     SqliteStore(CONFIG.database.sqlite)
     if CONFIG.database.mode == DatabaseMode.SQLITE
     else CosmosStore(CONFIG.database.cosmos_db)
 )
-search = AiSearchSearch(CONFIG.ai_search)
+search = AiSearchSearch(cache, CONFIG.ai_search)
 
 # FastAPI
 _logger.info(f'Using root path "{CONFIG.api.root_path}"')

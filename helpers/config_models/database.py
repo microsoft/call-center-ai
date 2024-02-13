@@ -44,5 +44,5 @@ class DatabaseModel(BaseSettings):
     @validator("sqlite", always=True)
     def check_sqlite(cls, v, values, **kwargs):
         if not v and values.get("mode", None) == ModeEnum.SQLITE:
-            raise ValueError("Sqlite config required")
+            raise ValueError("SQLite config required")
         return v

@@ -14,7 +14,6 @@ import os
 
 
 _logger = build_logger(__name__)
-SCHEMA_VERSION = "3"
 
 
 class SqliteStore(IStore):
