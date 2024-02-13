@@ -65,7 +65,7 @@ async def completion_stream(
     """
     Returns a stream of completion results.
 
-    Catch errors for a maximum of 3 times (internal + `RateLimitError`).
+    Catch errors for a maximum of 3 times (internal + `RateLimitError`), then raise the error.
     """
     extra = {}
 
@@ -103,7 +103,7 @@ async def completion_sync(
     """
     Returns a completion result.
 
-    Catch errors for a maximum of 3 times (internal + `RateLimitError` + `SafetyCheckError`). Safety check is only performed for text responses (= not JSON).
+    Catch errors for a maximum of 3 times (internal + `RateLimitError` + `SafetyCheckError`), then raise the error. Safety check is only performed for text responses (= not JSON).
     """
     extra = {}
 
