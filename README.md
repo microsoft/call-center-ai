@@ -108,7 +108,7 @@ graph LR
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
     gpt["GPT-4 Turbo\n(OpenAI)"]
-    redis["Cache\n(Redis)"]
+    redis[("Cache\n(Redis)")]
     translation["Translation\n(Cognitive Services)"]
   end
 
@@ -358,6 +358,8 @@ An exampe is [available at `examples/import-training.ipynb`](examples/import-tra
 
 Note that prompt examples contains `{xxx}` placeholders. These placeholders are replaced by the bot with the corresponding data. For example, `{bot_name}` is internally replaced by the bot name.
 
+Be sure to write all the TTS prompts in English. This language is used as a pivot language for the conversation translation.
+
 ```yaml
 # config.yaml
 [...]
@@ -365,15 +367,15 @@ Note that prompt examples contains `{xxx}` placeholders. These placeholders are 
 prompts:
   tts:
     hello_tpl: |
-      Bonjour, je suis {bot_name}, de {bot_company} ! Je suis spécialiste du support informatique.
+      Hello, I'm {bot_name}, from {bot_company}! I'm an IT support specialist.
 
-      Voici comment je fonctionne : lorsque je travaillerai, vous entendrez une petite musique ; après, au bip, ce sera à votre tour de parler. Vous pouvez me parler naturellement, je comprendrai.
+      Here's how I work: when I'm working, you'll hear a little music; then, at the beep, it's your turn to speak. You can speak to me naturally, I'll understand.
 
-      Exemples:
-      - "J'ai un problème avec mon ordinateur, il ne s'allume plus"
-      - "L'écran externe clignote, je ne sais pas pourquoi"
+      Examples:
+      - "I've got a problem with my computer, it won't turn on".
+      - "The external screen is flashing, I don't know why".
 
-      Quel est votre problème ?
+      What's your problem?
   llm:
     default_system_tpl: |
       Assistant is called {bot_name} and is in a call center for the company {bot_company} as an expert with 20 years of experience in IT service.
