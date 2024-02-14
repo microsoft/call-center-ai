@@ -144,7 +144,7 @@ api = FastAPI(
 
 
 CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event/{{phone_number}}/{{callback_secret}}'
-SENTENCE_R = r"[^\w\s+\-/'\",:;()@=]"
+SENTENCE_R = r"[^\w\s+\-–—’/'\",:;()@=]"
 MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
 MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
