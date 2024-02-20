@@ -8,5 +8,5 @@ class ICache(ABC):
         pass
 
     @abstractmethod
-    async def aset(self, key: str, value: Union[str, bytes, None]) -> None:
+    async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
         pass

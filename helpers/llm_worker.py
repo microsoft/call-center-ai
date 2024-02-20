@@ -201,7 +201,7 @@ async def safety_check(text: str) -> None:
 
     if not safety:
         raise SafetyCheckError(
-            f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}"
+            f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}: {text}"
         )
 
 

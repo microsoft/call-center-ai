@@ -24,7 +24,7 @@ class AiSearchSearch(ISearch):
     def __init__(self, cache: ICache, config: AiSearchModel):
         _logger.info(f"Using AI Search {config.endpoint} with index {config.index}")
         _logger.info(
-            f"Note: At 300 characters per document, each LLM call will use approx {300 * config.top_k * config.expansion_k / 4} tokens."
+            f"Note: At ~300 chars /doc, each LLM call will use approx {300 * config.top_k * config.expansion_k / 4} tokens (without tools)"
         )
         self._config = config
         super().__init__(cache)
@@ -118,5 +118,7 @@ class AiSearchSearch(ISearch):
             endpoint=self._config.endpoint,
             index_name=self._config.index,
         )
-        yield db
-        await db.close()
+        try:
+            yield db
+        finally:
+            await db.close()

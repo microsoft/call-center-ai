@@ -1,44 +1,16 @@
+from azure.core.exceptions import HttpResponseError
 from datetime import datetime, UTC
-from fastapi.encoders import jsonable_encoder
 from functools import cached_property
 from logging import Logger
-from models.claim import ClaimModel
-from models.message import (
-    ActionEnum as MessageAction,
-    MessageModel,
-    PersonaEnum as MessagePersona,
-    StyleEnum as MessageStyle,
-)
-from azure.core.exceptions import HttpResponseError
 from models.call import CallModel
-from models.next import ActionEnum as NextAction
+from models.message import MessageModel
+from models.next import ActionEnum as NextActionEnum
 from models.reminder import ReminderModel
 from models.training import TrainingModel
-from pydantic import computed_field, BaseModel
+from pydantic import computed_field, TypeAdapter
 from pydantic_settings import BaseSettings
 from textwrap import dedent
-from typing import List, Optional, Union, Set
-import json
-
-
-def _pydantic_to_str(
-    model: Optional[Union[BaseModel, List[BaseModel]]],
-    exclude: Optional[Set[str]] = None,
-) -> str:
-    """
-    Convert a Pydantic model to a JSON string.
-
-    If None, return "None" as a string.
-    """
-    if not model:
-        return "None"
-    return json.dumps(
-        jsonable_encoder(
-            model.model_dump(exclude=exclude)
-            if isinstance(model, BaseModel)
-            else [m.model_dump(exclude=exclude) for m in model]
-        )
-    )
+from typing import List, Optional
 
 
 class SoundModel(BaseSettings):
@@ -312,43 +284,55 @@ class LlmModel(BaseSettings):
 
     def chat_system(self, call: CallModel, trainings: List[TrainingModel]) -> str:
         from helpers.config import CONFIG
+        from models.message import (
+            ActionEnum as MessageActionEnum,
+            StyleEnum as MessageStyleEnum,
+        )
 
         return self._return(
             self.chat_system_tpl,
-            actions=", ".join([action.value for action in MessageAction]),
+            actions=", ".join([action.value for action in MessageActionEnum]),
             bot_company=CONFIG.workflow.bot_company,
-            claim=_pydantic_to_str(call.claim),
+            claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            reminders=_pydantic_to_str(call.reminders),
-            styles=", ".join([style.value for style in MessageStyle]),
+            reminders=TypeAdapter(List[ReminderModel])
+            .dump_json(call.reminders)
+            .decode(),
+            styles=", ".join([style.value for style in MessageStyleEnum]),
             trainings=trainings,
         )
 
     def sms_summary_system(self, call: CallModel) -> str:
         return self._return(
             self.sms_summary_system_tpl,
-            claim=_pydantic_to_str(call.claim),
+            claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            messages=_pydantic_to_str(call.messages),
-            reminders=_pydantic_to_str(call.reminders),
+            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(List[ReminderModel])
+            .dump_json(call.reminders)
+            .decode(),
         )
 
     def synthesis_short_system(self, call: CallModel) -> str:
         return self._return(
             self.synthesis_short_system_tpl,
-            claim=_pydantic_to_str(call.claim),
+            claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            messages=_pydantic_to_str(call.messages),
-            reminders=_pydantic_to_str(call.reminders),
+            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(List[ReminderModel])
+            .dump_json(call.reminders)
+            .decode(),
         )
 
     def synthesis_long_system(self, call: CallModel) -> str:
         return self._return(
             self.synthesis_long_system_tpl,
-            claim=_pydantic_to_str(call.claim),
+            claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            messages=_pydantic_to_str(call.messages),
-            reminders=_pydantic_to_str(call.reminders),
+            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(List[ReminderModel])
+            .dump_json(call.reminders)
+            .decode(),
         )
 
     def citations_system(self, call: CallModel, text: Optional[str]) -> Optional[str]:
@@ -357,45 +341,53 @@ class LlmModel(BaseSettings):
 
         The citations system is only used if `text` param is not empty, otherwise `None` is returned.
         """
+        from models.message import PersonaEnum as MessagePersonaEnum
+
         if not text:
             return None
 
         return self._return(
             self.citations_system_tpl,
-            claim=_pydantic_to_str(call.claim),
-            messages=_pydantic_to_str(
+            claim=call.claim.model_dump_json(),
+            messages=TypeAdapter(List[MessageModel])
+            .dump_json(
                 [
                     message
                     for message in call.messages
-                    if message.persona is not MessagePersona.TOOL
+                    if message.persona is not MessagePersonaEnum.TOOL
                 ],
                 exclude={"tool_calls"},
-            ),  # Filter out tool messages, to avoid LLM to cite itself
-            reminders=_pydantic_to_str(call.reminders),
+            )
+            .decode(),  # Filter out tool messages, to avoid LLM to cite itself
+            reminders=TypeAdapter(List[ReminderModel])
+            .dump_json(call.reminders)
+            .decode(),
             text=text,
         )
 
     def next_system(self, call: CallModel) -> str:
         return self._return(
             self.next_system_tpl,
-            actions=", ".join([action.value for action in NextAction]),
-            claim=_pydantic_to_str(call.claim),
-            messages=_pydantic_to_str(call.messages),
-            reminders=_pydantic_to_str(call.reminders),
+            actions=", ".join([action.value for action in NextActionEnum]),
+            claim=call.claim.model_dump_json(),
+            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(List[ReminderModel])
+            .dump_json(call.reminders)
+            .decode(),
         )
 
     def _return(
-        self, prompt_tpl: str, trainings: Optional[List[TrainingModel]] = None, **kwargs
+        self,
+        prompt_tpl: str,
+        trainings: Optional[List[TrainingModel]] = None,
+        **kwargs: str,
     ) -> str:
         # Build template
         res = dedent(prompt_tpl.format(**kwargs))
+        # Add trainings if any
         if trainings:
             res += "\n\n# Trusted data you can use"
-        # Add trainings
-        for i, training in enumerate(trainings or []):
-            res += f"\n\n## Data {i + 1}"
-            res += f"\nTitle: {training.title}"
-            res += f"\nContent: {training.content}"
+            res += TypeAdapter(List[TrainingModel]).dump_json(trainings).decode()
         self._logger.debug(f"LLM prompt: {res}")
         return res
 
@@ -407,7 +399,7 @@ class LlmModel(BaseSettings):
         return build_logger(__name__)
 
 
-class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
+class TtsModel(BaseSettings):
     tts_lang: str = "en-US"
     calltransfer_failure_tpl: str = (
         "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
@@ -537,7 +529,7 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
         return build_logger(__name__)
 
 
-class PromptsModel(BaseSettings, env_prefix="prompts_"):
+class PromptsModel(BaseSettings):
     llm: LlmModel = LlmModel()  # Object is fully defined by default
     sounds: SoundModel = SoundModel()  # Object is fully defined by default
     tts: TtsModel = TtsModel()  # Object is fully defined by default
