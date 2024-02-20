@@ -25,6 +25,7 @@ class CosmosStore(IStore):
 
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
+        res = None
         try:
             async with self._use_db() as db:
                 items = db.query_items(
@@ -33,13 +34,14 @@ class CosmosStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    return CallModel(**raw)
+                    res = CallModel(**raw)
                 except ValidationError as e:
                     _logger.warn(f"Error parsing call: {e.errors()}")
         except StopAsyncIteration:
-            return None
+            pass
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e}")
+        return res
 
     async def call_aset(self, call: CallModel) -> bool:
         data = jsonable_encoder(call.model_dump(), exclude_none=True)
@@ -55,6 +57,7 @@ class CosmosStore(IStore):
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
+        res = None
         try:
             async with self._use_db() as db:
                 items = db.query_items(
@@ -78,13 +81,14 @@ class CosmosStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    return CallModel(**raw)
+                    res = CallModel(**raw)
                 except ValidationError as e:
                     _logger.warn(f"Error parsing call: {e.errors()}")
         except StopAsyncIteration:
-            return None
+            pass
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB: {e}")
+        return res
 
     async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
@@ -122,6 +126,8 @@ class CosmosStore(IStore):
             # Authentication with API key
             credential=self._config.access_key.get_secret_value(),
         )
-        database = client.get_database_client(self._config.database)
-        yield database.get_container_client(self._config.container)
-        await client.close()
+        try:
+            database = client.get_database_client(self._config.database)
+            yield database.get_container_client(self._config.container)
+        finally:
+            await client.close()

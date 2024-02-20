@@ -28,9 +28,10 @@ class RedisCache(ICache):
 
         Catch errors for a maximum of 3 times, then raise the error.
         """
+        res = None
         async with self._use_db() as db:
             res = await db.get(key)
-            return res if res else None
+        return res
 
     async def aset(self, key: str, value: Union[str, bytes, None]) -> None:
         """
@@ -59,5 +60,7 @@ class RedisCache(ICache):
             # Authentication with password
             password=self._config.password.get_secret_value(),
         )
-        yield client
-        await client.aclose()
+        try:
+            yield client
+        finally:
+            await client.aclose()

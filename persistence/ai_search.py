@@ -118,5 +118,7 @@ class AiSearchSearch(ISearch):
             endpoint=self._config.endpoint,
             index_name=self._config.index,
         )
-        yield db
-        await db.close()
+        try:
+            yield db
+        finally:
+            await db.close()
