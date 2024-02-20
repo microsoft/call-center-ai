@@ -22,7 +22,7 @@ import re
 
 
 _logger = build_logger(__name__)
-SENTENCE_R = r"[^\w\s+\-–—’/'\",:;()@=]"
+_SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;:])"
 
 
 class ContextEnum(str, Enum):
@@ -31,15 +31,24 @@ class ContextEnum(str, Enum):
     TRANSFER_FAILED = "transfer_failed"
 
 
-def sentence_split(text: str) -> Generator[str, None, None]:
+def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, None]:
     """
     Split a text into sentences.
     """
-    separators = re.findall(SENTENCE_R, text)
-    splits = re.split(SENTENCE_R, text)
-    for i, separator in enumerate(separators):
-        local_content = splits[i] + separator
-        yield local_content
+    # Clean and remove extra spaces
+    text = " ".join(text.split())
+    # Split by sentence by punctuation
+    splits = re.split(_SENTENCE_PUNCTUATION_R, text)
+    for i, split in enumerate(splits):
+        if i % 2 == 1:  # Skip punctuation
+            continue
+        if not split:  # Skip empty lines
+            continue
+        if i == len(splits) - 1:  # Skip last line in case of missing punctuation
+            if include_last:
+                yield split
+        else:  # Add punctuation back
+            yield split + splits[i + 1]
 
 
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
@@ -144,7 +153,7 @@ async def handle_play(
     # Split text in chunks of max 400 characters, separated by sentence
     chunks = []
     chunk = ""
-    for to_add in sentence_split(text):
+    for to_add in tts_sentence_split(text, True):
         if len(chunk) + len(to_add) >= 400:
             chunks.append(chunk.strip())  # Remove trailing space
             chunk = ""

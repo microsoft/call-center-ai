@@ -80,7 +80,7 @@ from helpers.call import (
     handle_play,
     handle_recognize_ivr,
     handle_recognize_text,
-    sentence_split,
+    tts_sentence_split,
 )
 from helpers.llm_plugins import LlmPlugins
 
@@ -814,7 +814,9 @@ async def execute_llm_chat(
             else:
                 # Store whole content
                 content_full += delta.content
-                for sentence in sentence_split(content_full[content_buffer_pointer:]):
+                for sentence in tts_sentence_split(
+                    content_full[content_buffer_pointer:], False
+                ):
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _buffer_user_callback(sentence, plugins.style)
 
