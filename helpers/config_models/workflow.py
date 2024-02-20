@@ -68,7 +68,7 @@ class LanguageModel(BaseSettings):
         )
 
 
-class WorkflowModel(BaseSettings):
+class WorkflowModel(BaseSettings, env_prefix="workflow_"):
     agent_phone_number: PhoneNumber
     bot_company: str
     bot_name: str
