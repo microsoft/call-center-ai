@@ -119,7 +119,7 @@ class CosmosStore(IStore):
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
         client = CosmosClient(
             # Reliability
-            connection_timeout=5,
+            connection_timeout=10,
             consistency_level="BoundedStaleness",
             # Azure deployment
             url=self._config.endpoint,

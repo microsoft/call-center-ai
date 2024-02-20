@@ -54,7 +54,7 @@ class RedisCache(ICache):
             # Reliability
             retry_on_error=[BusyLoadingError, ConnectionError, TimeoutError],
             retry=_retry,
-            socket_connect_timeout=5,
+            socket_connect_timeout=10,
             # Azure deployment
             host=self._config.host,
             port=self._config.port,
