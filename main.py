@@ -316,8 +316,11 @@ async def communication_event_worker(
     secret: str,
 ) -> None:
     call = await db.call_asearch_one(phone_number)
-    if not call or call.callback_secret.get_secret_value() != secret:
-        _logger.warn(f"Call with {phone_number} not found")
+    if not call:
+        _logger.warn(f"Call {phone_number} not found")
+        return
+    if call.callback_secret != secret:
+        _logger.warn(f"Secret for call {phone_number} does not match")
         return
 
     event = CloudEvent.from_dict(event_dict)
@@ -1444,7 +1447,7 @@ async def callback_url(caller_id: str) -> str:
         call = CallModel(phone_number=caller_id)
         await db.call_aset(call)
     return CALL_EVENT_URL.format(
-        callback_secret=html.escape(call.callback_secret.get_secret_value()),
+        callback_secret=html.escape(call.callback_secret),
         phone_number=html.escape(call.phone_number),
     )
 

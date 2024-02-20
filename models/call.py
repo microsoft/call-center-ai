@@ -16,11 +16,9 @@ class CallModel(BaseModel):
     # Immutable fields
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
-    callback_secret: SecretStr = Field(
-        default=SecretStr(
-            "".join(
-                random.choice(string.ascii_letters + string.digits) for _ in range(16)
-            )
+    callback_secret: str = Field(
+        default="".join(
+            random.choice(string.ascii_letters + string.digits) for _ in range(16)
         ),
         frozen=True,
     )
