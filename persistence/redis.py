@@ -33,7 +33,7 @@ class RedisCache(ICache):
             res = await db.get(key)
         return res
 
-    async def aset(self, key: str, value: Union[str, bytes, None]) -> None:
+    async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
         """
         Set a value in the cache.
 
@@ -41,8 +41,10 @@ class RedisCache(ICache):
 
         Catch errors for a maximum of 3 times, then raise the error.
         """
+        # TODO: Catch errors
         async with self._use_db() as db:
             await db.set(key, value if value else "")
+        return True
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[Redis, None]:

@@ -23,7 +23,7 @@ class MemoryCache(ICache):
         """
         return self._cache.get(key, None)
 
-    async def aset(self, key: str, value: Union[str, bytes, None]) -> None:
+    async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
         """
         Set a value in the cache.
 
@@ -32,3 +32,4 @@ class MemoryCache(ICache):
         if len(self._cache) >= self._config.max_size:
             self._cache = {}
         self._cache[key] = value.encode() if isinstance(value, str) else value
+        return True
