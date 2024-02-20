@@ -8,9 +8,12 @@ from models.call import CallModel
 from models.claim import ClaimModel
 from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
+from models.training import TrainingModel
 from openai.types.chat import ChatCompletionToolParam
-from pydantic import ValidationError
+from persistence.ai_search import AiSearchSearch
+from pydantic import ValidationError, TypeAdapter
 from typing import Awaitable, Callable, Annotated, List
+import asyncio
 
 
 class LlmPlugins:
@@ -20,6 +23,7 @@ class LlmPlugins:
     client: CallConnectionClient
     post_call_next: Callable[[CallModel], Awaitable]
     post_call_synthesis: Callable[[CallModel], Awaitable]
+    search: AiSearchSearch
     style: MessageStyleEnum
     user_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
@@ -31,6 +35,7 @@ class LlmPlugins:
         client: CallConnectionClient,
         post_call_next: Callable[[CallModel], Awaitable],
         post_call_synthesis: Callable[[CallModel], Awaitable],
+        search: AiSearchSearch,
         style: MessageStyleEnum,
         user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
@@ -40,6 +45,7 @@ class LlmPlugins:
         self.client = client
         self.post_call_next = post_call_next
         self.post_call_synthesis = post_call_synthesis
+        self.search = search
         self.style = style
         self.user_callback = user_callback
 
@@ -170,6 +176,31 @@ class LlmPlugins:
             text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
         )
         return "Transferring to human agent"
+
+    async def search_document(
+        self,
+        customer_response: Annotated[
+            str,
+            "The text to be read to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am searching for the document about the car accident', 'I am searching for the document about the stolen watch'.",
+        ],
+        queries: Annotated[
+            list[str],
+            "The text queries to perform the search. Example: ['How much does it cost to repair a broken window', 'What are the requirements to ask for a cyber attack insurance']",
+        ],
+    ) -> str:
+        """
+        Use this if the user wants to search for a public specific information you don't have. Example: contract, law, regulation, article, etc.
+        """
+        await self.user_callback(customer_response, self.style)
+
+        # Execute in parallel
+        tasks = await asyncio.gather(
+            *[self.search.training_asearch_all(query, self.call) for query in queries]
+        )
+        # Flatten, remove duplicates, and sort by score
+        res = sorted(set(training for task in tasks for training in task or []))
+
+        return f"Search results: {TypeAdapter(List[TrainingModel]).dump_json(res).decode()}"
 
     @staticmethod
     def to_openai() -> List[ChatCompletionToolParam]:

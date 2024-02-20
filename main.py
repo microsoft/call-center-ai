@@ -788,6 +788,7 @@ async def execute_llm_chat(
         client=client,
         post_call_next=post_call_next,
         post_call_synthesis=post_call_synthesis,
+        search=search,
         style=MessageStyleEnum.NONE,
         user_callback=user_callback,
     )
