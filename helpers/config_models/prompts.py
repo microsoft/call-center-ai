@@ -399,7 +399,7 @@ class LlmModel(BaseSettings):
         return build_logger(__name__)
 
 
-class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
+class TtsModel(BaseSettings):
     tts_lang: str = "en-US"
     calltransfer_failure_tpl: str = (
         "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
@@ -529,7 +529,7 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
         return build_logger(__name__)
 
 
-class PromptsModel(BaseSettings, env_prefix="prompts_"):
+class PromptsModel(BaseSettings):
     llm: LlmModel = LlmModel()  # Object is fully defined by default
     sounds: SoundModel = SoundModel()  # Object is fully defined by default
     tts: TtsModel = TtsModel()  # Object is fully defined by default
