@@ -16,6 +16,7 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    Union,
 )
 from azure.communication.callautomation import (
     CallAutomationClient,
@@ -26,8 +27,11 @@ from azure.communication.callautomation import (
 )
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import ClientAuthenticationError
-from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
+from azure.core.exceptions import (
+    ResourceNotFoundError,
+    HttpResponseError,
+    ClientAuthenticationError,
+)
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential
@@ -224,7 +228,7 @@ async def call_initiate_get(phone_number: str) -> None:
     "/call/inbound",
     description="Handle incoming call from a Azure Event Grid event originating from Azure Communication Services.",
 )
-async def call_inbound_post(request: Request):
+async def call_inbound_post(request: Request) -> Response:
     responses = await asyncio.gather(
         *[call_inbound_worker(event_dict) for event_dict in await request.json()]
     )
@@ -234,7 +238,9 @@ async def call_inbound_post(request: Request):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-async def call_inbound_worker(event_dict: dict[str, Any]) -> Optional[JSONResponse]:
+async def call_inbound_worker(
+    event_dict: dict[str, Any]
+) -> Optional[Union[JSONResponse, Response]]:
     event = EventGridEvent.from_dict(event_dict)
     event_type = event.event_type
 
@@ -266,6 +272,14 @@ async def call_inbound_worker(event_dict: dict[str, Any]) -> Optional[JSONRespon
             _logger.info(
                 f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
             )
+            return None
+
+        except ClientAuthenticationError as e:
+            _logger.error(
+                f"Authentication error with Communication Services, check the credentials",
+                exc_info=True,
+            )
+
         except HttpResponseError as e:
             if (
                 "lifetime validation of the signed http request failed"
@@ -273,7 +287,13 @@ async def call_inbound_worker(event_dict: dict[str, Any]) -> Optional[JSONRespon
             ):
                 _logger.debug("Old call event received, ignoring")
             else:
-                raise e
+                _logger.error(
+                    f"Unknown error answering call with {phone_number}", exc_info=True
+                )
+
+        return Response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api.post(
