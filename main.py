@@ -45,9 +45,8 @@ from openai import APIError
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
-    ChatCompletionToolParam,
 )
-from persistence.ai_search import AiSearchSearch, TrainingModel as AiSearchTrainingModel
+from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.memory import MemoryCache
 from persistence.redis import RedisCache
@@ -71,7 +70,6 @@ from helpers.llm_worker import (
     ModelType,
     SafetyCheckError,
 )
-from models.claim import ClaimModel
 from uuid import UUID
 import mistune
 from helpers.call import (
