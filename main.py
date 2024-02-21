@@ -16,6 +16,7 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    Union,
 )
 from azure.communication.callautomation import (
     CallAutomationClient,
@@ -26,8 +27,11 @@ from azure.communication.callautomation import (
 )
 from azure.communication.sms import SmsClient
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import ClientAuthenticationError
-from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
+from azure.core.exceptions import (
+    ResourceNotFoundError,
+    HttpResponseError,
+    ClientAuthenticationError,
+)
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from azure.identity import DefaultAzureCredential
@@ -45,14 +49,13 @@ from openai import APIError
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
-    ChatCompletionToolParam,
 )
-from persistence.ai_search import AiSearchSearch, TrainingModel as AiSearchTrainingModel
+from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.memory import MemoryCache
 from persistence.redis import RedisCache
 from persistence.sqlite import SqliteStore
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 import asyncio
 import html
 import re
@@ -71,7 +74,6 @@ from helpers.llm_worker import (
     ModelType,
     SafetyCheckError,
 )
-from models.claim import ClaimModel
 from uuid import UUID
 import mistune
 from helpers.call import (
@@ -106,7 +108,8 @@ call_automation_client = CallAutomationClient(
     ),
 )
 sms_client = SmsClient(
-    credential=DefaultAzureCredential(), endpoint=CONFIG.communication_service.endpoint
+    credential=DefaultAzureCredential(),
+    endpoint=CONFIG.communication_service.endpoint,
 )
 
 # Persistence
@@ -139,11 +142,13 @@ api = FastAPI(
 )
 
 
-CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event/{{phone_number}}/{{callback_secret}}'
-SENTENCE_R = r"[^\w\s+\-–—’/'\",:;()@=]"
-MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
-_MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
-FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
+_CALL_EVENT_URL = urljoin(
+    str(CONFIG.api.events_domain), "/call/event/{phone_number}/{callback_secret}"
+)
+_logger.info(f"Using call event URL {_CALL_EVENT_URL}")
+
+_MESSAGE_ACTION_R = r"action=([a-z_]*)( .*)?"
+_MESSAGE_STYLE_R = r"style=([a-z_]*)( .*)?"
 
 
 @api.get(
@@ -226,7 +231,7 @@ async def call_initiate_get(phone_number: str) -> None:
     "/call/inbound",
     description="Handle incoming call from a Azure Event Grid event originating from Azure Communication Services.",
 )
-async def call_inbound_post(request: Request):
+async def call_inbound_post(request: Request) -> Response:
     responses = await asyncio.gather(
         *[call_inbound_worker(event_dict) for event_dict in await request.json()]
     )
@@ -236,7 +241,9 @@ async def call_inbound_post(request: Request):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-async def call_inbound_worker(event_dict: dict[str, Any]) -> Optional[JSONResponse]:
+async def call_inbound_worker(
+    event_dict: dict[str, Any]
+) -> Optional[Union[JSONResponse, Response]]:
     event = EventGridEvent.from_dict(event_dict)
     event_type = event.event_type
 
@@ -268,6 +275,14 @@ async def call_inbound_worker(event_dict: dict[str, Any]) -> Optional[JSONRespon
             _logger.info(
                 f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
             )
+            return None
+
+        except ClientAuthenticationError as e:
+            _logger.error(
+                f"Authentication error with Communication Services, check the credentials",
+                exc_info=True,
+            )
+
         except HttpResponseError as e:
             if (
                 "lifetime validation of the signed http request failed"
@@ -275,7 +290,13 @@ async def call_inbound_worker(event_dict: dict[str, Any]) -> Optional[JSONRespon
             ):
                 _logger.debug("Old call event received, ignoring")
             else:
-                raise e
+                _logger.error(
+                    f"Unknown error answering call with {phone_number}", exc_info=True
+                )
+
+        return Response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api.post(
@@ -699,7 +720,7 @@ async def execute_llm_chat(
         """
         Remove action from content. AI often adds it by mistake event if explicitly asked not to.
         """
-        res = re.match(MESSAGE_ACTION_R, text)
+        res = re.match(_MESSAGE_ACTION_R, text)
         if not res:
             return text.strip()
         content = res.group(2)
@@ -979,7 +1000,9 @@ async def post_call_sms(call: CallModel) -> None:
             )
 
     except ClientAuthenticationError:
-        _logger.error("Authentication error for SMS, check the credentials")
+        _logger.error(
+            "Authentication error for SMS, check the credentials", exc_info=True
+        )
     except Exception:
         _logger.warn(
             f"Failed SMS to {call.phone_number} ({call.call_id})", exc_info=True
@@ -996,7 +1019,7 @@ async def callback_url(caller_id: str) -> str:
     if not call:
         call = CallModel(phone_number=caller_id)
         await db.call_aset(call)
-    return CALL_EVENT_URL.format(
+    return _CALL_EVENT_URL.format(
         callback_secret=html.escape(call.callback_secret),
         phone_number=html.escape(call.phone_number),
     )

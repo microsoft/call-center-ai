@@ -1,6 +1,5 @@
 from enum import Enum
-from pydantic import validator, SecretStr, Field
-from pydantic_settings import BaseSettings
+from pydantic import validator, SecretStr, Field, BaseModel
 from typing import Optional
 
 
@@ -9,14 +8,14 @@ class ModeEnum(str, Enum):
     SQLITE = "sqlite"
 
 
-class CosmosDbModel(BaseSettings):
+class CosmosDbModel(BaseModel):
     access_key: SecretStr
     container: str
     database: str
     endpoint: str
 
 
-class SqliteModel(BaseSettings):
+class SqliteModel(BaseModel):
     path: str = ".local"
     schema_version: int = Field(default=3, frozen=True)
     table: str = "calls"
@@ -30,7 +29,7 @@ class SqliteModel(BaseSettings):
         return f"{self.path}-v{self.schema_version}.sqlite"
 
 
-class DatabaseModel(BaseSettings):
+class DatabaseModel(BaseModel):
     cosmos_db: Optional[CosmosDbModel] = None
     mode: ModeEnum = ModeEnum.SQLITE
     sqlite: Optional[SqliteModel] = None

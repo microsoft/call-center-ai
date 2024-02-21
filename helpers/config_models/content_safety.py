@@ -1,9 +1,8 @@
 from typing import List
-from pydantic import SecretStr, Field
-from pydantic_settings import BaseSettings
+from pydantic import SecretStr, Field, BaseModel
 
 
-class ContentSafetyModel(BaseSettings):
+class ContentSafetyModel(BaseModel):
     access_key: SecretStr
     blocklists: List[str]
     category_hate_score: int = Field(default=0, ge=0, le=7)

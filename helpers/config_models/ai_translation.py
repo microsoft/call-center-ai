@@ -1,7 +1,6 @@
-from pydantic import SecretStr
-from pydantic_settings import BaseSettings
+from pydantic import SecretStr, BaseModel
 
 
-class AiTranslationModel(BaseSettings):
+class AiTranslationModel(BaseModel):
     access_key: SecretStr
     endpoint: str

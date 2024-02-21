@@ -1,6 +1,5 @@
 from enum import Enum
-from pydantic import validator, SecretStr
-from pydantic_settings import BaseSettings
+from pydantic import validator, SecretStr, BaseModel, Field
 from typing import Optional
 
 
@@ -9,19 +8,19 @@ class ModeEnum(str, Enum):
     REDIS = "redis"
 
 
-class MemoryModel(BaseSettings):
-    max_size: int = 100
+class MemoryModel(BaseModel):
+    max_size: int = Field(default=100, ge=10)
 
 
-class RedisModel(BaseSettings):
-    database: int = 0
+class RedisModel(BaseModel):
+    database: int = Field(default=0, ge=0)
     host: str
     password: SecretStr
     port: int = 6379
     ssl: bool = True
 
 
-class CacheModel(BaseSettings):
+class CacheModel(BaseModel):
     memory: Optional[MemoryModel] = None
     mode: ModeEnum = ModeEnum.MEMORY
     redis: Optional[RedisModel] = None
