@@ -1,6 +1,6 @@
 from functools import cached_property
+from pydantic import BaseModel
 from pydantic_extra_types.phone_numbers import PhoneNumber
-from pydantic_settings import BaseSettings
 from typing import List
 
 
@@ -8,7 +8,7 @@ from typing import List
 PhoneNumber.phone_format = "E164"
 
 
-class LanguageEntryModel(BaseSettings):
+class LanguageEntryModel(BaseModel):
     """
     Language entry, containing the standard short code, an human name and the Azure Text-to-Speech voice name.
 
@@ -27,7 +27,7 @@ class LanguageEntryModel(BaseSettings):
         return self.short_code
 
 
-class LanguageModel(BaseSettings):
+class LanguageModel(BaseModel):
     """
     Manage language for the workflow.
     """
@@ -68,7 +68,7 @@ class LanguageModel(BaseSettings):
         )
 
 
-class WorkflowModel(BaseSettings, env_prefix="workflow_"):
+class WorkflowModel(BaseModel):
     agent_phone_number: PhoneNumber
     bot_company: str
     bot_name: str

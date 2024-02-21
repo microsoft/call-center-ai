@@ -12,10 +12,17 @@ from helpers.config_models.prompts import PromptsModel
 from helpers.config_models.resources import ResourcesModel
 from helpers.config_models.workflow import WorkflowModel
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class RootModel(BaseSettings, env_prefix=""):
+class RootModel(BaseSettings):
+    # Pydantic settings
+    model_config = SettingsConfigDict(
+        env_ignore_empty=True,
+        env_nested_delimiter="__",
+        env_prefix="",
+    )
+
     # Immutable fields
     version: str = Field(frozen=True)
     # Editable fields

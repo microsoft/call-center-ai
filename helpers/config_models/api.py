@@ -1,6 +1,6 @@
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
 
 
-class ApiModel(BaseSettings, env_prefix="api_"):
+class ApiModel(BaseModel):
     events_domain: str
     root_path: str = ""

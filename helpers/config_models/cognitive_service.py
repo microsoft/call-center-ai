@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
 
 
-class CognitiveServiceModel(BaseSettings):
+class CognitiveServiceModel(BaseModel):
     endpoint: str

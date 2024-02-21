@@ -7,13 +7,12 @@ from models.message import MessageModel
 from models.next import ActionEnum as NextActionEnum
 from models.reminder import ReminderModel
 from models.training import TrainingModel
-from pydantic import computed_field, TypeAdapter
-from pydantic_settings import BaseSettings
+from pydantic import TypeAdapter, BaseModel
 from textwrap import dedent
 from typing import List, Optional
 
 
-class SoundModel(BaseSettings):
+class SoundModel(BaseModel):
     loading_tpl: str = "{public_url}/loading.wav"
     ready_tpl: str = "{public_url}/ready.wav"
 
@@ -32,7 +31,7 @@ class SoundModel(BaseSettings):
         )
 
 
-class LlmModel(BaseSettings):
+class LlmModel(BaseModel):
     """
     Introduce to Assistant who they are, what they do.
 
@@ -391,7 +390,6 @@ class LlmModel(BaseSettings):
         self._logger.debug(f"LLM prompt: {res}")
         return res
 
-    @computed_field
     @cached_property
     def _logger(self) -> Logger:
         from helpers.logging import build_logger
@@ -399,7 +397,7 @@ class LlmModel(BaseSettings):
         return build_logger(__name__)
 
 
-class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
+class TtsModel(BaseModel):
     tts_lang: str = "en-US"
     calltransfer_failure_tpl: str = (
         "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
@@ -521,7 +519,6 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
             pass
         return translation or initial
 
-    @computed_field
     @cached_property
     def _logger(self) -> Logger:
         from helpers.logging import build_logger
@@ -529,7 +526,7 @@ class TtsModel(BaseSettings, env_prefix="prompts_tts_"):
         return build_logger(__name__)
 
 
-class PromptsModel(BaseSettings, env_prefix="prompts_"):
+class PromptsModel(BaseModel):
     llm: LlmModel = LlmModel()  # Object is fully defined by default
     sounds: SoundModel = SoundModel()  # Object is fully defined by default
     tts: TtsModel = TtsModel()  # Object is fully defined by default
