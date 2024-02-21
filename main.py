@@ -997,7 +997,9 @@ async def post_call_sms(call: CallModel) -> None:
             )
 
     except ClientAuthenticationError:
-        _logger.error("Authentication error for SMS, check the credentials")
+        _logger.error(
+            "Authentication error for SMS, check the credentials", exc_info=True
+        )
     except Exception:
         _logger.warn(
             f"Failed SMS to {call.phone_number} ({call.call_id})", exc_info=True
