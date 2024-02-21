@@ -55,7 +55,7 @@ from persistence.cosmos import CosmosStore
 from persistence.memory import MemoryCache
 from persistence.redis import RedisCache
 from persistence.sqlite import SqliteStore
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 import asyncio
 import html
 import re
@@ -108,7 +108,8 @@ call_automation_client = CallAutomationClient(
     ),
 )
 sms_client = SmsClient(
-    credential=DefaultAzureCredential(), endpoint=CONFIG.communication_service.endpoint
+    credential=DefaultAzureCredential(),
+    endpoint=CONFIG.communication_service.endpoint,
 )
 
 # Persistence
@@ -141,11 +142,13 @@ api = FastAPI(
 )
 
 
-CALL_EVENT_URL = f'{CONFIG.api.events_domain.strip("/")}/call/event/{{phone_number}}/{{callback_secret}}'
-SENTENCE_R = r"[^\w\s+\-–—’/'\",:;()@=]"
-MESSAGE_ACTION_R = rf"action=([a-z_]*)( .*)?"
-_MESSAGE_STYLE_R = rf"style=([a-z_]*)( .*)?"
-FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
+_CALL_EVENT_URL = urljoin(
+    str(CONFIG.api.events_domain), "/call/event/{phone_number}/{callback_secret}"
+)
+_logger.info(f"Using call event URL {_CALL_EVENT_URL}")
+
+_MESSAGE_ACTION_R = r"action=([a-z_]*)( .*)?"
+_MESSAGE_STYLE_R = r"style=([a-z_]*)( .*)?"
 
 
 @api.get(
@@ -717,7 +720,7 @@ async def execute_llm_chat(
         """
         Remove action from content. AI often adds it by mistake event if explicitly asked not to.
         """
-        res = re.match(MESSAGE_ACTION_R, text)
+        res = re.match(_MESSAGE_ACTION_R, text)
         if not res:
             return text.strip()
         content = res.group(2)
@@ -1016,7 +1019,7 @@ async def callback_url(caller_id: str) -> str:
     if not call:
         call = CallModel(phone_number=caller_id)
         await db.call_aset(call)
-    return CALL_EVENT_URL.format(
+    return _CALL_EVENT_URL.format(
         callback_secret=html.escape(call.callback_secret),
         phone_number=html.escape(call.phone_number),
     )
