@@ -89,7 +89,14 @@ class ToolModel(BaseModel):
 
         logger = build_logger(__name__)
         name = self.function_name
-        args = json.loads(self.function_arguments)
+
+        try:
+            args = json.loads(self.function_arguments)
+        except json.JSONDecodeError:
+            logger.warn(
+                f"Error decoding JSON args for function {name}: {self.function_arguments}"
+            )
+            return f"Bad JSON format, impossible to execute function {name}"
 
         try:
             res = await getattr(plugins, name)(**args)
