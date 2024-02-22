@@ -30,7 +30,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 from typing import AsyncGenerator, List, Optional, Type, TypeVar
-import asyncio
+from httpx import ReadError
 
 
 _logger = build_logger(__name__)
@@ -91,6 +91,7 @@ async def completion_stream(
     retry=(
         retry_if_exception_type(SafetyCheckError)
         | retry_if_exception_type(RateLimitError)
+        | retry_if_exception_type(ReadError)
     ),
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
