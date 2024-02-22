@@ -85,7 +85,6 @@ build:
 start:
 	@echo "🛠️ Deploying to localhost..."
 	$(docker) run \
-		--detach \
 		--env API__EVENTS_DOMAIN=$(tunnel_url) \
 		--env VERSION=$(version_full) \
 		--mount type=bind,source="$(CURDIR)/.env",target="/app/.env" \
@@ -94,14 +93,6 @@ start:
 		--publish 8080:8080 \
 		--rm \
 		$(container_name):$(version_small)
-
-	$(MAKE) eventgrid-register \
-		endpoint=$(tunnel_url) \
-		name=$(tunnel_name) \
-		source="/subscriptions/2e41c463-3dfb-4760-8161-60e8cefa6d28/resourceGroups/$(name)/providers/Microsoft.Communication/communicationServices/$(name)"
-
-	@echo "🚀 Claim AI is running on $(tunnel_url)"
-	$(docker) attach claim-ai
 
 stop:
 	@echo "Stopping container..."
