@@ -234,7 +234,7 @@ def _contentsafety_category_test(
     if score == 0:
         return True  # No need to check severity
 
-    detection = next(item for item in res if item.category == category)
+    detection = next((item for item in res if item.category == category), None)
 
     if detection and detection.severity and detection.severity > score:
         _logger.debug(f"Matched {category} with severity {detection.severity}")
