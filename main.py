@@ -85,6 +85,7 @@ from helpers.call import (
     tts_sentence_split,
 )
 from helpers.llm_plugins import LlmPlugins
+from httpx import ReadError
 
 
 # Jinja configuration
@@ -716,6 +717,17 @@ async def execute_llm_chat(
     _logger.debug(f"Running LLM chat ({call.call_id})")
     should_continue_chat = True
 
+    async def _retry() -> Tuple[bool, CallModel]:
+        if _retry_remaining < 1:
+            return await _error_response()
+        return await execute_llm_chat(
+            background_tasks=background_tasks,
+            call=call,
+            client=client,
+            user_callback=user_callback,
+            _retry_remaining=_retry_remaining - 1,
+        )
+
     def _remove_message_actions(text: str) -> str:
         """
         Remove action from content. AI often adds it by mistake event if explicitly asked not to.
@@ -751,7 +763,7 @@ async def execute_llm_chat(
             await user_callback(local_content, new_style)
         return new_style
 
-    async def _error_response() -> None:
+    async def _error_response() -> Tuple[bool, CallModel]:
         content = await CONFIG.prompts.tts.error(call)
         style = MessageStyleEnum.NONE
         await user_callback(content, style)
@@ -762,6 +774,7 @@ async def execute_llm_chat(
                 style=style,
             )
         )
+        return should_continue_chat, call
 
     async def _tool_cancellation_callback() -> None:
         nonlocal should_continue_chat
@@ -840,94 +853,70 @@ async def execute_llm_chat(
                 ):
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _buffer_user_callback(sentence, plugins.style)
-
-        # Flush the remaining buffer
-        if content_buffer_pointer < len(content_full):
-            plugins.style = await _buffer_user_callback(
-                content_full[content_buffer_pointer:], plugins.style
-            )
-
-        # Convert tool calls buffer
-        tool_calls = [tool_call for _, tool_call in tool_calls_buffer.items()]
-
-        # Get data from full content to be able to store it in the DB
-        _, content_full = _extract_message_style(_remove_message_actions(content_full))
-
-        _logger.debug(f"Chat response: {content_full}")
-        _logger.debug(f"Tool calls: {tool_calls}")
-
-        # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
-        # TODO: Tries to detect this error earlier
-        # See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653
-        if any(
-            tool_call.function_name == "multi_tool_use.parallel"
-            for tool_call in tool_calls
-        ):
-            _logger.debug(f"Invalid tool schema: {tool_calls}")
-            if _retry_remaining < 1:
-                _logger.warn(
-                    f'LLM send back invalid tool schema "multi_tool_use.parallel", retry limit reached'
-                )
-                await _error_response()
-                return should_continue_chat, call
-            _logger.warn(
-                f'LLM send back invalid tool schema "multi_tool_use.parallel", retrying'
-            )
-            return await execute_llm_chat(
-                background_tasks=background_tasks,
-                call=call,
-                client=client,
-                user_callback=user_callback,
-                _retry_remaining=_retry_remaining - 1,
-            )
-
-        # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
-        if not content_full and not tool_calls:
-            _logger.debug(f"Empty content, retrying")
-            if _retry_remaining < 1:
-                _logger.warn(f"LLM send back empty content, retry limit reached")
-                await _error_response()
-                return should_continue_chat, call
-            _logger.warn(f"LLM send back empty content, retrying")
-            await execute_llm_chat(
-                background_tasks=background_tasks,
-                call=call,
-                client=client,
-                user_callback=user_callback,
-                _retry_remaining=_retry_remaining - 1,
-            )
-            return should_continue_chat, call
-
-        # Execute tools
-        tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
-        await asyncio.gather(*tool_tasks)
-
-        # Store message
-        call.messages.append(
-            MessageModel(
-                content=content_full,
-                persona=MessagePersonaEnum.ASSISTANT,
-                style=plugins.style,
-                tool_calls=tool_calls,
-            )
-        )
-
-        # Recusive call if needed
-        if tool_calls and should_continue_chat:
-            # Save in DB for new claims and allowing demos to be more "real-time"
-            await db.call_aset(call)
-            # Recursively call intelligence to continue the conversation
-            return await execute_llm_chat(
-                background_tasks=background_tasks,
-                call=call,
-                client=client,
-                user_callback=user_callback,
-                _retry_remaining=_retry_remaining,
-            )
-
+    except ReadError:
+        _logger.warn(f"Network error ({call.call_id})", exc_info=True)
+        return await _retry()
     except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
-        await _error_response()
+        return await _error_response()
+
+    # Flush the remaining buffer
+    if content_buffer_pointer < len(content_full):
+        plugins.style = await _buffer_user_callback(
+            content_full[content_buffer_pointer:], plugins.style
+        )
+
+    # Convert tool calls buffer
+    tool_calls = [tool_call for _, tool_call in tool_calls_buffer.items()]
+
+    # Get data from full content to be able to store it in the DB
+    _, content_full = _extract_message_style(_remove_message_actions(content_full))
+
+    _logger.debug(f"Chat response: {content_full}")
+    _logger.debug(f"Tool calls: {tool_calls}")
+
+    # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
+    # TODO: Tries to detect this error earlier
+    # See: https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653
+    if any(
+        tool_call.function_name == "multi_tool_use.parallel" for tool_call in tool_calls
+    ):
+        _logger.warn(
+            f'LLM send back invalid tool schema "multi_tool_use.parallel" ({call.call_id})'
+        )
+        return await _retry()
+
+    # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
+    if not content_full and not tool_calls:
+        _logger.warn(f"Empty content, retrying ({call.call_id})")
+        return await _retry()
+
+    # Execute tools
+    tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
+    await asyncio.gather(*tool_tasks)
+
+    # Store message
+    call.messages.append(
+        MessageModel(
+            content=content_full,
+            persona=MessagePersonaEnum.ASSISTANT,
+            style=plugins.style,
+            tool_calls=tool_calls,
+        )
+    )
+
+    # Recusive call if needed
+    if tool_calls and should_continue_chat:
+        # Save in DB for new claims and allowing demos to be more "real-time"
+        await db.call_aset(call)
+        # Recursively call intelligence to continue the conversation
+        return await execute_llm_chat(
+            background_tasks=background_tasks,
+            call=call,
+            client=client,
+            user_callback=user_callback,
+            _retry_remaining=_retry_remaining,
+        )
 
     return should_continue_chat, call
 
