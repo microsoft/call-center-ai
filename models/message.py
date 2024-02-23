@@ -97,7 +97,7 @@ class ToolModel(BaseModel):
             )
         except json.JSONDecodeError:
             logger.warn(
-                f"Error decoding JSON args for function {name}: {self.function_arguments}"
+                f"Error decoding JSON args for function {name}: {self.function_arguments[:20]}...{self.function_arguments[-20:]}"
             )
             return f"Bad JSON format, impossible to execute function {name}"
 
