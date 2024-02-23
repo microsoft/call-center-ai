@@ -636,7 +636,7 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
 
     If the system prompt is None, no completion will be run and None will be returned. Otherwise, the response of the LLM will be returned.
     """
-    _logger.debug(f"Running LLM completion ({call.call_id})")
+    _logger.info(f"Running LLM completion ({call.call_id})")
 
     if not text:
         return None
@@ -713,7 +713,7 @@ async def execute_llm_chat(
     user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     _retry_remaining: int = 3,
 ) -> Tuple[bool, CallModel]:
-    _logger.debug(f"Running LLM chat, remaining {_retry_remaining} ({call.call_id})")
+    _logger.info(f"Running LLM chat, remaining {_retry_remaining} ({call.call_id})")
     should_continue_chat = True
 
     async def _retry() -> Tuple[bool, CallModel]:
