@@ -4,6 +4,10 @@ param agentPhoneNumber string
 param botCompany string
 param botName string
 param botPhoneNumber string
+param gptBackupContext int = 16385
+param gptBackupModel string = 'gpt-35-turbo'
+param gptBackupVersion string = '1106'
+param gptContext int = 128000
 param gptModel string = 'gpt-4'
 param gptVersion string = '1106-Preview'
 param imageVersion string = 'main'
@@ -42,6 +46,10 @@ module app 'app.bicep' = {
     botCompany: botCompany
     botName: botName
     botPhoneNumber: botPhoneNumber
+    gptBackupContext: gptBackupContext
+    gptBackupModel: gptBackupModel
+    gptBackupVersion: gptBackupVersion
+    gptContext: gptContext
     gptModel: gptModel
     gptVersion: gptVersion
     imageVersion: imageVersion
