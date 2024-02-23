@@ -265,8 +265,11 @@ async def _use_oai() -> AsyncGenerator[AsyncAzureOpenAI, None]:
             else None
         ),
     )
-    yield client
-    await client.close()
+
+    try:
+        yield client, model, context
+    finally:
+        await client.close()
 
 
 @asynccontextmanager
@@ -279,5 +282,8 @@ async def _use_contentsafety() -> AsyncGenerator[ContentSafetyClient, None]:
             CONFIG.content_safety.access_key.get_secret_value()
         ),
     )
-    yield client
-    await client.close()
+
+    try:
+        yield client
+    finally:
+        await client.close()
