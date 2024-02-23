@@ -112,6 +112,9 @@ deploy:
 		--template-file bicep/main.bicep \
 	 	--name $(name)
 
+	$(MAKE) post-deploy name=$(name)
+
+post-deploy:
 	$(MAKE) copy-resources \
 		name=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
 
