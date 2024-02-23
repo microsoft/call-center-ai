@@ -4,6 +4,10 @@ param agentPhoneNumber string
 param botCompany string
 param botName string
 param botPhoneNumber string
+param gptBackupContext int
+param gptBackupModel string
+param gptBackupVersion string
+param gptContext int
 param gptModel string
 param gptVersion string
 param imageVersion string
@@ -15,6 +19,7 @@ param tags object
 
 var prefix = deployment().name
 var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
+var gptBackupModelFullName = toLower('${gptBackupModel}-${gptBackupVersion}')
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 var adaModelFullName = toLower('${adaModel}-${adaVersion}')
 var config = {
@@ -49,6 +54,10 @@ var config = {
   }
   openai: {
     endpoint: cognitiveOpenai.properties.endpoint
+    gpt_backup_context: gptBackupContext
+    gpt_backup_deployment: gptBackup.name
+    gpt_backup_model: gptBackupModel
+    gpt_context: gptContext
     gpt_deployment: gpt.name
     gpt_model: gptModel
   }
@@ -310,6 +319,23 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
       format: 'OpenAI'
       name: gptModel
       version: gptVersion
+    }
+  }
+}
+
+resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+  parent: cognitiveOpenai
+  name: gptBackupModelFullName
+  sku: {
+    capacity: 50
+    name: 'Standard'  // Pay-as-you-go
+  }
+  properties: {
+    // raiPolicyName: contentfilter.name
+    model: {
+      format: 'OpenAI'
+      name: gptBackupModel
+      version: gptBackupVersion
     }
   }
 }

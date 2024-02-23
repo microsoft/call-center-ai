@@ -90,13 +90,32 @@ class ToolModel(BaseModel):
         logger = build_logger(__name__)
         name = self.function_name
 
+        # Parse args
         try:
-            args = json.loads(self.function_arguments)
+            args: dict[str, Union[str, list[str], dict[str, str]]] = json.loads(
+                self.function_arguments
+            )
         except json.JSONDecodeError:
             logger.warn(
                 f"Error decoding JSON args for function {name}: {self.function_arguments}"
             )
             return f"Bad JSON format, impossible to execute function {name}"
+
+        # Unescape content (double backslash, HTML entities, ...) for str and list
+        # TODO: Is there more to unescape?
+        for key, arg in args.items():
+            if isinstance(arg, str):
+                args[key] = arg.encode("raw_unicode_escape").decode("unicode_escape")
+            elif isinstance(arg, list):
+                for i, v in enumerate(arg):
+                    args[key][i] = v.encode("raw_unicode_escape").decode(
+                        "unicode_escape"
+                    )
+            elif isinstance(arg, dict):
+                for k, v in arg.items():
+                    args[key][k] = v.encode("raw_unicode_escape").decode(
+                        "unicode_escape"
+                    )
 
         try:
             res = await getattr(plugins, name)(**args)

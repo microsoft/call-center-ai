@@ -11,15 +11,14 @@ from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from helpers.config import CONFIG
 from contextlib import asynccontextmanager
 from helpers.logging import build_logger
-from openai import (
-    AsyncAzureOpenAI,
-    AsyncStream,
-    RateLimitError,
-)
+from openai import AsyncAzureOpenAI, AsyncStream, RateLimitError, APIError
 from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
     ChatCompletionChunk,
-    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionToolMessageParam,
     ChatCompletionToolParam,
+    ChatCompletionUserMessageParam,
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDelta
 from pydantic import BaseModel, ValidationError
@@ -29,8 +28,10 @@ from tenacity import (
     wait_random_exponential,
     retry_if_exception_type,
 )
-from typing import AsyncGenerator, List, Optional, Type, TypeVar
+from typing import AsyncGenerator, List, Optional, Tuple, Type, TypeVar, Union
 from httpx import ReadError
+from models.message import MessageModel
+import tiktoken
 
 
 _logger = build_logger(__name__)
@@ -58,8 +59,10 @@ class SafetyCheckError(Exception):
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def completion_stream(
-    messages: List[ChatCompletionMessageParam],
+    is_backup: bool,
     max_tokens: int,
+    messages: List[MessageModel],
+    system: List[ChatCompletionSystemMessageParam],
     tools: Optional[List[ChatCompletionToolParam]] = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
     """
@@ -72,11 +75,18 @@ async def completion_stream(
     if tools:
         extra["tools"] = tools
 
-    async with _use_oai() as client:
+    async with _use_oai(is_backup) as (client, model, context):
+        prompt = _prepare_messages(
+            context=context,
+            messages=messages,
+            model=model,
+            system=system,
+        )
+
         stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
             max_tokens=max_tokens,
-            messages=messages,
-            model=CONFIG.openai.gpt_model,
+            messages=prompt,
+            model=model,
             stream=True,
             temperature=0,  # Most focused and deterministic
             **extra,
@@ -90,6 +100,7 @@ async def completion_stream(
     reraise=True,
     retry=(
         retry_if_exception_type(SafetyCheckError)
+        | retry_if_exception_type(APIError)
         | retry_if_exception_type(RateLimitError)
         | retry_if_exception_type(ReadError)
     ),
@@ -97,8 +108,9 @@ async def completion_stream(
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def completion_sync(
-    messages: List[ChatCompletionMessageParam],
     max_tokens: int,
+    messages: List[MessageModel],
+    system: List[ChatCompletionSystemMessageParam],
     json_output: bool = False,
 ) -> Optional[str]:
     """
@@ -112,11 +124,18 @@ async def completion_sync(
         extra["response_format"] = {"type": "json_object"}
 
     content = None
-    async with _use_oai() as client:
+    async with _use_oai(False) as (client, model, context):
+        prompt = _prepare_messages(
+            context=context,
+            messages=messages,
+            model=model,
+            system=system,
+        )
+
         res = await client.chat.completions.create(
             max_tokens=max_tokens,
-            messages=messages,
-            model=CONFIG.openai.gpt_model,
+            messages=prompt,
+            model=model,
             temperature=0,  # Most focused and deterministic
             **extra,
         )
@@ -137,19 +156,71 @@ async def completion_sync(
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def completion_model_sync(
-    messages: List[ChatCompletionMessageParam],
     max_tokens: int,
+    messages: List[MessageModel],
     model: Type[ModelType],
+    system: List[ChatCompletionSystemMessageParam],
 ) -> Optional[ModelType]:
     """
     Returns an object validated against a given model, from a completion result.
 
     Catch errors for a maximum of 3 times, but not `SafetyCheckError`.
     """
-    res = await completion_sync(messages, max_tokens, json_output=True)
+    res = await completion_sync(
+        json_output=True,
+        max_tokens=max_tokens,
+        messages=messages,
+        system=system,
+    )
     if not res:
         return None
     return model.model_validate_json(res)
+
+
+def _prepare_messages(
+    context: int,
+    model: str,
+    system: List[ChatCompletionSystemMessageParam],
+    messages: List[MessageModel],
+    max_messages: int = 50,
+) -> List[
+    Union[
+        ChatCompletionAssistantMessageParam,
+        ChatCompletionSystemMessageParam,
+        ChatCompletionToolMessageParam,
+        ChatCompletionUserMessageParam,
+    ]
+]:
+    res: List[
+        Union[
+            ChatCompletionAssistantMessageParam,
+            ChatCompletionSystemMessageParam,
+            ChatCompletionToolMessageParam,
+            ChatCompletionUserMessageParam,
+        ]
+    ] = [*system]
+    counter = 0
+    total = min(len(system) + len(messages), max_messages)
+
+    # Add system messages
+    tokens = 0
+    for message in system:
+        tokens += count_tokens(message.get("content"), model)
+        counter += 1
+
+    # Add user messages until the context is reached
+    for message in messages:
+        tokens += count_tokens(message.content, model)
+        if tokens >= context:
+            break
+        if counter >= max_messages:
+            break
+        res += message.to_openai()
+        counter += 1
+
+    _logger.info(f"Took {counter}/{total} messages for the context")
+
+    return res
 
 
 async def safety_check(text: str) -> None:
@@ -243,15 +314,32 @@ def _contentsafety_category_test(
     return True
 
 
+def count_tokens(content: str, model: str) -> int:
+    enc = tiktoken.encoding_for_model(model)
+    return len(enc.encode(content))
+
+
 @asynccontextmanager
-async def _use_oai() -> AsyncGenerator[AsyncAzureOpenAI, None]:
+async def _use_oai(
+    is_backup: bool,
+) -> AsyncGenerator[Tuple[AsyncAzureOpenAI, str, int], None]:
+    deployment = (
+        CONFIG.openai.gpt_deployment
+        if not is_backup
+        else CONFIG.openai.gpt_backup_deployment
+    )
+    model = CONFIG.openai.gpt_model if not is_backup else CONFIG.openai.gpt_backup_model
+    context = (
+        CONFIG.openai.gpt_context if not is_backup else CONFIG.openai.gpt_backup_context
+    )
+
     client = AsyncAzureOpenAI(
         # Reliability
         max_retries=3,
         timeout=60,
         # Azure deployment
         api_version="2023-12-01-preview",
-        azure_deployment=CONFIG.openai.gpt_deployment,
+        azure_deployment=deployment,
         azure_endpoint=CONFIG.openai.endpoint,
         # Authentication, either RBAC or API key
         api_key=(

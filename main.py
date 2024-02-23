@@ -46,10 +46,7 @@ from models.next import ActionEnum as NextActionEnum
 from models.next import NextModel
 from models.synthesis import SynthesisModel
 from openai import APIError
-from openai.types.chat import (
-    ChatCompletionMessageParam,
-    ChatCompletionSystemMessageParam,
-)
+from openai.types.chat import ChatCompletionSystemMessageParam
 from persistence.ai_search import AiSearchSearch
 from persistence.cosmos import CosmosStore
 from persistence.memory import MemoryCache
@@ -67,11 +64,11 @@ from models.message import (
     ToolModel as MessageToolModel,
 )
 from helpers.llm_worker import (
+    completion_model_sync,
     completion_stream,
     completion_sync,
-    safety_check,
-    completion_model_sync,
     ModelType,
+    safety_check,
     SafetyCheckError,
 )
 from uuid import UUID
@@ -633,7 +630,7 @@ async def load_llm_chat(
     return call
 
 
-async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str]:
+async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
     """
     Run LLM completion from a system prompt and a Call model.
 
@@ -641,16 +638,17 @@ async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str
     """
     _logger.debug(f"Running LLM completion ({call.call_id})")
 
-    if not system:
+    if not text:
         return None
 
-    messages = _oai_completion_messages(system, call)
+    system = _llm_completion_system(text, call)
     content = None
 
     try:
         content = await completion_sync(
             max_tokens=1000,
-            messages=messages,
+            messages=call.messages,
+            system=system,
         )
     except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
@@ -661,7 +659,7 @@ async def llm_completion(system: Optional[str], call: CallModel) -> Optional[str
 
 
 async def llm_model(
-    system: Optional[str], call: CallModel, model: Type[ModelType]
+    text: Optional[str], call: CallModel, model: Type[ModelType]
 ) -> Optional[ModelType]:
     """
     Run LLM completion from a system prompt, a Call model, and an expected model type as a return.
@@ -670,17 +668,18 @@ async def llm_model(
     """
     _logger.debug(f"Running LLM model ({call.call_id})")
 
-    if not system:
+    if not text:
         return None
 
-    messages = _oai_completion_messages(system, call)
+    system = _llm_completion_system(text, call)
     res = None
 
     try:
         res = await completion_model_sync(
             max_tokens=1000,
-            messages=messages,
+            messages=call.messages,
             model=model,
+            system=system,
         )
     except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
@@ -688,10 +687,10 @@ async def llm_model(
     return res
 
 
-def _oai_completion_messages(
+def _llm_completion_system(
     system: str, call: CallModel
-) -> List[ChatCompletionMessageParam]:
-    messages: List[ChatCompletionMessageParam] = [
+) -> List[ChatCompletionSystemMessageParam]:
+    messages = [
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
@@ -714,7 +713,7 @@ async def execute_llm_chat(
     user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     _retry_remaining: int = 3,
 ) -> Tuple[bool, CallModel]:
-    _logger.debug(f"Running LLM chat ({call.call_id})")
+    _logger.debug(f"Running LLM chat, remaining {_retry_remaining} ({call.call_id})")
     should_continue_chat = True
 
     async def _retry() -> Tuple[bool, CallModel]:
@@ -791,11 +790,11 @@ async def execute_llm_chat(
     trainings = sorted(
         set(training for trainings in trainings_tasks for training in trainings or [])
     )  # Flatten, remove duplicates, and sort by score
-    _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings ({call.call_id})")
+    _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
     _logger.debug(f"Trainings: {trainings}")
 
-    # Build messages
-    messages: List[ChatCompletionMessageParam] = [
+    # Build system prompts
+    system = [
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.default_system(
                 phone_number=call.phone_number,
@@ -810,9 +809,6 @@ async def execute_llm_chat(
             role="system",
         ),
     ]
-    for message in call.messages:
-        messages += message.to_openai()
-    _logger.debug(f"Messages: {messages}")
 
     # Build plugins
     plugins = LlmPlugins(
@@ -829,14 +825,21 @@ async def execute_llm_chat(
     tools = plugins.to_openai()
     _logger.debug(f"Tools: {tools}")
 
+    # Enable backup model if two retries are left, to maximize the chance of success
+    model_is_backup = _retry_remaining < 2
+    if model_is_backup:
+        _logger.warn(f"Using backup model ({call.call_id})")
+
     # Execute LLM inference
     content_buffer_pointer = 0
     content_full = ""
     tool_calls_buffer: dict[int, MessageToolModel] = {}
     try:
         async for delta in completion_stream(
+            is_backup=model_is_backup,
             max_tokens=350,
-            messages=messages,
+            messages=call.messages,
+            system=system,
             tools=tools,
         ):
             if not delta.content:
@@ -858,7 +861,7 @@ async def execute_llm_chat(
         return await _retry()
     except APIError:
         _logger.warn(f"OpenAI API call error", exc_info=True)
-        return await _error_response()
+        return await _retry()
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
@@ -954,7 +957,7 @@ async def post_call_sms(call: CallModel) -> None:
     Send an SMS report to the customer.
     """
     content = await llm_completion(
-        system=CONFIG.prompts.llm.sms_summary_system(call),
+        text=CONFIG.prompts.llm.sms_summary_system(call),
         call=call,
     )
 
@@ -1023,15 +1026,15 @@ async def post_call_synthesis(call: CallModel) -> None:
     short, long = await asyncio.gather(
         llm_completion(
             call=call,
-            system=CONFIG.prompts.llm.synthesis_short_system(call),
+            text=CONFIG.prompts.llm.synthesis_short_system(call),
         ),
         llm_completion(
             call=call,
-            system=CONFIG.prompts.llm.citations_system(
+            text=CONFIG.prompts.llm.citations_system(
                 call=call,
                 text=await llm_completion(
                     call=call,
-                    system=CONFIG.prompts.llm.synthesis_long_system(call),
+                    text=CONFIG.prompts.llm.synthesis_long_system(call),
                 ),
             ),
         ),
@@ -1058,7 +1061,7 @@ async def post_call_next(call: CallModel) -> None:
     next = await llm_model(
         call=call,
         model=NextModel,
-        system=CONFIG.prompts.llm.next_system(call),
+        text=CONFIG.prompts.llm.next_system(call),
     )
 
     if not next:
