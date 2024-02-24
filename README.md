@@ -284,8 +284,13 @@ cognitive_service:
   endpoint: https://xxx.cognitiveservices.azure.com
 
 openai:
+  api_key: xxx
   endpoint: https://xxx.openai.azure.com
-  gpt_deployment: gpt
+  gpt_backup_context: 16385
+  gpt_backup_deployment: gpt-35-turbo-1106
+  gpt_backup_model: gpt-35-turbo-1106
+  gpt_context: 128000
+  gpt_deployment: gpt-4-1106-preview
   gpt_model: gpt-4-1106-preview
 
 ai_search:
