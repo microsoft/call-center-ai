@@ -22,7 +22,7 @@ import re
 
 
 _logger = build_logger(__name__)
-_SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;:])"
+_SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"
 
 
 class ContextEnum(str, Enum):
