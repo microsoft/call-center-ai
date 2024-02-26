@@ -277,7 +277,7 @@ async def call_inbound_worker(
 
         except ClientAuthenticationError as e:
             _logger.error(
-                f"Authentication error with Communication Services, check the credentials",
+                "Authentication error with Communication Services, check the credentials",
                 exc_info=True,
             )
 
@@ -346,7 +346,7 @@ async def communication_event_worker(
     _logger.debug(event.data)
 
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
-        _logger.info(f"Call connected ({call.call_id})")
+        _logger.info("Call connected")
         call.recognition_retry = 0  # Reset recognition retry counter
 
         call.messages.append(
@@ -362,7 +362,7 @@ async def communication_event_worker(
         )  # Every time a call is answered, confirm the language
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
-        _logger.info(f"Call disconnected ({call.call_id})")
+        _logger.info("Call disconnected")
         await handle_hangup(background_tasks, client, call)
 
     elif (
@@ -372,7 +372,7 @@ async def communication_event_worker(
 
         if recognition_result == "speech":  # Handle voice
             speech_text = event.data["speechResult"]["speech"]
-            _logger.info(f"Voice recognition ({call.call_id}): {speech_text}")
+            _logger.info(f"Voice recognition: {speech_text}")
 
             if speech_text is not None and len(speech_text) > 0:
                 call.messages.append(
@@ -396,12 +396,11 @@ async def communication_event_worker(
                     ),
                     CONFIG.workflow.lang.default_lang,
                 )
-                _logger.info(f"IVR recognition ({call.call_id}): {lang}")
             except ValueError:
                 _logger.warn(f"Unknown IVR {label_detected}, code not implemented")
                 return
 
-            _logger.info(f"Setting call language to {lang} ({call.call_id})")
+            _logger.info(f"Setting call language to {lang}")
             call.lang = lang
             await db.call_aset(
                 call
@@ -455,10 +454,10 @@ async def communication_event_worker(
 
         else:  # Other recognition error
             if error_code == 8511:  # Failure while trying to play the prompt
-                _logger.warn(f"Failed to play prompt ({call.call_id})")
+                _logger.warn("Failed to play prompt")
             else:
                 _logger.warn(
-                    f"Recognition failed with unknown error code {error_code}, answering with default error ({call.call_id})"
+                    f"Recognition failed with unknown error code {error_code}, answering with default error"
                 )
             await handle_recognize_text(
                 call=call,
@@ -467,17 +466,17 @@ async def communication_event_worker(
             )
 
     elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
-        _logger.debug(f"Play completed ({call.call_id})")
+        _logger.debug("Play completed")
 
         if (
             operation_context == CallContextEnum.TRANSFER_FAILED
             or operation_context == CallContextEnum.GOODBYE
         ):  # Call ended
-            _logger.info(f"Ending call ({call.call_id})")
+            _logger.info("Ending call")
             await handle_hangup(background_tasks, client, call)
 
         elif operation_context == CallContextEnum.CONNECT_AGENT:  # Call transfer
-            _logger.info(f"Initiating transfer call initiated ({call.call_id})")
+            _logger.info("Initiating transfer call initiated")
             agent_caller = PhoneNumberIdentifier(
                 str(CONFIG.workflow.agent_phone_number)
             )
@@ -486,7 +485,7 @@ async def communication_event_worker(
             )
 
     elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
-        _logger.debug(f"Play failed ({call.call_id})")
+        _logger.debug("Play failed")
 
         result_information = event.data["resultInformation"]
         error_code = result_information["subCode"]
@@ -508,16 +507,16 @@ async def communication_event_worker(
     elif (
         event_type == "Microsoft.Communication.CallTransferAccepted"
     ):  # Call transfer accepted
-        _logger.info(f"Call transfer accepted event ({call.call_id})")
+        _logger.info("Call transfer accepted event")
         # TODO: Is there anything to do here?
 
     elif (
         event_type == "Microsoft.Communication.CallTransferFailed"
     ):  # Call transfer failed
-        _logger.debug(f"Call transfer failed event ({call.call_id})")
+        _logger.debug("Call transfer failed event")
         result_information = event.data["resultInformation"]
         sub_code = result_information["subCode"]
-        _logger.info(f"Error during call transfer, subCode {sub_code} ({call.call_id})")
+        _logger.info(f"Error during call transfer, subCode {sub_code}")
         await handle_play(
             call=call,
             client=client,
@@ -538,6 +537,8 @@ async def load_llm_chat(
 
     Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after 15 seconds, play the timeout sound. If the intelligence is not processed after 30 seconds, stop the intelligence processing and play the error sound.
     """
+    _logger.info("Loading LLM chat")
+
     should_play_sound = True
 
     async def _tts_callback(text: str, style: MessageStyleEnum) -> None:
@@ -549,7 +550,7 @@ async def load_llm_chat(
         try:
             await safety_check(text)
         except SafetyCheckError as e:
-            _logger.warn(f"Unsafe text detected, not playing ({call.call_id}): {e}")
+            _logger.warn(f"Unsafe text detected, not playing: {e}")
             return
 
         should_play_sound = False
@@ -581,7 +582,7 @@ async def load_llm_chat(
     should_continue_chat = True
     try:
         while True:
-            _logger.debug(f"Chat task status ({call.call_id}): {chat_task.done()}")
+            _logger.debug(f"Chat task status: {chat_task.done()}")
             if chat_task.done():  # Break when chat coroutine is done
                 # Clean up
                 soft_timeout_task.cancel()
@@ -591,7 +592,7 @@ async def load_llm_chat(
                 break
             if hard_timeout_task.done():  # Break when hard timeout is reached
                 _logger.warn(
-                    f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached ({call.call_id})"
+                    f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached"
                 )
                 # Clean up
                 chat_task.cancel()
@@ -602,7 +603,7 @@ async def load_llm_chat(
                     soft_timeout_task.done() and not soft_timeout_triggered
                 ):  # Speak when soft timeout is reached
                     _logger.warn(
-                        f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached ({call.call_id})"
+                        f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached"
                     )
                     soft_timeout_triggered = True
                     await handle_play(
@@ -619,7 +620,7 @@ async def load_llm_chat(
             # Wait to not block the event loop and play too many sounds
             await asyncio.sleep(5)
     except Exception:
-        _logger.warn(f"Error loading intelligence ({call.call_id})", exc_info=True)
+        _logger.warn("Error loading intelligence", exc_info=True)
 
     if should_continue_chat:
         await handle_recognize_text(
@@ -636,7 +637,7 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
 
     If the system prompt is None, no completion will be run and None will be returned. Otherwise, the response of the LLM will be returned.
     """
-    _logger.info(f"Running LLM completion ({call.call_id})")
+    _logger.info("Running LLM completion")
 
     if not text:
         return None
@@ -651,7 +652,7 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
             system=system,
         )
     except APIError:
-        _logger.warn(f"OpenAI API call error", exc_info=True)
+        _logger.warn("OpenAI API call error", exc_info=True)
     except SafetyCheckError as e:
         _logger.warn(f"OpenAI safety check error: {e}")
 
@@ -666,7 +667,7 @@ async def llm_model(
 
     The logic will try its best to return a model of the expected type, but it is not guaranteed. It it fails, `None` will be returned.
     """
-    _logger.debug(f"Running LLM model ({call.call_id})")
+    _logger.debug("Running LLM model")
 
     if not text:
         return None
@@ -682,7 +683,7 @@ async def llm_model(
             system=system,
         )
     except APIError:
-        _logger.warn(f"OpenAI API call error", exc_info=True)
+        _logger.warn("OpenAI API call error", exc_info=True)
 
     return res
 
@@ -777,7 +778,7 @@ async def execute_llm_chat(
 
     async def _tool_cancellation_callback() -> None:
         nonlocal should_continue_chat
-        _logger.info(f"Chat stopped by tool ({call.call_id})")
+        _logger.info("Chat stopped by tool")
         should_continue_chat = False
 
     # Build RAG using query expansion from last messages
@@ -857,10 +858,10 @@ async def execute_llm_chat(
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _buffer_user_callback(sentence, plugins.style)
     except ReadError:
-        _logger.warn(f"Network error ({call.call_id})", exc_info=True)
+        _logger.warn(f"Network error", exc_info=True)
         return await _retry()
     except APIError:
-        _logger.warn(f"OpenAI API call error", exc_info=True)
+        _logger.warn("OpenAI API call error")
         return await _retry()
 
     # Flush the remaining buffer
@@ -927,14 +928,14 @@ async def execute_llm_chat(
 async def handle_hangup(
     background_tasks: BackgroundTasks, client: CallConnectionClient, call: CallModel
 ) -> None:
-    _logger.debug(f"Hanging up call ({call.call_id})")
+    _logger.debug("Hanging up call")
     try:
         client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
-        _logger.debug(f"Call already hung up ({call.call_id})")
+        _logger.debug("Call already hung up")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing ({call.call_id})")
+            _logger.debug("Call hung up before playing")
         else:
             raise e
 
@@ -962,10 +963,10 @@ async def post_call_sms(call: CallModel) -> None:
     )
 
     if not content:
-        _logger.warn(f"Error generating SMS report ({call.call_id})")
+        _logger.warn("Error generating SMS report")
         return
 
-    _logger.info(f"SMS report ({call.call_id}): {content}")
+    _logger.info(f"SMS report: {content}")
     try:
         responses = sms_client.send(
             from_=str(CONFIG.communication_service.phone_number),
@@ -975,9 +976,7 @@ async def post_call_sms(call: CallModel) -> None:
         response = responses[0]
 
         if response.successful:
-            _logger.debug(
-                f"SMS report sent {response.message_id} to {response.to} ({call.call_id})"
-            )
+            _logger.debug(f"SMS report sent {response.message_id} to {response.to}")
             call.messages.append(
                 MessageModel(
                     action=MessageActionEnum.SMS,
@@ -988,7 +987,7 @@ async def post_call_sms(call: CallModel) -> None:
             await db.call_aset(call)
         else:
             _logger.warn(
-                f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message} ({call.call_id})"
+                f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message}"
             )
 
     except ClientAuthenticationError:
@@ -996,9 +995,7 @@ async def post_call_sms(call: CallModel) -> None:
             "Authentication error for SMS, check the credentials", exc_info=True
         )
     except Exception:
-        _logger.warn(
-            f"Failed SMS to {call.phone_number} ({call.call_id})", exc_info=True
-        )
+        _logger.warn(f"Failed SMS to {call.phone_number}", exc_info=True)
 
 
 async def callback_url(caller_id: str) -> str:
@@ -1021,7 +1018,7 @@ async def post_call_synthesis(call: CallModel) -> None:
     """
     Synthesize the call and store it to the model.
     """
-    _logger.debug(f"Synthesizing call ({call.call_id})")
+    _logger.debug("Synthesizing call")
 
     short, long = await asyncio.gather(
         llm_completion(
@@ -1041,11 +1038,11 @@ async def post_call_synthesis(call: CallModel) -> None:
     )
 
     if not short or not long:
-        _logger.warn(f"Error generating synthesis ({call.call_id})")
+        _logger.warn("Error generating synthesis")
         return
 
-    _logger.info(f"Short synthesis ({call.call_id}): {short}")
-    _logger.info(f"Long synthesis ({call.call_id}): {long}")
+    _logger.info(f"Short synthesis: {short}")
+    _logger.info(f"Long synthesis: {long}")
 
     call.synthesis = SynthesisModel(
         long=long,
@@ -1065,10 +1062,10 @@ async def post_call_next(call: CallModel) -> None:
     )
 
     if not next:
-        _logger.warn(f"Error generating next action ({call.call_id})")
+        _logger.warn("Error generating next action")
         return
 
-    _logger.info(f"Next action ({call.call_id}): {next}")
+    _logger.info(f"Next action: {next}")
     call.next = next
     await db.call_aset(call)
 

@@ -58,7 +58,7 @@ async def _handle_recognize_media(
     """
     Play a media to a call participant and start recognizing the response.
     """
-    _logger.debug(f"Recognizing media ({call.call_id})")
+    _logger.debug(f"Recognizing media")
     try:
         client.start_recognizing_media(
             end_silence_timeout=3,  # Sometimes user includes breaks in their speech
@@ -68,10 +68,10 @@ async def _handle_recognize_media(
             target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
         )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before recognizing ({call.call_id})")
+        _logger.debug(f"Call hung up before recognizing")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing ({call.call_id})")
+            _logger.debug(f"Call hung up before playing")
         else:
             raise e
 
@@ -88,10 +88,10 @@ async def handle_media(
             play_source=FileSource(url=sound_url),
         )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing ({call.call_id})")
+        _logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing ({call.call_id})")
+            _logger.debug(f"Call hung up before playing")
         else:
             raise e
 
@@ -161,16 +161,16 @@ async def handle_play(
 
     try:
         for chunk in chunks:
-            _logger.info(f"Playing text ({call.call_id}): {text} ({style})")
+            _logger.info(f"Playing text: {text} ({style})")
             client.play_media(
                 operation_context=context,
                 play_source=_audio_from_text(chunk, style, call),
             )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing ({call.call_id})")
+        _logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing ({call.call_id})")
+            _logger.debug(f"Call hung up before playing")
         else:
             raise e
 
@@ -206,8 +206,8 @@ async def handle_recognize_ivr(
     text: str,
     choices: List[RecognitionChoice],
 ) -> None:
-    _logger.info(f"Playing text before IVR ({call.call_id}): {text}")
-    _logger.debug(f"Recognizing IVR ({call.call_id})")
+    _logger.info(f"Playing text before IVR: {text}")
+    _logger.debug(f"Recognizing IVR")
     try:
         client.start_recognizing_media(
             choices=choices,
@@ -219,4 +219,4 @@ async def handle_recognize_ivr(
             target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
         )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before recognizing ({call.call_id})")
+        _logger.debug(f"Call hung up before recognizing")
