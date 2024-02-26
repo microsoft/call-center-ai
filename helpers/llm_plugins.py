@@ -51,7 +51,7 @@ class LlmPlugins:
 
     async def end_call(self) -> str:
         """
-        Use this if the user wants to end the call in its last message. Be warnging that the call will be ended immediately. Never use this action directly after a recall. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.
+        Use this if the user wants to end the call in its last message. Use this action only at the end of a conversation. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon'.
         """
         await self.cancellation_callback()
         await handle_play(
