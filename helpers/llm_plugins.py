@@ -49,7 +49,7 @@ class LlmPlugins:
 
     async def end_call(self) -> str:
         """
-        Use this if the user wants to end the call in its last message. Use this action only at the end of a conversation. Be warnging that the call will be ended immediately. Example: 'I want to hang up', 'Good bye, see you soon'.
+        Use this if the user said they want to end the call. This will hang up the call. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
         """
         await self.cancellation_callback()
         await handle_play(
