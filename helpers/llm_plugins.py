@@ -24,7 +24,7 @@ class LlmPlugins:
     post_call_next: Callable[[CallModel], Awaitable]
     post_call_synthesis: Callable[[CallModel], Awaitable]
     search: AiSearchSearch
-    style: MessageStyleEnum
+    style: MessageStyleEnum = MessageStyleEnum.NONE
     user_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
     def __init__(
@@ -36,7 +36,6 @@ class LlmPlugins:
         post_call_next: Callable[[CallModel], Awaitable],
         post_call_synthesis: Callable[[CallModel], Awaitable],
         search: AiSearchSearch,
-        style: MessageStyleEnum,
         user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
         self.background_tasks = background_tasks
@@ -46,7 +45,6 @@ class LlmPlugins:
         self.post_call_next = post_call_next
         self.post_call_synthesis = post_call_synthesis
         self.search = search
-        self.style = style
         self.user_callback = user_callback
 
     async def end_call(self) -> str:

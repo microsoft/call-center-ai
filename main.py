@@ -531,11 +531,14 @@ async def load_llm_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
     client: CallConnectionClient,
+    _retry_remaining: int = 3,
 ) -> CallModel:
     """
     Handle the intelligence of the call, including: LLM chat, TTS, and media play.
 
-    Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after 15 seconds, play the timeout sound. If the intelligence is not processed after 30 seconds, stop the intelligence processing and play the error sound.
+    Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after few seconds, play the timeout sound. If the intelligence is not processed after more seconds, stop the intelligence processing and play the error sound.
+
+    Returns the updated call model.
     """
     _logger.info("Loading LLM chat")
 
@@ -562,9 +565,15 @@ async def load_llm_chat(
             text=text,
         )
 
+    # Enable backup model if two retries are left, to maximize the chance of success
+    backup_model = _retry_remaining < 2
+    if backup_model:
+        _logger.warn("Using backup model")
+
     chat_task = asyncio.create_task(
         execute_llm_chat(
             background_tasks=background_tasks,
+            backup_model=backup_model,
             call=call,
             client=client,
             user_callback=_tts_callback,
@@ -579,7 +588,9 @@ async def load_llm_chat(
         asyncio.sleep(CONFIG.workflow.intelligence_hard_timeout_sec)
     )
 
-    should_continue_chat = True
+    is_error = True
+    continue_chat = True
+    should_user_answer = True
     try:
         while True:
             _logger.debug(f"Chat task status: {chat_task.done()}")
@@ -588,8 +599,11 @@ async def load_llm_chat(
                 soft_timeout_task.cancel()
                 hard_timeout_task.cancel()
                 # Store updated chat model
-                should_continue_chat, call = chat_task.result()
+                is_error, continue_chat, should_user_answer, call = chat_task.result()
+                # Save in DB for new claims and allowing demos to be more "real-time"
+                await db.call_aset(call)
                 break
+
             if hard_timeout_task.done():  # Break when hard timeout is reached
                 _logger.warn(
                     f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached"
@@ -598,6 +612,7 @@ async def load_llm_chat(
                 chat_task.cancel()
                 soft_timeout_task.cancel()
                 break
+
             if should_play_sound:  # Catch timeout if async loading is not started
                 if (
                     soft_timeout_task.done() and not soft_timeout_triggered
@@ -611,18 +626,54 @@ async def load_llm_chat(
                         client=client,
                         text=await CONFIG.prompts.tts.timeout_loading(call),
                     )
+
                 else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
                     await handle_media(
                         call=call,
                         client=client,
                         sound_url=CONFIG.prompts.sounds.loading(),
                     )  # Play loading sound
+
             # Wait to not block the event loop and play too many sounds
             await asyncio.sleep(5)
+
     except Exception:
         _logger.warn("Error loading intelligence", exc_info=True)
 
-    if should_continue_chat:
+    if is_error:  # Error during chat
+        if not continue_chat or _retry_remaining < 1:  # Maximum retries reached
+            _logger.warn("Maximum retries reached, stopping chat")
+            should_user_answer = True
+            content = await CONFIG.prompts.tts.error(call)
+            style = MessageStyleEnum.NONE
+            await _tts_callback(content, style)
+            call.messages.append(
+                MessageModel(
+                    content=content,
+                    persona=MessagePersonaEnum.ASSISTANT,
+                    style=style,
+                )
+            )
+
+        else:  # Retry chat after an error
+            _logger.info(f"Retrying chat, {_retry_remaining - 1} remaining")
+            return await load_llm_chat(
+                background_tasks=background_tasks,
+                call=call,
+                client=client,
+                _retry_remaining=_retry_remaining - 1,
+            )
+
+    elif continue_chat:  # Contiue chat
+        _logger.info(f"Continuing chat")
+        return await load_llm_chat(
+            background_tasks=background_tasks,
+            call=call,
+            client=client,
+            _retry_remaining=_retry_remaining,
+        )
+
+    if should_user_answer:
         await handle_recognize_text(
             call=call,
             client=client,
@@ -709,24 +760,28 @@ def _llm_completion_system(
 
 async def execute_llm_chat(
     background_tasks: BackgroundTasks,
+    backup_model: bool,
     call: CallModel,
     client: CallConnectionClient,
     user_callback: Callable[[str, MessageStyleEnum], Awaitable],
-    _retry_remaining: int = 3,
-) -> Tuple[bool, CallModel]:
-    _logger.info(f"Running LLM chat, remaining {_retry_remaining} ({call.call_id})")
-    should_continue_chat = True
+) -> Tuple[bool, bool, bool, CallModel]:
+    """
+    Perform the chat with the LLM model.
 
-    async def _retry() -> Tuple[bool, CallModel]:
-        if _retry_remaining < 1:
-            return await _error_response()
-        return await execute_llm_chat(
-            background_tasks=background_tasks,
-            call=call,
-            client=client,
-            user_callback=user_callback,
-            _retry_remaining=_retry_remaining - 1,
-        )
+    This function will handle:
+
+    - The chat with the LLM model (incl system prompts, tools, and user callback)
+    - Retry as possible if the LLM model fails to return a response
+
+    Returns a tuple with:
+
+    1. `bool`, notify error
+    2. `bool`, should retry chat
+    3. `bool`, if the chat should continue
+    4. `CallModel`, the updated model
+    """
+    _logger.debug("Running LLM chat")
+    should_user_answer = True
 
     def _remove_message_actions(text: str) -> str:
         """
@@ -763,23 +818,10 @@ async def execute_llm_chat(
             await user_callback(local_content, new_style)
         return new_style
 
-    async def _error_response() -> Tuple[bool, CallModel]:
-        content = await CONFIG.prompts.tts.error(call)
-        style = MessageStyleEnum.NONE
-        await user_callback(content, style)
-        call.messages.append(
-            MessageModel(
-                content=content,
-                persona=MessagePersonaEnum.ASSISTANT,
-                style=style,
-            )
-        )
-        return should_continue_chat, call
-
     async def _tool_cancellation_callback() -> None:
-        nonlocal should_continue_chat
+        nonlocal should_user_answer
         _logger.info("Chat stopped by tool")
-        should_continue_chat = False
+        should_user_answer = False
 
     # Build RAG using query expansion from last messages
     trainings_tasks = await asyncio.gather(
@@ -820,16 +862,10 @@ async def execute_llm_chat(
         post_call_next=post_call_next,
         post_call_synthesis=post_call_synthesis,
         search=search,
-        style=MessageStyleEnum.NONE,
         user_callback=user_callback,
     )
     tools = plugins.to_openai()
     _logger.debug(f"Tools: {tools}")
-
-    # Enable backup model if two retries are left, to maximize the chance of success
-    model_is_backup = _retry_remaining < 2
-    if model_is_backup:
-        _logger.warn(f"Using backup model ({call.call_id})")
 
     # Execute LLM inference
     content_buffer_pointer = 0
@@ -837,7 +873,7 @@ async def execute_llm_chat(
     tool_calls_buffer: dict[int, MessageToolModel] = {}
     try:
         async for delta in completion_stream(
-            is_backup=model_is_backup,
+            is_backup=backup_model,
             max_tokens=350,
             messages=call.messages,
             system=system,
@@ -859,10 +895,10 @@ async def execute_llm_chat(
                     plugins.style = await _buffer_user_callback(sentence, plugins.style)
     except ReadError:
         _logger.warn(f"Network error", exc_info=True)
-        return await _retry()
+        return True, True, should_user_answer, call
     except APIError:
         _logger.warn("OpenAI API call error")
-        return await _retry()
+        return True, True, should_user_answer, call
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
@@ -885,15 +921,13 @@ async def execute_llm_chat(
     if any(
         tool_call.function_name == "multi_tool_use.parallel" for tool_call in tool_calls
     ):
-        _logger.warn(
-            f'LLM send back invalid tool schema "multi_tool_use.parallel" ({call.call_id})'
-        )
-        return await _retry()
+        _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
+        return True, True, should_user_answer, call
 
     # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
     if not content_full and not tool_calls:
-        _logger.warn(f"Empty content, retrying ({call.call_id})")
-        return await _retry()
+        _logger.warn("Empty content, retrying")
+        return True, True, should_user_answer, call
 
     # Execute tools
     tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
@@ -910,19 +944,10 @@ async def execute_llm_chat(
     )
 
     # Recusive call if needed
-    if tool_calls and should_continue_chat:
-        # Save in DB for new claims and allowing demos to be more "real-time"
-        await db.call_aset(call)
-        # Recursively call intelligence to continue the conversation
-        return await execute_llm_chat(
-            background_tasks=background_tasks,
-            call=call,
-            client=client,
-            user_callback=user_callback,
-            _retry_remaining=_retry_remaining,
-        )
+    if tool_calls and should_user_answer:
+        return False, True, should_user_answer, call
 
-    return should_continue_chat, call
+    return False, False, should_user_answer, call
 
 
 async def handle_hangup(
