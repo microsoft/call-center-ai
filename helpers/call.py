@@ -35,8 +35,6 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
     """
     Split a text into sentences.
     """
-    # Clean and remove extra spaces
-    text = " ".join(text.split())
     # Split by sentence by punctuation
     splits = re.split(_SENTENCE_PUNCTUATION_R, text)
     for i, split in enumerate(splits):
