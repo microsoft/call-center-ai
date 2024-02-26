@@ -410,7 +410,9 @@ class TtsModel(BaseModel):
     end_call_to_connect_agent_tpl: str = (
         "Of course, stay on the line. I'll transfer you to an agent."
     )
-    error_tpl: str = "I'm sorry, I've made a mistake. Could you repeat your request?"
+    error_tpl: str = (
+        "I'm sorry, I have encountered an error. Could you repeat your request?"
+    )
     goodbye_tpl: str = (
         "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
     )
@@ -423,7 +425,7 @@ class TtsModel(BaseModel):
         - "I fell off my bike yesterday, broke my arm, my neighbor took me to hospital"
         - "I had an accident this morning, I was shopping".
 
-        What's your problem?
+        May I ask what your problem is?
 """
     timeout_silence_tpl: str = (
         "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
