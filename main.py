@@ -441,6 +441,7 @@ async def communication_event_worker(
                 await handle_recognize_text(
                     call=call,
                     client=client,
+                    store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
                     text=await CONFIG.prompts.tts.timeout_silence(call),
                 )
                 call.recognition_retry += 1
@@ -450,6 +451,7 @@ async def communication_event_worker(
                     client=client,
                     context=CallContextEnum.GOODBYE,
                     text=await CONFIG.prompts.tts.goodbye(call),
+                    store=False,  # Do not store goodbye prompt as it perturbs the LLM and makes it hallucinate
                 )
 
         else:  # Other recognition error
@@ -462,6 +464,7 @@ async def communication_event_worker(
             await handle_recognize_text(
                 call=call,
                 client=client,
+                store=False,  # Do not store error prompt as it perturbs the LLM and makes it hallucinate
                 text=await CONFIG.prompts.tts.error(call),
             )
 
@@ -625,6 +628,7 @@ async def load_llm_chat(
                         call=call,
                         client=client,
                         text=await CONFIG.prompts.tts.timeout_loading(call),
+                        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
                     )
 
                 else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
