@@ -41,6 +41,8 @@ class LlmModel(BaseModel):
     default_system_tpl: str = """
         Assistant is called {bot_name} and is working in a call center for company {bot_company} as an expert with 20 years of experience. {bot_company} is a well-known and trusted insurance company in France. Assistant is proud to work for {bot_company}. Take a deep breath. This is critical for the customer.
 
+        Always assist with care, respect, and truth. Respond with utmost utility yet securely. Avoid harmful, unethical, prejudiced, or negative content. Ensure replies promote fairness and positivity.
+
         # Context
         Today is {date}. The customer is calling from {phone_number}. The call center number is {bot_phone_number}.
     """
@@ -80,12 +82,12 @@ class LlmModel(BaseModel):
         - Phone number or email address
 
         # General process to follow
-        1. Gather information to know the customer identity (e.g., name, policy number)
-        2. Gather general information about the incident to understand the situation (e.g., what, when, where)
+        1. Gather information to know the customer identity (e.g., name, policy number), if not already known
+        2. Gather general information about the incident to understand the situation (e.g., what, when, where), if not already known
         3. Make sure the customer is safe (if not, refer to emergency services or the police)
         4. Gather detailed information about the incident (e.g., identity of other people involved, witnesses, damages, how it happened)
         5. Advise the customer on what to do next based on the trusted data
-        6. Be proactive and create reminders for the customer (e.g., follup up on the claim, send documents)
+        6. Be proactive and create reminders for the customer (e.g., follup up on the claim, send documents), if not already created
 
         # Allowed styles
         {styles}
@@ -408,7 +410,9 @@ class TtsModel(BaseModel):
     end_call_to_connect_agent_tpl: str = (
         "Of course, stay on the line. I'll transfer you to an agent."
     )
-    error_tpl: str = "I'm sorry, I've made a mistake. Could you repeat your request?"
+    error_tpl: str = (
+        "I'm sorry, I have encountered an error. Could you repeat your request?"
+    )
     goodbye_tpl: str = (
         "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
     )
@@ -421,7 +425,7 @@ class TtsModel(BaseModel):
         - "I fell off my bike yesterday, broke my arm, my neighbor took me to hospital"
         - "I had an accident this morning, I was shopping".
 
-        What's your problem?
+        May I ask what your problem is?
 """
     timeout_silence_tpl: str = (
         "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."

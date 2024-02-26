@@ -218,7 +218,7 @@ def _prepare_messages(
         res += message.to_openai()
         counter += 1
 
-    _logger.info(f"Took {counter}/{total} messages for the context")
+    _logger.debug(f"Took {counter}/{total} messages for the context")
 
     return res
 

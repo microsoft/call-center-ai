@@ -24,7 +24,7 @@ class LlmPlugins:
     post_call_next: Callable[[CallModel], Awaitable]
     post_call_synthesis: Callable[[CallModel], Awaitable]
     search: AiSearchSearch
-    style: MessageStyleEnum
+    style: MessageStyleEnum = MessageStyleEnum.NONE
     user_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
     def __init__(
@@ -36,7 +36,6 @@ class LlmPlugins:
         post_call_next: Callable[[CallModel], Awaitable],
         post_call_synthesis: Callable[[CallModel], Awaitable],
         search: AiSearchSearch,
-        style: MessageStyleEnum,
         user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
         self.background_tasks = background_tasks
@@ -46,12 +45,11 @@ class LlmPlugins:
         self.post_call_next = post_call_next
         self.post_call_synthesis = post_call_synthesis
         self.search = search
-        self.style = style
         self.user_callback = user_callback
 
     async def end_call(self) -> str:
         """
-        Use this if the user wants to end the call in its last message. Be warnging that the call will be ended immediately. Never use this action directly after a recall. Example: 'I want to hang up', 'Good bye, see you soon', 'We are done here', 'We will talk again later'.
+        Use this if the user said they want to end the call. This will hang up the call. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
         """
         await self.cancellation_callback()
         await handle_play(

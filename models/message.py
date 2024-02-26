@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field, validator
-from typing import List, Union
+from typing import Any, List, Union
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -12,6 +12,7 @@ from inspect import getmembers, isfunction
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 import json
 import re
+from json_repair import repair_json
 
 
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
@@ -84,46 +85,35 @@ class ToolModel(BaseModel):
                 self.function_arguments += other.function.arguments
         return self
 
-    async def execute_function(self, plugins: object) -> str:
+    async def execute_function(self, plugins: object) -> None:
         from helpers.logging import build_logger
 
         logger = build_logger(__name__)
         name = self.function_name
 
-        # Parse args
-        try:
-            args: dict[str, Union[str, list[str], dict[str, str]]] = json.loads(
-                self.function_arguments
-            )
-        except json.JSONDecodeError:
+        # Try to fix JSON args to catch some LLM hallucinations
+        # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
+        args: dict[str, Any] = repair_json(
+            json_str=self.function_arguments.replace("\\\\", "\\").replace("\\n", ""),
+            return_objects=True,
+        )  # type: ignore
+
+        if args is None:
             logger.warn(
                 f"Error decoding JSON args for function {name}: {self.function_arguments[:20]}...{self.function_arguments[-20:]}"
             )
-            return f"Bad JSON format, impossible to execute function {name}"
-
-        # Unescape content (double backslash, HTML entities, ...) for str and list
-        # TODO: Is there more to unescape?
-        for key, arg in args.items():
-            if isinstance(arg, str):
-                args[key] = arg.encode("raw_unicode_escape").decode("unicode_escape")
-            elif isinstance(arg, list):
-                for i, v in enumerate(arg):
-                    args[key][i] = v.encode("raw_unicode_escape").decode(
-                        "unicode_escape"
-                    )
-            elif isinstance(arg, dict):
-                for k, v in arg.items():
-                    args[key][k] = v.encode("raw_unicode_escape").decode(
-                        "unicode_escape"
-                    )
+            self.content = "Not executed, bad arguments format"
+            return
 
         try:
             res = await getattr(plugins, name)(**args)
-            logger.info(f"Executing function {name} ({args}): {res[:50]}...")
+            logger.info(f"Executing function {name} ({args}): {res[:20]}...{res[-20:]}")
         except Exception as e:
-            res = f"Error executing function {self.function_name}: {e}"
-            logger.warn(res)
-        return res
+            logger.warn(
+                f"Error executing function {self.function_name} with args {args}: {e}"
+            )
+            res = f"Not executed, error: {e}"
+        self.content = res
 
     @staticmethod
     def _available_function_names() -> List[str]:

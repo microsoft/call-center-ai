@@ -1,3 +1,4 @@
+from azure.core.exceptions import ServiceResponseError
 from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from contextlib import asynccontextmanager
@@ -11,6 +12,12 @@ from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, List, Optional
 from uuid import UUID
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+    retry_if_exception_type,
+)
 
 
 _logger = build_logger(__name__)
@@ -23,6 +30,12 @@ class CosmosStore(IStore):
         _logger.info(f"Using Cosmos DB {config.database}/{config.container}")
         self._config = config
 
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(ServiceResponseError),
+        stop=stop_after_attempt(3),
+        wait=wait_random_exponential(multiplier=0.5, max=30),
+    )
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
         res = None
@@ -43,6 +56,12 @@ class CosmosStore(IStore):
             _logger.error(f"Error accessing CosmosDB, {e}")
         return res
 
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(ServiceResponseError),
+        stop=stop_after_attempt(3),
+        wait=wait_random_exponential(multiplier=0.5, max=30),
+    )
     async def call_aset(self, call: CallModel) -> bool:
         data = jsonable_encoder(call.model_dump(), exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
@@ -55,6 +74,12 @@ class CosmosStore(IStore):
             _logger.error(f"Error accessing CosmosDB: {e}")
             return False
 
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(ServiceResponseError),
+        stop=stop_after_attempt(3),
+        wait=wait_random_exponential(multiplier=0.5, max=30),
+    )
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
         res = None
@@ -90,6 +115,12 @@ class CosmosStore(IStore):
             _logger.error(f"Error accessing CosmosDB: {e}")
         return res
 
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(ServiceResponseError),
+        stop=stop_after_attempt(3),
+        wait=wait_random_exponential(multiplier=0.5, max=30),
+    )
     async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
         calls = []

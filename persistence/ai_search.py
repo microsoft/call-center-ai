@@ -1,5 +1,9 @@
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import HttpResponseError, ServiceRequestError
+from azure.core.exceptions import (
+    HttpResponseError,
+    ServiceRequestError,
+    ServiceResponseError,
+)
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 from contextlib import asynccontextmanager
@@ -13,6 +17,12 @@ from persistence.isearch import ISearch
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 from typing import AsyncGenerator, List, Optional
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+    retry_if_exception_type,
+)
 
 
 _logger = build_logger(__name__)
@@ -29,6 +39,12 @@ class AiSearchSearch(ISearch):
         self._config = config
         super().__init__(cache)
 
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(ServiceResponseError),
+        stop=stop_after_attempt(3),
+        wait=wait_random_exponential(multiplier=0.5, max=30),
+    )
     async def training_asearch_all(
         self, text: str, call: CallModel
     ) -> Optional[List[TrainingModel]]:
