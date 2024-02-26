@@ -82,12 +82,12 @@ class LlmModel(BaseModel):
         - Phone number or email address
 
         # General process to follow
-        1. Gather information to know the customer identity (e.g., name, policy number)
-        2. Gather general information about the incident to understand the situation (e.g., what, when, where)
+        1. Gather information to know the customer identity (e.g., name, policy number), if not already known
+        2. Gather general information about the incident to understand the situation (e.g., what, when, where), if not already known
         3. Make sure the customer is safe (if not, refer to emergency services or the police)
         4. Gather detailed information about the incident (e.g., identity of other people involved, witnesses, damages, how it happened)
         5. Advise the customer on what to do next based on the trusted data
-        6. Be proactive and create reminders for the customer (e.g., follup up on the claim, send documents)
+        6. Be proactive and create reminders for the customer (e.g., follup up on the claim, send documents), if not already created
 
         # Allowed styles
         {styles}
