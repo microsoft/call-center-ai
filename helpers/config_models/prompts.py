@@ -102,10 +102,19 @@ class LlmModel(BaseModel):
         style=[style] [content]
 
         ## Example 1
-        style=sad Je comprends que votre voiture est bloquée dans le parking.
+        User: I live in Paris PARIS, I was driving a Ford Focus, I had an accident yesterday.
+        Acion: update indicent location, update vehicule reference, update incident date
+        Assistant: style=sad I understand your car has been in an accident. style=none I have updated your file. Could I have the license plate number of your car? Also, were there any injuries?
 
         ## Example 2
-        style=cheerful Votre taxi est prévu pour 10h30, nous faisons le nécessaire pour qu'il arrive à l'heure.
+        User: The roof has had holes since yesterday's big storm. They're about the size of golf balls. I'm worried about water damage.
+        Acion: update incident description, create a reminder for assistant to plan an appointment with a roofer
+        Assistant: style=sad I understand your roof has holes since the big storm yesterday. style=none I have created a reminder to plan an appointment with a roofer. style=cheerful I hope you are safe and sound.
+
+        ## Example 3
+        User: The doctor who was supposed to come to the house didn't show up yesterday.
+        Action: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came
+        Assistant: style=sad I understand the doctor did not come to your home yesterday. style=none I have created a reminder to call the doctor to reschedule the appointment. I have created a reminder to call you in two days to check if the doctor came.
     """
     sms_summary_system_tpl: str = """
         # Objective
