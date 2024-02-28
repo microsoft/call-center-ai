@@ -706,6 +706,8 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
             messages=call.messages,
             system=system,
         )
+    except ReadError:
+        _logger.warn(f"Network error", exc_info=True)
     except APIError:
         _logger.warn("OpenAI API call error", exc_info=True)
     except SafetyCheckError as e:
@@ -737,6 +739,8 @@ async def llm_model(
             model=model,
             system=system,
         )
+    except ReadError:
+        _logger.warn(f"Network error", exc_info=True)
     except APIError:
         _logger.warn("OpenAI API call error", exc_info=True)
 
@@ -901,7 +905,7 @@ async def execute_llm_chat(
         _logger.warn(f"Network error", exc_info=True)
         return True, True, should_user_answer, call
     except APIError:
-        _logger.warn("OpenAI API call error")
+        _logger.warn("OpenAI API call error", exc_info=True)
         return True, True, should_user_answer, call
 
     # Flush the remaining buffer
