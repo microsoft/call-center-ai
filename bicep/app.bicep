@@ -311,7 +311,7 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   parent: cognitiveOpenai
   name: gptModelFullName
   sku: {
-    capacity: 50
+    capacity: 80
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -328,7 +328,7 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
   parent: cognitiveOpenai
   name: gptBackupModelFullName
   sku: {
-    capacity: 50
+    capacity: 80
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -404,7 +404,7 @@ resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   parent: cognitiveOpenai
   name: adaModelFullName
   sku: {
-    capacity: 50
+    capacity: 150
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
