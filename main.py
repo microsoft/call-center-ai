@@ -710,9 +710,9 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
             system=system,
         )
     except ReadError:
-        _logger.warn(f"Network error", exc_info=True)
-    except APIError:
-        _logger.warn("OpenAI API call error", exc_info=True)
+        _logger.warn("Network error", exc_info=True)
+    except APIError as e:
+        _logger.warn(f"OpenAI API call error: {e}")
     except SafetyCheckError as e:
         _logger.warn(f"OpenAI safety check error: {e}")
 
@@ -743,9 +743,9 @@ async def llm_model(
             system=system,
         )
     except ReadError:
-        _logger.warn(f"Network error", exc_info=True)
-    except APIError:
-        _logger.warn("OpenAI API call error", exc_info=True)
+        _logger.warn("Network error", exc_info=True)
+    except APIError as e:
+        _logger.warn(f"OpenAI API call error: {e}")
 
     return res
 
@@ -911,10 +911,10 @@ async def execute_llm_chat(
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _buffer_user_callback(sentence, plugins.style)
     except ReadError:
-        _logger.warn(f"Network error", exc_info=True)
+        _logger.warn("Network error", exc_info=True)
         return True, True, should_user_answer, call
-    except APIError:
-        _logger.warn("OpenAI API call error", exc_info=True)
+    except APIError as e:
+        _logger.warn(f"OpenAI API call error: {e}")
         return True, True, should_user_answer, call
 
     # Flush the remaining buffer
@@ -1036,6 +1036,8 @@ async def post_call_sms(call: CallModel) -> None:
         _logger.error(
             "Authentication error for SMS, check the credentials", exc_info=True
         )
+    except HttpResponseError as e:
+        _logger.error(f"Error sending SMS: {e}")
     except Exception:
         _logger.warn(f"Failed SMS to {call.phone_number}", exc_info=True)
 
