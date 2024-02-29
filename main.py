@@ -34,7 +34,6 @@ from azure.core.exceptions import (
 )
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
-from azure.identity import DefaultAzureCredential
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config_models.database import ModeEnum as DatabaseModeEnum
@@ -106,7 +105,7 @@ call_automation_client = CallAutomationClient(
     ),
 )
 sms_client = SmsClient(
-    credential=DefaultAzureCredential(),
+    credential=CONFIG.communication_service.access_key.get_secret_value(),
     endpoint=CONFIG.communication_service.endpoint,
 )
 
