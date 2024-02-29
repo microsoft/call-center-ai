@@ -21,6 +21,7 @@ targetScope = 'subscription'
 output appUrl string = app.outputs.appUrl
 output blobStoragePublicName string = app.outputs.blobStoragePublicName
 output communicationId string = app.outputs.communicationId
+output logAnalyticsWorkspaceCustomerId string = app.outputs.logAnalyticsWorkspaceCustomerId
 
 var tags = {
   application: 'claim-ai'

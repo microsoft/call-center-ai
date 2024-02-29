@@ -93,6 +93,7 @@ var config = {
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
 output communicationId string = communication.id
+output logAnalyticsWorkspaceCustomerId string = logAnalyticsWorkspace.properties.customerId
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: prefix

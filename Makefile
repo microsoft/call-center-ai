@@ -20,6 +20,7 @@ bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_n
 app_url ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
 communication_id ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
+log_analytics_workspace_customer_id ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["logAnalyticsWorkspaceName"].value')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
@@ -147,6 +148,13 @@ logs:
 		--name claim-ai \
 		--resource-group $(name) \
 		--tail 100
+
+logs-history:
+	az monitor log-analytics query \
+		--analytics-query "ContainerAppConsoleLogs_CL | project TimeGenerated, Log_s | sort by TimeGenerated desc" \
+		--output jsonc \
+		--timespan P1D \
+		--workspace $(log_analytics_workspace_customer_id)
 
 eventgrid-register:
 	@echo "⚙️ Deleting previous event grid subscription..."
