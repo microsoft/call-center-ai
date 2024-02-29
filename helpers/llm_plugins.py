@@ -8,10 +8,9 @@ from models.call import CallModel
 from models.claim import ClaimModel
 from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
-from models.training import TrainingModel
 from openai.types.chat import ChatCompletionToolParam
 from persistence.ai_search import AiSearchSearch
-from pydantic import ValidationError, TypeAdapter
+from pydantic import ValidationError
 from typing import Awaitable, Callable, Annotated, List
 import asyncio
 
