@@ -9,13 +9,17 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 from inspect import getmembers, isfunction
-from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
-import json
-import re
 from json_repair import repair_json
+from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
+from html import unescape
+import re
+from urllib.parse import unquote
 
 
+DOUBLE_ESCAPED_UNICODE_R = r"\\\\u([0-9a-fA-F]{4})"
 FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
+NON_ESCAPED_UNICODE_R = r"(?<!\\)u[0-9a-fA-F]{4}"
+REMOVE_DOUBLE_ESCAPE_R = r"\\u\1"
 
 
 class StyleEnum(str, Enum):
@@ -68,7 +72,7 @@ class ToolModel(BaseModel):
         )
 
     @validator("function_name")
-    def validate_function_name(cls, v, values) -> str:
+    def validate_function_name(cls, v: str, values) -> str:
         if v not in ToolModel._available_function_names():
             raise ValueError(
                 f'Invalid function names "{v}", available are {ToolModel._available_function_names()}'
@@ -89,12 +93,31 @@ class ToolModel(BaseModel):
         from helpers.logging import build_logger
 
         logger = build_logger(__name__)
+        json_str = self.function_arguments
         name = self.function_name
 
-        # Try to fix JSON args to catch some LLM hallucinations
+        # Try to fix encoding issues with args and GPT-4 Turbo
+        # See:
+        # - https://community.openai.com/t/gpt-4-1106-preview-is-not-generating-utf-8/482839/8
+        # - https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500/32
+        # - https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500/71
+        # Fix double escaped unicode (\\u0000 -> \u0000)
+        json_str = re.sub(DOUBLE_ESCAPED_UNICODE_R, REMOVE_DOUBLE_ESCAPE_R, json_str)
+        # Fix unicode that was not escaped (u0000 -> \u0000)
+        json_str = re.sub(
+            NON_ESCAPED_UNICODE_R,
+            lambda match: "\\" + match.group(0),
+            json_str,
+        )
+        # Unescape % encoded characters (e.g. %20 -> " ") and fix special characters (e.g. ü, é)
+        json_str = unquote(json_str, "latin1")
+        # Unescape html entities (e.g. &uuml; -> ü)
+        json_str = unescape(json_str)
+
+        # Try to fix JSON args to catch LLM hallucinations
         # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
         args: dict[str, Any] = repair_json(
-            json_str=self.function_arguments.replace("\\\\", "\\").replace("\\n", ""),
+            json_str=json_str,
             return_objects=True,
         )  # type: ignore
 
@@ -102,7 +125,7 @@ class ToolModel(BaseModel):
             logger.warn(
                 f"Error decoding JSON args for function {name}: {self.function_arguments[:20]}...{self.function_arguments[-20:]}"
             )
-            self.content = "Not executed, bad arguments format"
+            self.content = f"Bad arguments, available are {ToolModel._available_function_names()}. Please try again."
             return
 
         try:
@@ -112,7 +135,7 @@ class ToolModel(BaseModel):
             logger.warn(
                 f"Error executing function {self.function_name} with args {args}: {e}"
             )
-            res = f"Not executed, error: {e}"
+            res = f"Error: {e}. Please try again."
         self.content = res
 
     @staticmethod
@@ -141,10 +164,13 @@ class MessageModel(BaseModel):
             ChatCompletionUserMessageParam,
         ]
     ]:
+        # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
+        content = " ".join(self.content.splitlines()).strip()
+
         if self.persona == PersonaEnum.HUMAN:
             return [
                 ChatCompletionUserMessageParam(
-                    content=f"action={self.action.value} style={self.style.value} {self.content}",
+                    content=f"action={self.action.value} {content}",
                     role="user",
                 )
             ]
@@ -153,7 +179,7 @@ class MessageModel(BaseModel):
             if not self.tool_calls:
                 return [
                     ChatCompletionAssistantMessageParam(
-                        content=f"action={self.action.value} style={self.style.value} {self.content}",
+                        content=f"action={self.action.value} style={self.style.value} {content}",
                         role="assistant",
                     )
                 ]
@@ -161,7 +187,7 @@ class MessageModel(BaseModel):
         res = []
         res.append(
             ChatCompletionAssistantMessageParam(
-                content=f"action={self.action.value} style={self.style.value} {self.content}",
+                content=f"action={self.action.value} style={self.style.value} {content}",
                 role="assistant",
                 tool_calls=[tool_call.to_openai() for tool_call in self.tool_calls],
             )
