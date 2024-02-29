@@ -402,10 +402,16 @@ class LlmModel(BaseModel):
     ) -> str:
         # Build template
         res = dedent(prompt_tpl.format(**kwargs))
-        # Add trainings if any
+
+        # Format trainings, if any
         if trainings:
             res += "\n\n# Trusted data you can use"
-            res += TypeAdapter(List[TrainingModel]).dump_json(trainings).decode()
+            for training in trainings:
+                res += f"\n- {training.title}: {training.content}"
+
+        # Remove newlines to avoid hallucinations issues with GPT-4 Turbo
+        res = " ".join(res.splitlines()).strip()
+
         self._logger.debug(f"LLM prompt: {res}")
         return res
 

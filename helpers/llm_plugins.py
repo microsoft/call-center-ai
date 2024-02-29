@@ -196,9 +196,14 @@ class LlmPlugins:
             *[self.search.training_asearch_all(query, self.call) for query in queries]
         )
         # Flatten, remove duplicates, and sort by score
-        res = sorted(set(training for task in tasks for training in task or []))
+        trainings = sorted(set(training for task in tasks for training in task or []))
 
-        return f"Search results: {TypeAdapter(List[TrainingModel]).dump_json(res).decode()}"
+        # Format results
+        res = "# Search results"
+        for training in trainings:
+            res += f"\n- {training.title}: {training.content}"
+
+        return res
 
     @staticmethod
     def to_openai() -> List[ChatCompletionToolParam]:
