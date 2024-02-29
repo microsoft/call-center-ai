@@ -49,7 +49,7 @@ class LlmPlugins:
 
     async def end_call(self) -> str:
         """
-        Use this if the user said they want to end the call. This will hang up the call. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
+        Use this if the customer said they want to end the call. Requires an explicit verbal validation from the customer. This will hang up the call. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
         """
         await self.cancellation_callback()
         await handle_play(
@@ -68,7 +68,7 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if the user wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.
+        Use this if the customer wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.
         """
         await self.user_callback(customer_response, self.style)
 
@@ -85,7 +85,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Contextual description of the reminder. Should be detailed enough to be understood by anyone. Example: 'Watch model is Rolex Submariner 116610LN', 'User said the witnesses car was red but the police report says it was blue. Double check with the involved parties'.",
+            "Contextual description of the reminder. Should be detailed enough to be understood by anyone. Example: 'Watch model is Rolex Submariner 116610LN', 'Customer said the witnesses car was red but the police report says it was blue. Double check with the involved parties'.",
         ],
         description: Annotated[
             str,
@@ -146,7 +146,7 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if the user wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update contact contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.
+        Use this if the customer wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update contact contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.
         """
         await self.user_callback(customer_response, self.style)
 
@@ -164,7 +164,7 @@ class LlmPlugins:
 
     async def talk_to_human(self) -> str:
         """
-        Use this if the user wants to talk to a human and Assistant is unable to help. This will transfer the customer to an human agent. Approval from the customer must be explicitely given. Never use this action directly after a recall. Example: 'I want to talk to a human', 'I want to talk to a real person'.
+        Use this if the customer wants to talk to a human and Assistant is unable to help. Requires an explicit verbal validation from the customer. This will transfer the customer to an human agent. Example: 'I want to talk to a human', 'I want to talk to a real person'.
         """
         await self.cancellation_callback()
         await handle_play(
@@ -187,7 +187,7 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if the user wants to search for a public specific information you don't have. Example: contract, law, regulation, article, etc.
+        Use this if the customer wants to search for a public specific information you don't have. Example: contract, law, regulation, article, etc.
         """
         await self.user_callback(customer_response, self.style)
 
