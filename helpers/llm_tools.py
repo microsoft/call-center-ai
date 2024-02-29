@@ -74,8 +74,9 @@ def function_schema(f: Callable[..., Any]) -> ChatCompletionToolParam:
             + f"The annotations are missing for the following parameters: {', '.join(missing_s)}"
         )
 
-    description = f.__doc__ or ""
-    name = f.__name__
+    # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
+    description = " ".join((f.__doc__ or "").splitlines()).strip()
+    name = " ".join((f.__name__).splitlines()).strip()
     parameters: dict[str, object] = _parameters(
         required, param_annotations, default_values=default_values
     ).model_dump()

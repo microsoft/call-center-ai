@@ -61,6 +61,8 @@ from models.message import (
     PersonaEnum as MessagePersonaEnum,
     StyleEnum as MessageStyleEnum,
     ToolModel as MessageToolModel,
+    extract_message_style,
+    remove_message_action,
 )
 from helpers.llm_worker import (
     completion_model_sync,
@@ -143,9 +145,6 @@ _CALL_EVENT_URL = urljoin(
     str(CONFIG.api.events_domain), "/call/event/{phone_number}/{callback_secret}"
 )
 _logger.info(f"Using call event URL {_CALL_EVENT_URL}")
-
-_MESSAGE_ACTION_R = r"action=([a-z_]*)( .*)?"
-_MESSAGE_STYLE_R = r"style=([a-z_]*)( .*)?"
 
 
 @api.get(
@@ -795,35 +794,12 @@ async def execute_llm_chat(
     _logger.debug("Running LLM chat")
     should_user_answer = True
 
-    def _remove_message_actions(text: str) -> str:
-        """
-        Remove action from content. AI often adds it by mistake event if explicitly asked not to.
-        """
-        res = re.match(_MESSAGE_ACTION_R, text)
-        if not res:
-            return text.strip()
-        content = res.group(2)
-        return content.strip() if content else ""
-
-    def _extract_message_style(text: str) -> Tuple[Optional[MessageStyleEnum], str]:
-        """
-        Detect the style of a message.
-        """
-        res = re.match(_MESSAGE_STYLE_R, text)
-        if not res:
-            return None, text
-        try:
-            content = res.group(2)
-            return MessageStyleEnum(res.group(1)), (content.strip() if content else "")
-        except ValueError:
-            return None, text
-
     async def _buffer_user_callback(
         buffer: str, style: MessageStyleEnum
     ) -> MessageStyleEnum:
         # Remove tool calls from buffer content and detect style
-        local_style, local_content = _extract_message_style(
-            _remove_message_actions(buffer)
+        local_style, local_content = extract_message_style(
+            remove_message_action(buffer)
         )
         new_style = local_style or style
         if local_content:
@@ -927,7 +903,7 @@ async def execute_llm_chat(
     tool_calls = [tool_call for _, tool_call in tool_calls_buffer.items()]
 
     # Get data from full content to be able to store it in the DB
-    _, content_full = _extract_message_style(_remove_message_actions(content_full))
+    _, content_full = extract_message_style(remove_message_action(content_full))
 
     _logger.debug(f"Chat response: {content_full}")
     _logger.debug(f"Tool calls: {tool_calls}")

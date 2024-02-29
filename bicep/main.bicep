@@ -6,10 +6,10 @@ param botName string
 param botPhoneNumber string
 param gptBackupContext int = 16385
 param gptBackupModel string = 'gpt-35-turbo'
-param gptBackupVersion string = '1106'
+param gptBackupVersion string = '0125'
 param gptContext int = 128000
 param gptModel string = 'gpt-4'
-param gptVersion string = '1106-Preview'
+param gptVersion string = '0125-Preview'
 param imageVersion string = 'main'
 param instance string = deployment().name
 param location string = deployment().location
@@ -21,6 +21,7 @@ targetScope = 'subscription'
 output appUrl string = app.outputs.appUrl
 output blobStoragePublicName string = app.outputs.blobStoragePublicName
 output communicationId string = app.outputs.communicationId
+output logAnalyticsWorkspaceCustomerId string = app.outputs.logAnalyticsWorkspaceCustomerId
 
 var tags = {
   application: 'claim-ai'

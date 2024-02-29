@@ -8,10 +8,9 @@ from models.call import CallModel
 from models.claim import ClaimModel
 from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
-from models.training import TrainingModel
 from openai.types.chat import ChatCompletionToolParam
 from persistence.ai_search import AiSearchSearch
-from pydantic import ValidationError, TypeAdapter
+from pydantic import ValidationError
 from typing import Awaitable, Callable, Annotated, List
 import asyncio
 
@@ -49,7 +48,7 @@ class LlmPlugins:
 
     async def end_call(self) -> str:
         """
-        Use this if the customer said they want to end the call. Requires an explicit verbal validation from the customer. This will hang up the call. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
+        Use this if the customer said they want to end the call. Requires an explicit verbal validation from the customer. This will hang up the call. Never use this action directly after a recall. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
         """
         await self.cancellation_callback()
         await handle_play(
@@ -164,7 +163,7 @@ class LlmPlugins:
 
     async def talk_to_human(self) -> str:
         """
-        Use this if the customer wants to talk to a human and Assistant is unable to help. Requires an explicit verbal validation from the customer. This will transfer the customer to an human agent. Example: 'I want to talk to a human', 'I want to talk to a real person'.
+        Use this if the customer wants to talk to a human and Assistant is unable to help. Requires an explicit verbal validation from the customer. This will transfer the customer to an human agent. Never use this action directly after a recall. Example: 'I want to talk to a human', 'I want to talk to a real person'.
         """
         await self.cancellation_callback()
         await handle_play(

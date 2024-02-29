@@ -59,7 +59,7 @@ class SqliteStore(IStore):
         _logger.debug(f"Loading last call for {phone_number}")
         async with self._use_db() as db:
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) < DATETIME('now', '{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
+                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
                 (
                     phone_number,  # data.phone_number
                     phone_number,  # data.claim.policyholder_phone

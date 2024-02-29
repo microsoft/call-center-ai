@@ -195,15 +195,8 @@ def _prepare_messages(
         ChatCompletionUserMessageParam,
     ]
 ]:
-    responses: List[
-        Union[
-            ChatCompletionAssistantMessageParam,
-            ChatCompletionSystemMessageParam,
-            ChatCompletionToolMessageParam,
-            ChatCompletionUserMessageParam,
-        ]
-    ] = [*system]
     counter = 0
+    selected_messages = []
     tokens = 0
     total = min(len(system) + len(messages), max_messages)
 
@@ -217,19 +210,24 @@ def _prepare_messages(
         tokens += count_tokens(json.dumps(tool), model)
 
     # Add user messages until the context is reached, from the newest to the oldest
-    for message in reversed(messages):
-        response = message.to_openai()
-        new_tokens = count_tokens("".join([json.dumps(x) for x in response]), model)
+    for message in messages[::-1]:
+        openai_message = message.to_openai()
+        new_tokens = count_tokens(
+            "".join([json.dumps(x) for x in openai_message]), model
+        )
         if tokens + new_tokens >= context:
             break
-        tokens += new_tokens
         if counter >= max_messages:
             break
-        responses += response
         counter += 1
+        selected_messages += openai_message[::-1]
+        tokens += new_tokens
 
     _logger.info(f"Using {counter}/{total} messages ({tokens} tokens) as context")
-    return responses
+    return [
+        *system,
+        *selected_messages[::-1],
+    ]
 
 
 async def safety_check(text: str) -> None:
