@@ -26,13 +26,17 @@ class CacheModel(BaseModel):
     redis: Optional[RedisModel] = None
 
     @validator("redis", always=True)
-    def check_sqlite(cls, v, values, **kwargs):
+    def validate_sqlite(
+        cls, v: Optional[RedisModel], values, **kwargs
+    ) -> Optional[RedisModel]:
         if not v and values.get("mode", None) == ModeEnum.REDIS:
             raise ValueError("Redis config required")
         return v
 
     @validator("memory", always=True)
-    def check_memory(cls, v, values, **kwargs):
+    def validate_memory(
+        cls, v: Optional[MemoryModel], values, **kwargs
+    ) -> Optional[MemoryModel]:
         if not v and values.get("mode", None) == ModeEnum.MEMORY:
             raise ValueError("Memory config required")
         return v
