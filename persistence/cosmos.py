@@ -87,21 +87,12 @@ class CosmosStore(IStore):
             async with self._use_db() as db:
                 items = db.query_items(
                     max_item_count=1,
-                    query="SELECT * FROM c WHERE (STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at < @date_limit ORDER BY c.created_at DESC",
+                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.workflow.conversation_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
                     parameters=[
                         {
                             "name": "@phone_number",
                             "value": phone_number,
-                        },
-                        {
-                            "name": "@date_limit",
-                            "value": str(
-                                datetime.utcnow()
-                                + timedelta(
-                                    hours=CONFIG.workflow.conversation_timeout_hour
-                                )
-                            ),
-                        },
+                        }
                     ],
                 )
                 raw = await anext(items)
