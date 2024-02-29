@@ -200,7 +200,7 @@ resource roleCommunicationContributor 'Microsoft.Authorization/roleDefinitions@2
 }
 
 resource appContribCommunication 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, 'appContribCommunication')
+  name: guid(subscription().id, deployment().name, communication.name, 'appContribCommunication')
   scope: communication
   properties: {
     principalId: containerApp.identity.principalId
@@ -228,7 +228,7 @@ resource roleCognitiveUser 'Microsoft.Authorization/roleDefinitions@2022-04-01' 
 }
 
 resource appUserCommunication 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, 'appUserCommunication')
+  name: guid(subscription().id, deployment().name, cognitiveCommunication.name, 'appUserCommunication')
   scope: cognitiveCommunication
   properties: {
     principalId: communication.identity.principalId
@@ -238,7 +238,7 @@ resource appUserCommunication 'Microsoft.Authorization/roleAssignments@2022-04-0
 }
 
 resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
-  name: '${prefix}-communication'
+  name: '${prefix}-${location}-communication'
   location: location
   tags: tags
   sku: {
@@ -246,12 +246,12 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01
   }
   kind: 'CognitiveServices'
   properties: {
-    customSubDomainName: '${prefix}-communication'
+    customSubDomainName: '${prefix}-${location}-communication'
   }
 }
 
 resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
-  name: '${prefix}-document'
+  name: '${prefix}-${location}-document'
   location: location
   tags: tags
   sku: {
@@ -259,12 +259,12 @@ resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2023-10-01-prev
   }
   kind: 'FormRecognizer'
   properties: {
-    customSubDomainName: '${prefix}-document'
+    customSubDomainName: '${prefix}-${location}-document'
   }
 }
 
 resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
-  name: '${prefix}-contentsafety'
+  name: '${prefix}-${location}-contentsafety'
   location: location
   tags: tags
   sku: {
@@ -272,7 +272,7 @@ resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01
   }
   kind: 'ContentSafety'
   properties: {
-    customSubDomainName: '${prefix}-contentsafety'
+    customSubDomainName: '${prefix}-${location}-contentsafety'
     publicNetworkAccess: 'Enabled'
     networkAcls: {
       defaultAction: 'Allow'
@@ -285,7 +285,7 @@ resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-
 }
 
 resource appContribOpenai 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, 'appContribOpenai')
+  name: guid(subscription().id, deployment().name, cognitiveOpenai.name, 'appContribOpenai')
   scope: cognitiveOpenai
   properties: {
     principalId: containerApp.identity.principalId
@@ -295,7 +295,7 @@ resource appContribOpenai 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 }
 
 resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
-  name: '${prefix}-openai'
+  name: '${prefix}-${openaiLocation}-openai'
   location: openaiLocation
   tags: tags
   sku: {
@@ -303,7 +303,7 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-previe
   }
   kind: 'OpenAI'
   properties: {
-    customSubDomainName: '${prefix}-openai'
+    customSubDomainName: '${prefix}-${openaiLocation}-openai'
   }
 }
 
@@ -514,7 +514,7 @@ resource search 'Microsoft.Search/searchServices@2023-11-01' = {
 }
 
 resource translate 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
-  name: '${prefix}-translate'
+  name: '${prefix}-${location}-translate'
   location: location
   tags: tags
   sku: {
@@ -522,7 +522,7 @@ resource translate 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
   }
   kind: 'TextTranslation'
   properties: {
-    customSubDomainName: '${prefix}-translate'
+    customSubDomainName: '${prefix}-${location}-translate'
   }
 }
 
