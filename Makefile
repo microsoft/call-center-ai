@@ -16,6 +16,10 @@ agent_phone_number ?= $(shell cat config.yaml | yq '.workflow.agent_phone_number
 bot_company ?= $(shell cat config.yaml | yq '.workflow.bot_company')
 bot_name ?= $(shell cat config.yaml | yq '.workflow.bot_name')
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_number')
+# Bicep outputs
+app_url ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')
+blob_storage_public_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
+communication_id ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
@@ -116,14 +120,14 @@ deploy:
 
 post-deploy:
 	$(MAKE) copy-resources \
-		name=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
+		name=$(blob_storage_public_name)
 
 	$(MAKE) eventgrid-register \
-		endpoint=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value') \
+		endpoint=$(app_url) \
 		name=$(name) \
-		source=$(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
+		source=$(communication_id)
 
-	@echo "🚀 Claim AI is running on $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')"
+	@echo "🚀 Claim AI is running on $(app_url)"
 	$(MAKE) logs name=$(name)
 
 destroy:

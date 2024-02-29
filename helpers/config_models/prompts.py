@@ -102,26 +102,26 @@ class LlmModel(BaseModel):
         style=[style] [content]
 
         ## Example 1
-        User: I live in Paris PARIS, I was driving a Ford Focus, I had an accident yesterday.
-        Acion: update indicent location, update vehicule reference, update incident date
+        User: action=talk I live in Paris PARIS, I was driving a Ford Focus, I had an accident yesterday.
+        Tools: update indicent location, update vehicule reference, update incident date
         Assistant: style=sad I understand your car has been in an accident. style=none I have updated your file. Could I have the license plate number of your car? Also, were there any injuries?
 
         ## Example 2
-        User: The roof has had holes since yesterday's big storm. They're about the size of golf balls. I'm worried about water damage.
-        Acion: update incident description, create a reminder for assistant to plan an appointment with a roofer
+        User: action=talk The roof has had holes since yesterday's big storm. They're about the size of golf balls. I'm worried about water damage.
+        Tools: update incident description, create a reminder for assistant to plan an appointment with a roofer
         Assistant: style=sad I understand your roof has holes since the big storm yesterday. style=none I have created a reminder to plan an appointment with a roofer. style=cheerful I hope you are safe and sound.
 
         ## Example 3
-        User: Thank you verry much for your help. See you tomorrow for the appointment.
-        Action: end call
+        User: action=talk Thank you verry much for your help. See you tomorrow for the appointment.
+        Tools: end call
 
         ## Example 4
-        User: The doctor who was supposed to come to the house didn't show up yesterday.
-        Action: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came
+        User: action=talk The doctor who was supposed to come to the house didn't show up yesterday.
+        Tools: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came
         Assistant: style=sad I understand the doctor did not come to your home yesterday. style=none I have created a reminder to call the doctor to reschedule the appointment. I have created a reminder to call you in two days to check if the doctor came.
 
         ## Example 5
-        User: call
+        User: action=call
         Assistant: style=none Hello, we talked yesterday about the car accident you had in Paris. We planned an appointment with the garage for tomorrow. What can I do for you today?
     """
     sms_summary_system_tpl: str = """
@@ -402,10 +402,16 @@ class LlmModel(BaseModel):
     ) -> str:
         # Build template
         res = dedent(prompt_tpl.format(**kwargs))
-        # Add trainings if any
+
+        # Format trainings, if any
         if trainings:
             res += "\n\n# Trusted data you can use"
-            res += TypeAdapter(List[TrainingModel]).dump_json(trainings).decode()
+            for training in trainings:
+                res += f"\n- {training.title}: {training.content}"
+
+        # Remove newlines to avoid hallucinations issues with GPT-4 Turbo
+        res = " ".join(res.splitlines()).strip()
+
         self._logger.debug(f"LLM prompt: {res}")
         return res
 

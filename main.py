@@ -34,7 +34,6 @@ from azure.core.exceptions import (
 )
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
-from azure.identity import DefaultAzureCredential
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
 from helpers.config_models.database import ModeEnum as DatabaseModeEnum
@@ -106,7 +105,7 @@ call_automation_client = CallAutomationClient(
     ),
 )
 sms_client = SmsClient(
-    credential=DefaultAzureCredential(),
+    credential=CONFIG.communication_service.access_key.get_secret_value(),
     endpoint=CONFIG.communication_service.endpoint,
 )
 
@@ -534,7 +533,8 @@ async def load_llm_chat(
     background_tasks: BackgroundTasks,
     call: CallModel,
     client: CallConnectionClient,
-    _retry_remaining: int = 3,
+    _backup_model: bool = False,
+    _iterations_remaining: int = 3,
 ) -> CallModel:
     """
     Handle the intelligence of the call, including: LLM chat, TTS, and media play.
@@ -568,17 +568,16 @@ async def load_llm_chat(
             text=text,
         )
 
-    # Enable backup model if two retries are left, to maximize the chance of success
-    backup_model = _retry_remaining < 2
-    if backup_model:
+    if _backup_model:
         _logger.warn("Using backup model")
 
     chat_task = asyncio.create_task(
         execute_llm_chat(
             background_tasks=background_tasks,
-            backup_model=backup_model,
+            backup_model=_backup_model,
             call=call,
             client=client,
+            use_tools=_iterations_remaining > 0,
             user_callback=_tts_callback,
         )
     )
@@ -645,7 +644,7 @@ async def load_llm_chat(
         _logger.warn("Error loading intelligence", exc_info=True)
 
     if is_error:  # Error during chat
-        if not continue_chat or _retry_remaining < 1:  # Maximum retries reached
+        if not continue_chat or _iterations_remaining < 1:  # Maximum retries reached
             _logger.warn("Maximum retries reached, stopping chat")
             should_user_answer = True
             content = await CONFIG.prompts.tts.error(call)
@@ -660,21 +659,25 @@ async def load_llm_chat(
             )
 
         else:  # Retry chat after an error
-            _logger.info(f"Retrying chat, {_retry_remaining - 1} remaining")
+            _logger.info(f"Retrying chat, {_iterations_remaining - 1} remaining")
             return await load_llm_chat(
                 background_tasks=background_tasks,
                 call=call,
                 client=client,
-                _retry_remaining=_retry_remaining - 1,
+                _backup_model=(
+                    _iterations_remaining < 2
+                ),  # Enable backup model if two retries are left, to maximize the chance of success
+                _iterations_remaining=_iterations_remaining - 1,
             )
 
     elif continue_chat:  # Contiue chat
-        _logger.info(f"Continuing chat")
+        _logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
         return await load_llm_chat(
             background_tasks=background_tasks,
             call=call,
             client=client,
-            _retry_remaining=_retry_remaining,
+            _backup_model=_backup_model,
+            _iterations_remaining=_iterations_remaining - 1,
         )
 
     if should_user_answer:
@@ -707,9 +710,9 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
             system=system,
         )
     except ReadError:
-        _logger.warn(f"Network error", exc_info=True)
-    except APIError:
-        _logger.warn("OpenAI API call error", exc_info=True)
+        _logger.warn("Network error", exc_info=True)
+    except APIError as e:
+        _logger.warn(f"OpenAI API call error: {e}")
     except SafetyCheckError as e:
         _logger.warn(f"OpenAI safety check error: {e}")
 
@@ -740,9 +743,9 @@ async def llm_model(
             system=system,
         )
     except ReadError:
-        _logger.warn(f"Network error", exc_info=True)
-    except APIError:
-        _logger.warn("OpenAI API call error", exc_info=True)
+        _logger.warn("Network error", exc_info=True)
+    except APIError as e:
+        _logger.warn(f"OpenAI API call error: {e}")
 
     return res
 
@@ -771,6 +774,7 @@ async def execute_llm_chat(
     backup_model: bool,
     call: CallModel,
     client: CallConnectionClient,
+    use_tools: bool,
     user_callback: Callable[[str, MessageStyleEnum], Awaitable],
 ) -> Tuple[bool, bool, bool, CallModel]:
     """
@@ -872,8 +876,13 @@ async def execute_llm_chat(
         search=search,
         user_callback=user_callback,
     )
-    tools = plugins.to_openai()
-    _logger.debug(f"Tools: {tools}")
+
+    tools = []
+    if not use_tools:
+        _logger.warn("Tools disabled for this chat")
+    else:
+        tools = plugins.to_openai()
+        _logger.debug(f"Tools: {tools}")
 
     # Execute LLM inference
     content_buffer_pointer = 0
@@ -902,10 +911,10 @@ async def execute_llm_chat(
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _buffer_user_callback(sentence, plugins.style)
     except ReadError:
-        _logger.warn(f"Network error", exc_info=True)
+        _logger.warn("Network error", exc_info=True)
         return True, True, should_user_answer, call
-    except APIError:
-        _logger.warn("OpenAI API call error", exc_info=True)
+    except APIError as e:
+        _logger.warn(f"OpenAI API call error: {e}")
         return True, True, should_user_answer, call
 
     # Flush the remaining buffer
@@ -1027,6 +1036,8 @@ async def post_call_sms(call: CallModel) -> None:
         _logger.error(
             "Authentication error for SMS, check the credentials", exc_info=True
         )
+    except HttpResponseError as e:
+        _logger.error(f"Error sending SMS: {e}")
     except Exception:
         _logger.warn(f"Failed SMS to {call.phone_number}", exc_info=True)
 

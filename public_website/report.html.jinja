@@ -39,49 +39,51 @@ Déclaration de sinistre {{ call.claim.claim_id }}
     <!-- Agent and customer -->
     <div class="overflow-hidden space-y-6">
       {% for message in call.messages | sort(attribute='created_at') %}
-      {% set name = bot_name if message.persona == 'assistant' else call.claim.policyholder_name %}
-      <div class="flex flex-row">
-        <div class="basis-6 relative self-stretch">
-          <div class="absolute top-0 left-0 w-full h-full -z-10">
-            <div class="h-screen mx-auto w-0.5 bg-neutral-200/60 dark:bg-neutral-800/60"></div>
+        {% if not (message.action == 'talk' and not message.content) %}
+        {% set name = bot_name if message.persona == 'assistant' else call.claim.policyholder_name %}
+        <div class="flex flex-row">
+          <div class="basis-6 relative self-stretch">
+            <div class="absolute top-0 left-0 w-full h-full -z-10">
+              <div class="h-screen mx-auto w-0.5 bg-neutral-200/60 dark:bg-neutral-800/60"></div>
+            </div>
+            <div class="py-1.5 bg-white dark:bg-neutral-900">
+              {% if message.persona == 'assistant' %}
+              <div
+                class="rounded-full h-2 w-2 mx-auto bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700"
+              ></div>
+              {% else %}
+              <div
+                class="rounded-full h-2 w-2 mx-auto bg-blue-200 dark:bg-blue-800 ring-1 ring-blue-400 dark:ring-blue-600"
+              ></div>
+              {% endif %}
+            </div>
           </div>
-          <div class="py-1.5 bg-white dark:bg-neutral-900">
-            {% if message.persona == 'assistant' %}
-            <div
-              class="rounded-full h-2 w-2 mx-auto bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700"
-            ></div>
-            {% else %}
-            <div
-              class="rounded-full h-2 w-2 mx-auto bg-blue-200 dark:bg-blue-800 ring-1 ring-blue-400 dark:ring-blue-600"
-            ></div>
+          <div class="basis-full space-y-2 px-4 py-0.5">
+            <div class="flex flex-row justify-between content-center text-xs">
+              <div>
+                {{ name | title }}
+                <span class="text-neutral-600 dark:text-neutral-400">
+                  {% if message.action == 'call' %}
+                  a appelé
+                  {% elif message.action == 'hangup' %}
+                  a raccroché
+                  {% elif message.action == 'sms' %}
+                  a envoyé un SMS
+                  {% elif message.action == 'talk' %}
+                  a dit
+                  {% endif %}
+                </span>
+              </div>
+              <div class="text-neutral-600 dark:text-neutral-400">
+                {{ message.created_at.strftime('%d %b %Y, %H:%M') }}
+              </div>
+            </div>
+            {% if message.content %}
+            <p class="text-neutral-600 dark:text-neutral-400">{{ message.content }}</p>
             {% endif %}
           </div>
         </div>
-        <div class="basis-full space-y-2 px-4 py-0.5">
-          <div class="flex flex-row justify-between content-center text-xs">
-            <div>
-              {{ name | title }}
-              <span class="text-neutral-600 dark:text-neutral-400">
-                {% if message.action == 'call' %}
-                a appelé
-                {% elif message.action == 'hangup' %}
-                a raccroché
-                {% elif message.action == 'sms' %}
-                a envoyé un SMS
-                {% elif message.action == 'talk' %}
-                a dit
-                {% endif %}
-              </span>
-            </div>
-            <div class="text-neutral-600 dark:text-neutral-400">
-              {{ message.created_at.strftime('%d %b %Y, %H:%M') }}
-            </div>
-          </div>
-          {% if message.content %}
-          <p class="text-neutral-600 dark:text-neutral-400">{{ message.content }}</p>
-          {% endif %}
-        </div>
-      </div>
+        {% endif %}
       {% else %}
       <p class="text-neutral-600 dark:text-neutral-400">Aucun message pour l'instant.</p>
       {% endfor %}

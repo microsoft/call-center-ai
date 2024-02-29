@@ -35,13 +35,17 @@ class DatabaseModel(BaseModel):
     sqlite: Optional[SqliteModel] = None
 
     @validator("cosmos_db", always=True)
-    def check_cosmos_db(cls, v, values, **kwargs):
+    def validate_cosmos_db(
+        cls, v: Optional[CosmosDbModel], values, **kwargs
+    ) -> Optional[CosmosDbModel]:
         if not v and values.get("mode", None) == ModeEnum.COSMOS_DB:
             raise ValueError("Cosmos DB config required")
         return v
 
     @validator("sqlite", always=True)
-    def check_sqlite(cls, v, values, **kwargs):
+    def validate_sqlite(
+        cls, v: Optional[SqliteModel], values, **kwargs
+    ) -> Optional[SqliteModel]:
         if not v and values.get("mode", None) == ModeEnum.SQLITE:
             raise ValueError("SQLite config required")
         return v
