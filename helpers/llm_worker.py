@@ -32,6 +32,7 @@ from typing import AsyncGenerator, List, Optional, Tuple, Type, TypeVar, Union
 from httpx import ReadError
 from models.message import MessageModel
 import tiktoken
+import json
 
 
 _logger = build_logger(__name__)
@@ -78,9 +79,11 @@ async def completion_stream(
     async with _use_oai(is_backup) as (client, model, context):
         prompt = _prepare_messages(
             context=context,
+            max_messages=20,  # Quick response
             messages=messages,
             model=model,
             system=system,
+            tools=tools,
         )
 
         stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
@@ -179,10 +182,11 @@ async def completion_model_sync(
 
 def _prepare_messages(
     context: int,
+    messages: List[MessageModel],
     model: str,
     system: List[ChatCompletionSystemMessageParam],
-    messages: List[MessageModel],
-    max_messages: int = 50,
+    max_messages: int = 1000,
+    tools: Optional[List[ChatCompletionToolParam]] = None,
 ) -> List[
     Union[
         ChatCompletionAssistantMessageParam,
@@ -191,7 +195,7 @@ def _prepare_messages(
         ChatCompletionUserMessageParam,
     ]
 ]:
-    res: List[
+    responses: List[
         Union[
             ChatCompletionAssistantMessageParam,
             ChatCompletionSystemMessageParam,
@@ -200,27 +204,32 @@ def _prepare_messages(
         ]
     ] = [*system]
     counter = 0
+    tokens = 0
     total = min(len(system) + len(messages), max_messages)
 
     # Add system messages
-    tokens = 0
     for message in system:
-        tokens += count_tokens(message.get("content"), model)
+        tokens += count_tokens(json.dumps(message), model)
         counter += 1
 
-    # Add user messages until the context is reached
-    for message in messages:
-        tokens += count_tokens(message.content, model)
-        if tokens >= context:
+    # Add tools
+    for tool in tools or []:
+        tokens += count_tokens(json.dumps(tool), model)
+
+    # Add user messages until the context is reached, from the newest to the oldest
+    for message in reversed(messages):
+        response = message.to_openai()
+        new_tokens = count_tokens("".join([json.dumps(x) for x in response]), model)
+        if tokens + new_tokens >= context:
             break
+        tokens += new_tokens
         if counter >= max_messages:
             break
-        res += message.to_openai()
+        responses += response
         counter += 1
 
-    _logger.debug(f"Took {counter}/{total} messages for the context")
-
-    return res
+    _logger.info(f"Using {counter}/{total} messages ({tokens} tokens) as context")
+    return responses
 
 
 async def safety_check(text: str) -> None:
