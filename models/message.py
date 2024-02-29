@@ -96,24 +96,6 @@ class ToolModel(BaseModel):
         json_str = self.function_arguments
         name = self.function_name
 
-        # Try to fix encoding issues with args and GPT-4 Turbo
-        # See:
-        # - https://community.openai.com/t/gpt-4-1106-preview-is-not-generating-utf-8/482839/8
-        # - https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500/32
-        # - https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500/71
-        # Fix double escaped unicode (\\u0000 -> \u0000)
-        json_str = re.sub(DOUBLE_ESCAPED_UNICODE_R, REMOVE_DOUBLE_ESCAPE_R, json_str)
-        # Fix unicode that was not escaped (u0000 -> \u0000)
-        json_str = re.sub(
-            NON_ESCAPED_UNICODE_R,
-            lambda match: "\\" + match.group(0),
-            json_str,
-        )
-        # Unescape % encoded characters (e.g. %20 -> " ") and fix special characters (e.g. ü, é)
-        json_str = unquote(json_str, "latin1")
-        # Unescape html entities (e.g. &uuml; -> ü)
-        json_str = unescape(json_str)
-
         # Try to fix JSON args to catch LLM hallucinations
         # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
         args: dict[str, Any] = repair_json(
