@@ -343,7 +343,7 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
 
 // resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2023-06-01-preview' = {
 //   parent: cognitiveOpenai
-//   name: 'gpt'
+//   name: 'disabled'
 //   properties: {
 //     basePolicyName: 'Microsoft.Default'
 //     mode: 'Default'
