@@ -3,6 +3,7 @@ from fastapi import BackgroundTasks
 from helpers.call import ContextEnum as CallContextEnum, handle_play
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
+from helpers.logging import build_logger
 from inspect import getmembers, isfunction
 from models.call import CallModel
 from models.claim import ClaimModel
@@ -11,8 +12,11 @@ from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
 from persistence.ai_search import AiSearchSearch
 from pydantic import ValidationError
-from typing import Awaitable, Callable, Annotated, List
+from typing import Awaitable, Callable, Annotated, List, Literal
 import asyncio
+
+
+_logger = build_logger(__name__)
 
 
 class LlmPlugins:
@@ -203,6 +207,36 @@ class LlmPlugins:
             res += f"\n- {training.title}: {training.content}"
 
         return res
+
+    async def notify_emergencies(
+        self,
+        customer_response: Annotated[
+            str,
+            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am notifying the emergency services', 'I am notifying the police'.",
+        ],
+        reason: Annotated[
+            str,
+            "The reason to notify the emergency services. Should be detailed enough to be understood by anyone. Example: 'A person is having a heart attack', 'A child is being attacked by a dog'.",
+        ],
+        location: Annotated[
+            str,
+            "The location of the emergency. Should be detailed enough to be understood by anyone. Should contains details like the floor, the building, the code to enter, etc. Example: '123 rue de la paix 75000 Paris, Building A, 3rd floor, code 1234', '12 avenue de la manivelle 13000 Marseille, behind the red door'.",
+        ],
+        contact: Annotated[
+            str,
+            "The local contact of a person on site. Should be detailed enough to be understood by anyone. Should contains details like the name, the phone number, etc. Example: 'Marie-Jeanne, +33735119775', 'Jean-Pierre, wear a red hat'.",
+        ],
+        service: Annotated[
+            Literal["police", "firefighters", "pharmacy", "veterinarian", "hospital"],
+            "The emergency service to notify.",
+        ],
+    ) -> str:
+        await self.user_callback(customer_response, self.style)
+        # TODO: Implement notification to emergency services for production usage
+        _logger.info(
+            f"Notifying {service}, location {location}, contact {contact}, reason {reason}."
+        )
+        return f"Notifying {service} for {reason}."
 
     @staticmethod
     def to_openai() -> List[ChatCompletionToolParam]:
