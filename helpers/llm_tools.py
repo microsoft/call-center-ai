@@ -1,277 +1,213 @@
-"""
-Inspired by: Microsoft AutoGen (CC-BY-4.0)
-See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd94c9a0e/autogen/function_utils.py
-"""
-
-import inspect
-from helpers.logging import build_logger
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    ForwardRef,
-    List,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from azure.communication.callautomation import CallConnectionClient
+from fastapi import BackgroundTasks
+from helpers.call import ContextEnum as CallContextEnum, handle_play
+from helpers.config import CONFIG
+from helpers.llm_utils import function_schema
+from inspect import getmembers, isfunction
+from models.call import CallModel
+from models.claim import ClaimModel
+from models.message import StyleEnum as MessageStyleEnum
+from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
-from openai.types.shared_params.function_definition import FunctionDefinition
-from pydantic import BaseModel, TypeAdapter
-from pydantic._internal._typing_extra import eval_type_lenient
-from pydantic.json_schema import JsonSchemaValue
-from typing_extensions import Annotated
+from persistence.ai_search import AiSearchSearch
+from pydantic import ValidationError
+from typing import Awaitable, Callable, Annotated, List
+import asyncio
 
 
-_logger = build_logger(__name__)
-T = TypeVar("T")
+class LlmPlugins:
+    background_tasks: BackgroundTasks
+    call: CallModel
+    cancellation_callback: Callable[[], Awaitable]
+    client: CallConnectionClient
+    post_call_next: Callable[[CallModel], Awaitable]
+    post_call_synthesis: Callable[[CallModel], Awaitable]
+    search: AiSearchSearch
+    style: MessageStyleEnum = MessageStyleEnum.NONE
+    user_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
+    def __init__(
+        self,
+        background_tasks: BackgroundTasks,
+        call: CallModel,
+        cancellation_callback: Callable[[], Awaitable],
+        client: CallConnectionClient,
+        post_call_next: Callable[[CallModel], Awaitable],
+        post_call_synthesis: Callable[[CallModel], Awaitable],
+        search: AiSearchSearch,
+        user_callback: Callable[[str, MessageStyleEnum], Awaitable],
+    ):
+        self.background_tasks = background_tasks
+        self.call = call
+        self.cancellation_callback = cancellation_callback
+        self.client = client
+        self.post_call_next = post_call_next
+        self.post_call_synthesis = post_call_synthesis
+        self.search = search
+        self.user_callback = user_callback
 
-class Parameters(BaseModel):
-    """
-    Parameters of a function as defined by the OpenAI API.
-    """
+    async def end_call(self) -> str:
+        """
+        Use this if the customer said they want to end the call. Requires an explicit verbal validation from the customer. This will hang up the call. Never use this action directly after a recall. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
+        """
+        await self.cancellation_callback()
+        await handle_play(
+            call=self.call,
+            client=self.client,
+            context=CallContextEnum.GOODBYE,
+            text=await CONFIG.prompts.tts.goodbye(self.call),
+        )
+        return "Call ended"
 
-    properties: Dict[str, JsonSchemaValue]
-    required: List[str]
-    type: str = "object"
+    async def new_claim(
+        self,
+        customer_response: Annotated[
+            str,
+            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+        ],
+    ) -> str:
+        """
+        Use this if the customer wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.
+        """
+        await self.user_callback(customer_response, self.style)
 
+        self.background_tasks.add_task(self.post_call_next, self.call)
+        self.background_tasks.add_task(self.post_call_synthesis, self.call)
 
-def function_schema(f: Callable[..., Any]) -> ChatCompletionToolParam:
-    """
-    Get a JSON schema for a function as defined by the OpenAI API.
+        last_message = self.call.messages[-1]
+        call = CallModel(phone_number=self.call.phone_number)
+        call.messages.append(last_message)
 
-    Args:
-        f: The function to get the JSON schema for
+        return "Claim, reminders and messages reset"
 
-    Returns:
-        A JSON schema for the function
+    async def new_or_updated_reminder(
+        self,
+        customer_response: Annotated[
+            str,
+            "Contextual description of the reminder. Should be detailed enough to be understood by anyone. Example: 'Watch model is Rolex Submariner 116610LN', 'Customer said the witnesses car was red but the police report says it was blue. Double check with the involved parties'.",
+        ],
+        description: Annotated[
+            str,
+            "Sentence to be said to the customer to confirm the reminder. Only speak about this action. Use an imperative sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
+        ],
+        due_date_time: Annotated[
+            str,
+            "Datetime when the reminder should be triggered. Should be in the future, in the ISO format.",
+        ],
+        owner: Annotated[
+            str,
+            "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'contact', 'witness', 'police'.",
+        ],
+        title: Annotated[
+            str,
+            "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Title is unique and allows the reminder to be updated. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
+        ],
+    ) -> str:
+        """
+        Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.
+        """
+        await self.user_callback(customer_response, self.style)
 
-    Raises:
-        TypeError: If the function is not annotated
-    """
-    typed_signature = _typed_signature(f)
-    default_values = _default_values(typed_signature)
-    param_annotations = _param_annotations(typed_signature)
-    required = _required_params(typed_signature)
-    missing, unannotated_with_default = _missing_annotations(typed_signature, required)
+        for reminder in self.call.reminders:
+            if reminder.title == title:
+                try:
+                    reminder.description = description
+                    reminder.due_date_time = due_date_time  # type: ignore
+                    reminder.owner = owner
+                    return f'Reminder "{title}" updated.'
+                except ValidationError as e:  # Catch error
+                    return f'Failed to edit reminder "{title}": {e.json()}'
 
-    if unannotated_with_default != set():
-        unannotated_with_default_s = [
-            f"'{k}'" for k in sorted(unannotated_with_default)
+        try:
+            reminder = ReminderModel(
+                description=description,
+                due_date_time=due_date_time,  # type: ignore
+                owner=owner,
+                title=title,
+            )
+            self.call.reminders.append(reminder)
+            return f'Reminder "{title}" created.'
+        except ValidationError as e:  # Catch error
+            return f'Failed to create reminder "{title}": {e.json()}'
+
+    async def updated_claim(
+        self,
+        customer_response: Annotated[
+            str,
+            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+        ],
+        field: Annotated[
+            str, f"The claim field to update: {list(ClaimModel.editable_fields())}"
+        ],
+        value: Annotated[
+            str,
+            "The claim field value to update. For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58). For phone numbers, use E164 format (e.g. +33612345678).",
+        ],
+    ) -> str:
+        """
+        Use this if the customer wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update contact contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.
+        """
+        await self.user_callback(customer_response, self.style)
+
+        if not field in ClaimModel.editable_fields():
+            return f'Failed to update a non-editable field "{field}".'
+
+        try:
+            # Define the field and force to trigger validation
+            copy = self.call.claim.model_dump()
+            copy[field] = value
+            self.call.claim = ClaimModel.model_validate(copy)
+            return f'Updated claim field "{field}" with value "{value}".'
+        except ValidationError as e:  # Catch error to inform LLM
+            return f'Failed to edit field "{field}": {e.json()}'
+
+    async def talk_to_human(self) -> str:
+        """
+        Use this if the customer wants to talk to a human and Assistant is unable to help. Requires an explicit verbal validation from the customer. This will transfer the customer to an human agent. Never use this action directly after a recall. Example: 'I want to talk to a human', 'I want to talk to a real person'.
+        """
+        await self.cancellation_callback()
+        await handle_play(
+            call=self.call,
+            client=self.client,
+            context=CallContextEnum.CONNECT_AGENT,
+            text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
+        )
+        return "Transferring to human agent"
+
+    async def search_document(
+        self,
+        customer_response: Annotated[
+            str,
+            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am searching for the document about the car accident', 'I am searching for the document about the stolen watch'.",
+        ],
+        queries: Annotated[
+            list[str],
+            "The text queries to perform the search. Example: ['How much does it cost to repair a broken window', 'What are the requirements to ask for a cyber attack insurance']",
+        ],
+    ) -> str:
+        """
+        Use this if the customer wants to search for a public specific information you don't have. Example: contract, law, regulation, article, etc.
+        """
+        await self.user_callback(customer_response, self.style)
+
+        # Execute in parallel
+        tasks = await asyncio.gather(
+            *[self.search.training_asearch_all(query, self.call) for query in queries]
+        )
+        # Flatten, remove duplicates, and sort by score
+        trainings = sorted(set(training for task in tasks for training in task or []))
+
+        # Format results
+        res = "# Search results"
+        for training in trainings:
+            res += f"\n- {training.title}: {training.content}"
+
+        return res
+
+    @staticmethod
+    def to_openai() -> List[ChatCompletionToolParam]:
+        return [
+            function_schema(func[1])
+            for func in getmembers(LlmPlugins, isfunction)
+            if not func[0].startswith("_")
         ]
-        _logger.warning(
-            f"The following parameters of the function '{f.__name__}' with default values are not annotated: "
-            + f"{', '.join(unannotated_with_default_s)}."
-        )
-
-    if missing != set():
-        missing_s = [f"'{k}'" for k in sorted(missing)]
-        raise TypeError(
-            f"All parameters of the function '{f.__name__}' without default values must be annotated. "
-            + f"The annotations are missing for the following parameters: {', '.join(missing_s)}"
-        )
-
-    # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
-    description = " ".join((f.__doc__ or "").splitlines()).strip()
-    name = " ".join((f.__name__).splitlines()).strip()
-    parameters: dict[str, object] = _parameters(
-        required, param_annotations, default_values=default_values
-    ).model_dump()
-
-    function = ChatCompletionToolParam(
-        type="function",
-        function=FunctionDefinition(
-            description=description,
-            name=name,
-            parameters=parameters,
-        ),
-    )
-
-    return function
-
-
-def _typed_annotation(annotation: Any, globalns: Dict[str, Any]) -> Any:
-    """
-    Get the type annotation of a parameter.
-
-    Args:
-        annotation: The annotation of the parameter
-        globalns: The global namespace of the function
-
-    Returns:
-        The type annotation of the parameter
-    """
-    if isinstance(annotation, str):
-        annotation = ForwardRef(annotation)
-        annotation = eval_type_lenient(annotation, globalns, globalns)
-    return annotation
-
-
-def _typed_signature(call: Callable[..., Any]) -> inspect.Signature:
-    """Get the signature of a function with type annotations.
-
-    Args:
-        call: The function to get the signature for
-
-    Returns:
-        The signature of the function with type annotations
-    """
-    signature = inspect.signature(call)
-    globalns = getattr(call, "__globals__", {})
-    typed_params = [
-        inspect.Parameter(
-            name=param.name,
-            kind=param.kind,
-            default=param.default,
-            annotation=_typed_annotation(param.annotation, globalns),
-        )
-        for param in signature.parameters.values()
-    ]
-    typed_signature = inspect.Signature(typed_params)
-    return typed_signature
-
-
-def _param_annotations(
-    typed_signature: inspect.Signature,
-) -> Dict[str, Union[Annotated[Type[Any], str], Type[Any]]]:
-    """
-    Get the type annotations of the parameters of a function.
-
-    Args:
-        typed_signature: The signature of the function with type annotations
-
-    Returns:
-        A dictionary of the type annotations of the parameters of the function
-    """
-    return {
-        k: v.annotation
-        for k, v in typed_signature.parameters.items()
-        if v.annotation is not inspect.Signature.empty and k != "self"
-    }
-
-
-def _parameter_json_schema(
-    k: str,
-    v: Union[Annotated[Type[Any], str], Type[Any]],
-    default_values: Dict[str, Any],
-) -> JsonSchemaValue:
-    """
-    Get a JSON schema for a parameter as defined by the OpenAI API.
-
-    Args:
-        k: The name of the parameter
-        v: The type of the parameter
-        default_values: The default values of the parameters of the function
-
-    Returns:
-        A Pydanitc model for the parameter
-    """
-
-    def _description(k: str, v: Union[Annotated[Type[Any], str], Type[Any]]) -> str:
-        # Handles Annotated
-        if hasattr(v, "__metadata__"):
-            retval = v.__metadata__[0]
-            if isinstance(retval, str):
-                return retval
-            else:
-                raise ValueError(
-                    f"Invalid description {retval} for parameter {k}, should be a string."
-                )
-        else:
-            return k
-
-    schema = TypeAdapter(v).json_schema()
-    if k in default_values:
-        dv = default_values[k]
-        schema["default"] = dv
-
-    schema["description"] = _description(k, v)
-
-    return schema
-
-
-def _required_params(typed_signature: inspect.Signature) -> List[str]:
-    """
-    Get the required parameters of a function.
-
-    Args:
-        signature: The signature of the function as returned by inspect.signature
-
-    Returns:
-        A list of the required parameters of the function
-    """
-    return [
-        k
-        for k, v in typed_signature.parameters.items()
-        if v.default == inspect.Signature.empty and k != "self"
-    ]
-
-
-def _default_values(typed_signature: inspect.Signature) -> Dict[str, Any]:
-    """
-    Get default values of parameters of a function.
-
-    Args:
-        signature: The signature of the function as returned by inspect.signature
-
-    Returns:
-        A dictionary of the default values of the parameters of the function
-    """
-    return {
-        k: v.default
-        for k, v in typed_signature.parameters.items()
-        if v.default != inspect.Signature.empty and k != "self"
-    }
-
-
-def _parameters(
-    required: List[str],
-    param_annotations: Dict[str, Union[Annotated[Type[Any], str], Type[Any]]],
-    default_values: Dict[str, Any],
-) -> Parameters:
-    """
-    Get the parameters of a function as defined by the OpenAI API.
-
-    Args:
-        required: The required parameters of the function
-        hints: The type hints of the function as returned by typing.get_type_hints
-
-    Returns:
-        A Pydantic model for the parameters of the function
-    """
-    return Parameters(
-        properties={
-            k: _parameter_json_schema(k, v, default_values)
-            for k, v in param_annotations.items()
-            if v is not inspect.Signature.empty and k != "self"
-        },
-        required=required,
-    )
-
-
-def _missing_annotations(
-    typed_signature: inspect.Signature, required: List[str]
-) -> Tuple[Set[str], Set[str]]:
-    """
-    Get the missing annotations of a function.
-
-    Ignores the parameters with default values as they are not required to be annotated, but logs a warning.
-
-    Args:
-        typed_signature: The signature of the function with type annotations
-        required: The required parameters of the function
-
-    Returns:
-        A set of the missing annotations of the function
-    """
-    all_missing = {
-        k
-        for k, v in typed_signature.parameters.items()
-        if v.annotation is inspect.Signature.empty and k != "self"
-    }
-    missing = all_missing.intersection(set(required))
-    unannotated_with_default = all_missing.difference(missing)
-    return missing, unannotated_with_default

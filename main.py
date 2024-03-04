@@ -82,7 +82,7 @@ from helpers.call import (
     handle_recognize_text,
     tts_sentence_split,
 )
-from helpers.llm_plugins import LlmPlugins
+from helpers.llm_tools import LlmPlugins
 from httpx import ReadError
 
 
@@ -546,7 +546,7 @@ async def load_llm_chat(
 
     should_play_sound = True
 
-    async def _tts_callback(text: str, style: MessageStyleEnum) -> None:
+    async def _user_callback(text: str, style: MessageStyleEnum) -> None:
         """
         Send back the TTS to the user.
         """
@@ -577,7 +577,7 @@ async def load_llm_chat(
             call=call,
             client=client,
             use_tools=_iterations_remaining > 0,
-            user_callback=_tts_callback,
+            user_callback=_user_callback,
         )
     )
 
@@ -648,7 +648,7 @@ async def load_llm_chat(
             should_user_answer = True
             content = await CONFIG.prompts.tts.error(call)
             style = MessageStyleEnum.NONE
-            await _tts_callback(content, style)
+            await _user_callback(content, style)
             call.messages.append(
                 MessageModel(
                     content=content,
@@ -806,7 +806,7 @@ async def execute_llm_chat(
             await user_callback(local_content, new_style)
         return new_style
 
-    async def _tool_cancellation_callback() -> None:
+    async def _tools_cancellation_callback() -> None:
         nonlocal should_user_answer
         _logger.info("Chat stopped by tool")
         should_user_answer = False
@@ -845,7 +845,7 @@ async def execute_llm_chat(
     plugins = LlmPlugins(
         background_tasks=background_tasks,
         call=call,
-        cancellation_callback=_tool_cancellation_callback,
+        cancellation_callback=_tools_cancellation_callback,
         client=client,
         post_call_next=post_call_next,
         post_call_synthesis=post_call_synthesis,
@@ -929,7 +929,7 @@ async def execute_llm_chat(
     # Store message
     call.messages.append(
         MessageModel(
-            content=content_full,
+            content=content_full.strip(),
             persona=MessagePersonaEnum.ASSISTANT,
             style=plugins.style,
             tool_calls=tool_calls,
