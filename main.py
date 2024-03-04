@@ -792,9 +792,15 @@ async def execute_llm_chat(
     4. `CallModel`, the updated model
     """
     _logger.debug("Running LLM chat")
+    content_full = ""
     should_user_answer = True
 
-    async def _buffer_user_callback(
+    async def _tools_callback(text: str, style: MessageStyleEnum) -> None:
+        nonlocal content_full
+        content_full += f" {text}"
+        await user_callback(text, style)
+
+    async def _content_callback(
         buffer: str, style: MessageStyleEnum
     ) -> MessageStyleEnum:
         # Remove tool calls from buffer content and detect style
@@ -850,7 +856,7 @@ async def execute_llm_chat(
         post_call_next=post_call_next,
         post_call_synthesis=post_call_synthesis,
         search=search,
-        user_callback=user_callback,
+        user_callback=_tools_callback,
     )
 
     tools = []
@@ -862,7 +868,6 @@ async def execute_llm_chat(
 
     # Execute LLM inference
     content_buffer_pointer = 0
-    content_full = ""
     tool_calls_buffer: dict[int, MessageToolModel] = {}
     try:
         async for delta in completion_stream(
@@ -885,7 +890,7 @@ async def execute_llm_chat(
                     content_full[content_buffer_pointer:], False
                 ):
                     content_buffer_pointer += len(sentence)
-                    plugins.style = await _buffer_user_callback(sentence, plugins.style)
+                    plugins.style = await _content_callback(sentence, plugins.style)
     except ReadError:
         _logger.warn("Network error", exc_info=True)
         return True, True, should_user_answer, call
@@ -895,7 +900,7 @@ async def execute_llm_chat(
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
-        plugins.style = await _buffer_user_callback(
+        plugins.style = await _content_callback(
             content_full[content_buffer_pointer:], plugins.style
         )
 
