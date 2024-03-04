@@ -119,7 +119,7 @@ class ToolModel(BaseModel):
 
     @staticmethod
     def _available_function_names() -> List[str]:
-        from helpers.llm_plugins import LlmPlugins
+        from helpers.llm_tools import LlmPlugins
 
         return [name for name, _ in getmembers(LlmPlugins, isfunction)]
 

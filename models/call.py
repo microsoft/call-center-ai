@@ -5,7 +5,7 @@ from models.message import MessageModel
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
-from pydantic import BaseModel, Field, computed_field, SecretStr
+from pydantic import BaseModel, Field, computed_field
 from typing import List, Optional
 from uuid import UUID, uuid4
 import random

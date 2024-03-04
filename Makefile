@@ -9,7 +9,7 @@ tunnel_name := claim-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
 app_location := westeurope
-openai_location := swedencentral
+openai_location := southcentralus
 search_location := northeurope
 # App configuration
 agent_phone_number ?= $(shell cat config.yaml | yq '.workflow.agent_phone_number')

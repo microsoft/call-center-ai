@@ -82,7 +82,7 @@ from helpers.call import (
     handle_recognize_text,
     tts_sentence_split,
 )
-from helpers.llm_plugins import LlmPlugins
+from helpers.llm_tools import LlmPlugins
 from httpx import ReadError
 
 
@@ -546,7 +546,7 @@ async def load_llm_chat(
 
     should_play_sound = True
 
-    async def _tts_callback(text: str, style: MessageStyleEnum) -> None:
+    async def _user_callback(text: str, style: MessageStyleEnum) -> None:
         """
         Send back the TTS to the user.
         """
@@ -577,7 +577,7 @@ async def load_llm_chat(
             call=call,
             client=client,
             use_tools=_iterations_remaining > 0,
-            user_callback=_tts_callback,
+            user_callback=_user_callback,
         )
     )
 
@@ -648,7 +648,7 @@ async def load_llm_chat(
             should_user_answer = True
             content = await CONFIG.prompts.tts.error(call)
             style = MessageStyleEnum.NONE
-            await _tts_callback(content, style)
+            await _user_callback(content, style)
             call.messages.append(
                 MessageModel(
                     content=content,
@@ -792,9 +792,15 @@ async def execute_llm_chat(
     4. `CallModel`, the updated model
     """
     _logger.debug("Running LLM chat")
+    content_full = ""
     should_user_answer = True
 
-    async def _buffer_user_callback(
+    async def _tools_callback(text: str, style: MessageStyleEnum) -> None:
+        nonlocal content_full
+        content_full += f" {text}"
+        await user_callback(text, style)
+
+    async def _content_callback(
         buffer: str, style: MessageStyleEnum
     ) -> MessageStyleEnum:
         # Remove tool calls from buffer content and detect style
@@ -806,7 +812,7 @@ async def execute_llm_chat(
             await user_callback(local_content, new_style)
         return new_style
 
-    async def _tool_cancellation_callback() -> None:
+    async def _tools_cancellation_callback() -> None:
         nonlocal should_user_answer
         _logger.info("Chat stopped by tool")
         should_user_answer = False
@@ -845,12 +851,12 @@ async def execute_llm_chat(
     plugins = LlmPlugins(
         background_tasks=background_tasks,
         call=call,
-        cancellation_callback=_tool_cancellation_callback,
+        cancellation_callback=_tools_cancellation_callback,
         client=client,
         post_call_next=post_call_next,
         post_call_synthesis=post_call_synthesis,
         search=search,
-        user_callback=user_callback,
+        user_callback=_tools_callback,
     )
 
     tools = []
@@ -862,7 +868,6 @@ async def execute_llm_chat(
 
     # Execute LLM inference
     content_buffer_pointer = 0
-    content_full = ""
     tool_calls_buffer: dict[int, MessageToolModel] = {}
     try:
         async for delta in completion_stream(
@@ -885,7 +890,7 @@ async def execute_llm_chat(
                     content_full[content_buffer_pointer:], False
                 ):
                     content_buffer_pointer += len(sentence)
-                    plugins.style = await _buffer_user_callback(sentence, plugins.style)
+                    plugins.style = await _content_callback(sentence, plugins.style)
     except ReadError:
         _logger.warn("Network error", exc_info=True)
         return True, True, should_user_answer, call
@@ -895,7 +900,7 @@ async def execute_llm_chat(
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
-        plugins.style = await _buffer_user_callback(
+        plugins.style = await _content_callback(
             content_full[content_buffer_pointer:], plugins.style
         )
 
@@ -929,7 +934,7 @@ async def execute_llm_chat(
     # Store message
     call.messages.append(
         MessageModel(
-            content=content_full,
+            content=content_full.strip(),
             persona=MessagePersonaEnum.ASSISTANT,
             style=plugins.style,
             tool_calls=tool_calls,

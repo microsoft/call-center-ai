@@ -140,13 +140,18 @@ async def handle_play(
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
     if store:
-        call.messages.append(
-            MessageModel(
-                content=text,
-                persona=MessagePersonaEnum.ASSISTANT,
-                style=style,
+        if (
+            call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
+        ):  # If the last message was from the assistant, append to it
+            call.messages[-1].content += f" {text}"
+        else:  # Otherwise, create a new message
+            call.messages.append(
+                MessageModel(
+                    content=text,
+                    persona=MessagePersonaEnum.ASSISTANT,
+                    style=style,
+                )
             )
-        )
 
     # Split text in chunks of max 400 characters, separated by sentence
     chunks = []
