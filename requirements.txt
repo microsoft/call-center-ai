@@ -7,7 +7,7 @@ azure-communication-sms==1.0.1
 azure-cosmos==4.5.1
 azure-eventgrid==4.17.0
 azure-identity==1.15.0  # Required for all Azure SDKs
-azure-search-documents==11.6.0b1
+azure-search-documents==11.6.0b2
 email-validator==2.1.1  # Required for pydantic
 fastapi==0.110.0
 jinja2==3.1.3
