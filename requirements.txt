@@ -22,4 +22,4 @@ pyyaml==6.0.1
 redis==5.0.2
 tenacity==8.2.3
 tiktoken==0.6.0
-uvicorn[standard]==0.27.1
+uvicorn[standard]==0.28.0
