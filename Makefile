@@ -32,6 +32,9 @@ install:
 	@echo "➡️ Installing Dev Tunnels CLI..."
 	devtunnel --version || brew install --cask devtunnel
 
+	@echo "➡️ Installing Allure..."
+	allure --version || brew install allure
+
 	@echo "➡️ Installing Python app dependencies..."
 	python3 -m pip install -r requirements.txt
 
@@ -54,6 +57,12 @@ upgrade:
 test:
 	@echo "➡️ Running Black..."
 	python3 -m black --check .
+
+	@echo "➡️ Running Pytest..."
+	pytest --alluredir=test-reports -ra test.py
+
+test-serve:
+	allure serve test-reports
 
 lint:
 	@echo "➡️ Running Black..."
