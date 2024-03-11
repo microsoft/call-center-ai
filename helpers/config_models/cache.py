@@ -1,9 +1,7 @@
 from enum import Enum
 from functools import cache
 from persistence.icache import ICache
-from persistence.memory import MemoryCache
-from persistence.redis import RedisCache
-from pydantic import validator, SecretStr, BaseModel, Field
+from pydantic import field_validator, SecretStr, BaseModel, Field, ValidationInfo
 from typing import Optional
 
 
@@ -29,21 +27,25 @@ class CacheModel(BaseModel, frozen=True):
     mode: ModeEnum = ModeEnum.MEMORY
     redis: Optional[RedisModel] = None
 
-    @validator("redis", always=True)
+    @field_validator("redis")
     def validate_sqlite(
-        cls, v: Optional[RedisModel], values, **kwargs
+        cls,
+        redis: Optional[RedisModel],
+        info: ValidationInfo,
     ) -> Optional[RedisModel]:
-        if not v and values.get("mode", None) == ModeEnum.REDIS:
+        if not redis and info.data.get("mode", None) == ModeEnum.REDIS:
             raise ValueError("Redis config required")
-        return v
+        return redis
 
-    @validator("memory", always=True)
+    @field_validator("memory")
     def validate_memory(
-        cls, v: Optional[MemoryModel], values, **kwargs
+        cls,
+        memory: Optional[MemoryModel],
+        info: ValidationInfo,
     ) -> Optional[MemoryModel]:
-        if not v and values.get("mode", None) == ModeEnum.MEMORY:
+        if not memory and info.data.get("mode", None) == ModeEnum.MEMORY:
             raise ValueError("Memory config required")
-        return v
+        return memory
 
     @cache
     def instance(self) -> ICache:

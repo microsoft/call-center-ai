@@ -1,8 +1,7 @@
 from enum import Enum
 from functools import cache
 from persistence.istore import IStore
-from persistence.sqlite import SqliteStore
-from pydantic import validator, SecretStr, Field, BaseModel
+from pydantic import field_validator, SecretStr, Field, BaseModel, ValidationInfo
 from typing import Optional
 
 
@@ -37,21 +36,25 @@ class DatabaseModel(BaseModel, frozen=True):
     mode: ModeEnum = ModeEnum.SQLITE
     sqlite: Optional[SqliteModel] = None
 
-    @validator("cosmos_db", always=True)
+    @field_validator("cosmos_db")
     def validate_cosmos_db(
-        cls, v: Optional[CosmosDbModel], values, **kwargs
+        cls,
+        cosmos_db: Optional[CosmosDbModel],
+        info: ValidationInfo,
     ) -> Optional[CosmosDbModel]:
-        if not v and values.get("mode", None) == ModeEnum.COSMOS_DB:
+        if not cosmos_db and info.data.get("mode", None) == ModeEnum.COSMOS_DB:
             raise ValueError("Cosmos DB config required")
-        return v
+        return cosmos_db
 
-    @validator("sqlite", always=True)
+    @field_validator("sqlite")
     def validate_sqlite(
-        cls, v: Optional[SqliteModel], values, **kwargs
+        cls,
+        sqlite: Optional[SqliteModel],
+        info: ValidationInfo,
     ) -> Optional[SqliteModel]:
-        if not v and values.get("mode", None) == ModeEnum.SQLITE:
+        if not sqlite and info.data.get("mode", None) == ModeEnum.SQLITE:
             raise ValueError("SQLite config required")
-        return v
+        return sqlite
 
     @cache
     def instance(self) -> IStore:
