@@ -1,10 +1,10 @@
 from azure.ai.translation.text.aio import TextTranslationClient
-from azure.ai.translation.text.models import InputTextItem
+from azure.ai.translation.text.models import InputTextItem, TranslatedTextItem
 from azure.core.credentials import AzureKeyCredential
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, List, Optional
 from azure.core.exceptions import HttpResponseError
 from tenacity import (
     retry,
@@ -16,7 +16,7 @@ from tenacity import (
 
 _logger = build_logger(__name__)
 _logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
-_cache = {}  # Local cache for translations, TODO: Use Redis
+_cache = CONFIG.cache.instance()
 
 
 @retry(
@@ -36,20 +36,28 @@ async def translate_text(
     if source_lang == target_lang:  # No need to translate
         return text
 
-    cache_key = (text, source_lang, target_lang)
-    if cache_key in _cache:  # Search in cache
-        return _cache[cache_key]
+    # Try cache
+    cache_key = f"{__name__}:translate_text:{text}:{source_lang}:{target_lang}"
+    cached = await _cache.aget(cache_key)
+    if cached:
+        return cached.decode("utf-8")
 
+    # Try live
+    translation: Optional[str] = None
     async with _use_client() as client:  # Perform translation
-        res = await client.translate(
+        res: List[TranslatedTextItem] = await client.translate(
             content=[InputTextItem(text=text)],  # type: ignore
             from_parameter=source_lang,
             to=[target_lang],
         )
-        translation = res[0] if res else None
-        translation = translation.translations[0].text if translation else None
-        _cache[cache_key] = translation  # Add to cache
-        return translation
+        translation = (
+            res[0].translations[0].text if res and res[0].translations else None
+        )
+
+    # Update cache
+    await _cache.aset(cache_key, translation)
+
+    return translation
 
 
 @asynccontextmanager
