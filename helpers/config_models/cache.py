@@ -1,4 +1,8 @@
 from enum import Enum
+from functools import cache
+from persistence.icache import ICache
+from persistence.memory import MemoryCache
+from persistence.redis import RedisCache
 from pydantic import validator, SecretStr, BaseModel, Field
 from typing import Optional
 
@@ -8,11 +12,11 @@ class ModeEnum(str, Enum):
     REDIS = "redis"
 
 
-class MemoryModel(BaseModel):
+class MemoryModel(BaseModel, frozen=True):
     max_size: int = Field(default=100, ge=10)
 
 
-class RedisModel(BaseModel):
+class RedisModel(BaseModel, frozen=True):
     database: int = Field(default=0, ge=0)
     host: str
     password: SecretStr
@@ -20,7 +24,7 @@ class RedisModel(BaseModel):
     ssl: bool = True
 
 
-class CacheModel(BaseModel):
+class CacheModel(BaseModel, frozen=True):
     memory: Optional[MemoryModel] = None
     mode: ModeEnum = ModeEnum.MEMORY
     redis: Optional[RedisModel] = None
@@ -40,3 +44,16 @@ class CacheModel(BaseModel):
         if not v and values.get("mode", None) == ModeEnum.MEMORY:
             raise ValueError("Memory config required")
         return v
+
+    @cache
+    def instance(self) -> ICache:
+        if self.mode == ModeEnum.MEMORY:
+            from persistence.memory import MemoryCache
+
+            assert self.memory
+            return MemoryCache(self.memory)
+
+        from persistence.redis import RedisCache
+
+        assert self.redis
+        return RedisCache(self.redis)

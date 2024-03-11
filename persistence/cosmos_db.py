@@ -23,7 +23,7 @@ from tenacity import (
 _logger = build_logger(__name__)
 
 
-class CosmosStore(IStore):
+class CosmosDbStore(IStore):
     _config: CosmosDbModel
 
     def __init__(self, config: CosmosDbModel):

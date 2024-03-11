@@ -1,3 +1,5 @@
 black[jupyter]==24.2.0
+deepeval==0.20.86
 pur==7.3.1
+pytest==8.1.1
 watchfiles==0.21.0  # Required for uvicorn auto-reload

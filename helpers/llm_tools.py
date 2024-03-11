@@ -1,6 +1,6 @@
 from azure.communication.callautomation import CallConnectionClient
 from fastapi import BackgroundTasks
-from helpers.call import ContextEnum as CallContextEnum, handle_play
+from helpers.call_utils import ContextEnum as CallContextEnum, handle_play
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
 from helpers.logging import build_logger
@@ -10,44 +10,35 @@ from models.claim import ClaimModel
 from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
-from persistence.ai_search import AiSearchSearch
 from pydantic import ValidationError
 from typing import Awaitable, Callable, Annotated, List, Literal
 import asyncio
 
 
 _logger = build_logger(__name__)
+_search = CONFIG.ai_search.instance()
 
 
 class LlmPlugins:
-    background_tasks: BackgroundTasks
     call: CallModel
     cancellation_callback: Callable[[], Awaitable]
     client: CallConnectionClient
-    post_call_next: Callable[[CallModel], Awaitable]
-    post_call_synthesis: Callable[[CallModel], Awaitable]
-    search: AiSearchSearch
+    post_call_intelligence: Callable[[CallModel], None]
     style: MessageStyleEnum = MessageStyleEnum.NONE
     user_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
     def __init__(
         self,
-        background_tasks: BackgroundTasks,
         call: CallModel,
         cancellation_callback: Callable[[], Awaitable],
         client: CallConnectionClient,
-        post_call_next: Callable[[CallModel], Awaitable],
-        post_call_synthesis: Callable[[CallModel], Awaitable],
-        search: AiSearchSearch,
+        post_call_intelligence: Callable[[CallModel], None],
         user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
-        self.background_tasks = background_tasks
         self.call = call
         self.cancellation_callback = cancellation_callback
         self.client = client
-        self.post_call_next = post_call_next
-        self.post_call_synthesis = post_call_synthesis
-        self.search = search
+        self.post_call_intelligence = post_call_intelligence
         self.user_callback = user_callback
 
     async def end_call(self) -> str:
@@ -75,8 +66,7 @@ class LlmPlugins:
         """
         await self.user_callback(customer_response, self.style)
 
-        self.background_tasks.add_task(self.post_call_next, self.call)
-        self.background_tasks.add_task(self.post_call_synthesis, self.call)
+        self.post_call_intelligence(self.call)
 
         last_message = self.call.messages[-1]
         call = CallModel(phone_number=self.call.phone_number)
@@ -196,7 +186,7 @@ class LlmPlugins:
 
         # Execute in parallel
         tasks = await asyncio.gather(
-            *[self.search.training_asearch_all(query, self.call) for query in queries]
+            *[_search.training_asearch_all(query, self.call) for query in queries]
         )
         # Flatten, remove duplicates, and sort by score
         trainings = sorted(set(training for task in tasks for training in task or []))
