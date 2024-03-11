@@ -23,7 +23,6 @@ from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
-from helpers.logging import build_logger
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.call import CallModel
 from models.next import ActionEnum as NextActionEnum

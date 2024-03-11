@@ -7,7 +7,6 @@ from azure.core.exceptions import (
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 from contextlib import asynccontextmanager
-from helpers.config import CONFIG
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.logging import build_logger
 from models.call import CallModel

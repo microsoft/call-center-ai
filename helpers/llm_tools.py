@@ -1,5 +1,4 @@
 from azure.communication.callautomation import CallConnectionClient
-from fastapi import BackgroundTasks
 from helpers.call_utils import ContextEnum as CallContextEnum, handle_play
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
