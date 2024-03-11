@@ -7,8 +7,11 @@
 # Local app config file
 config*.yaml
 
-# Created by https://www.toptal.com/developers/gitignore/api/osx,linux,eclipse,windows,visualstudio,visualstudiocode,dotenv
-# Edit at https://www.toptal.com/developers/gitignore?templates=osx,linux,eclipse,windows,visualstudio,visualstudiocode,dotenv
+# Test reports
+test-reports/
+
+# Created by https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,visualstudiocode,jupyternotebooks
+# Edit at https://www.toptal.com/developers/gitignore?templates=osx,linux,dotenv,eclipse,windows,visualstudio,visualstudiocode,jupyternotebooks
 
 ### dotenv ###
 .env
@@ -78,6 +81,20 @@ local.properties
 ### Eclipse Patch ###
 # Spring Boot Tooling
 .sts4-cache/
+
+### JupyterNotebooks ###
+# gitignore template for Jupyter Notebooks
+# website: http://jupyter.org/
+
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Remove previous ipynb_checkpoints
+#   git rm -r .ipynb_checkpoints/
 
 ### Linux ###
 *~
@@ -556,4 +573,4 @@ FodyWeavers.xsd
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio
 
-# End of https://www.toptal.com/developers/gitignore/api/osx,linux,eclipse,windows,visualstudio,visualstudiocode,dotenv
+# End of https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,visualstudiocode,jupyternotebooks

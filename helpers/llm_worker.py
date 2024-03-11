@@ -339,6 +339,14 @@ async def _use_oai(
     context = (
         CONFIG.openai.gpt_context if not is_backup else CONFIG.openai.gpt_backup_context
     )
+    key = CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None
+    token_func = (
+        get_bearer_token_provider(
+            DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+        )
+        if not CONFIG.openai.api_key
+        else None
+    )
 
     client = AsyncAzureOpenAI(
         # Reliability
@@ -349,16 +357,8 @@ async def _use_oai(
         azure_deployment=deployment,
         azure_endpoint=CONFIG.openai.endpoint,
         # Authentication, either RBAC or API key
-        api_key=(
-            CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None
-        ),
-        azure_ad_token_provider=(
-            get_bearer_token_provider(
-                DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
-            )
-            if not CONFIG.openai.api_key
-            else None
-        ),
+        api_key=key,
+        azure_ad_token_provider=token_func,
     )
 
     try:

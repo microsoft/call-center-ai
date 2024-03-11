@@ -24,7 +24,7 @@ class RootModel(BaseSettings):
     )
 
     # Immutable fields
-    version: str = Field(frozen=True)
+    version: str = Field(default="0.0.0-unknown", frozen=True)
     # Editable fields
     ai_search: AiSearchModel
     ai_translation: AiTranslationModel

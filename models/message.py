@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Any, List, Optional, Tuple, Union
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
@@ -68,13 +68,13 @@ class ToolModel(BaseModel):
             },
         )
 
-    @validator("function_name")
-    def validate_function_name(cls, v: str, values) -> str:
-        if v not in ToolModel._available_function_names():
+    @field_validator("function_name")
+    def validate_function_name(cls, function_name: str) -> str:
+        if function_name not in ToolModel._available_function_names():
             raise ValueError(
-                f'Invalid function names "{v}", available are {ToolModel._available_function_names()}'
+                f'Invalid function names "{function_name}", available are {ToolModel._available_function_names()}'
             )
-        return v
+        return function_name
 
     def __add__(self, other: ChoiceDeltaToolCall) -> "ToolModel":
         if other.id:

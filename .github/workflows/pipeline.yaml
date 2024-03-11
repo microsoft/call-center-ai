@@ -56,12 +56,11 @@ jobs:
           submodules: recursive
 
       - name: SAST - Credentials
-        uses: trufflesecurity/trufflehog@v3.63.1
+        uses: trufflesecurity/trufflehog@v3.69.0
         with:
           base: ${{ github.event.repository.default_branch }}
           extra_args: --only-verified
-          head: HEAD
-          path: .
+          head: HEAD~1
 
   build-image:
     name: Build & publish image
@@ -118,7 +117,7 @@ jobs:
             org.opencontainers.image.vendor=${{ github.actor }}
 
       - name: Build/push container
-        uses: docker/build-push-action@v5.1.0
+        uses: docker/build-push-action@v5.2.0
         with:
           build-args: |
             VERSION=${{ needs.init.outputs.VERSION_FULL }}
