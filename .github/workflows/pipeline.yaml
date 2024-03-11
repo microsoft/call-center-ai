@@ -117,7 +117,7 @@ jobs:
             org.opencontainers.image.vendor=${{ github.actor }}
 
       - name: Build/push container
-        uses: docker/build-push-action@v5.1.0
+        uses: docker/build-push-action@v5.2.0
         with:
           build-args: |
             VERSION=${{ needs.init.outputs.VERSION_FULL }}
