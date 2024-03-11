@@ -1,3 +1,7 @@
+allure-pytest==2.13.3
 black[jupyter]==24.2.0
+deepeval==0.20.88
 pur==7.3.1
+pytest-asyncio==0.23.5.post1  # Required for pytest
+pytest==8.1.1
 watchfiles==0.21.0  # Required for uvicorn auto-reload
