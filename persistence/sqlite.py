@@ -27,6 +27,7 @@ class SqliteStore(IStore):
 
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
+        call = None
         async with self._use_db() as db:
             cursor = await db.execute(
                 f"SELECT data FROM {self._config.table} WHERE id = ?",
@@ -35,10 +36,10 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
             if row:
                 try:
-                    return CallModel.model_validate_json(row[0])
+                    call = CallModel.model_validate_json(row[0])
                 except ValidationError as e:
                     _logger.warning(f"Error parsing call: {e.errors()}")
-        return None
+        return call
 
     async def call_aset(self, call: CallModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
@@ -57,6 +58,7 @@ class SqliteStore(IStore):
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
+        call = None
         async with self._use_db() as db:
             cursor = await db.execute(
                 f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
@@ -68,10 +70,10 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
             if row:
                 try:
-                    return CallModel.model_validate_json(row[0])
+                    call = CallModel.model_validate_json(row[0])
                 except ValidationError as e:
                     _logger.warning(f"Error parsing call: {e.errors()}")
-        return None
+        return call
 
     async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
         _logger.debug(f"Loading all {self._config.table} for {phone_number}")
@@ -135,10 +137,7 @@ class SqliteStore(IStore):
             first_run = True
 
         # Connect to DB
-        db = sqlite_connect(database=db_path)
-        try:
+        async with sqlite_connect(database=db_path) as db:
             if first_run:
                 await self._init_db(db)
             yield db
-        finally:
-            await db.close()
