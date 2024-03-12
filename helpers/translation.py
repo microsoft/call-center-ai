@@ -40,7 +40,7 @@ async def translate_text(
     cache_key = f"{__name__}:translate_text:{text}:{source_lang}:{target_lang}"
     cached = await _cache.aget(cache_key)
     if cached:
-        return cached.decode("utf-8")
+        return cached.decode()
 
     # Try live
     translation: Optional[str] = None
