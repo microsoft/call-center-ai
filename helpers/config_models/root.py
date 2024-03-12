@@ -29,7 +29,7 @@ class RootModel(BaseSettings):
     ai_search: AiSearchModel
     ai_translation: AiTranslationModel
     api: ApiModel
-    cache: CacheModel
+    cache: CacheModel = CacheModel()  # Object is fully defined by default
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
     content_safety: ContentSafetyModel

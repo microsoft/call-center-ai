@@ -23,7 +23,7 @@ class RedisModel(BaseModel, frozen=True):
 
 
 class CacheModel(BaseModel, frozen=True):
-    memory: Optional[MemoryModel] = None
+    memory: Optional[MemoryModel] = MemoryModel()  # Object is fully defined by default
     mode: ModeEnum = ModeEnum.MEMORY
     redis: Optional[RedisModel] = None
 

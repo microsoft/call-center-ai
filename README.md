@@ -259,13 +259,6 @@ database:
   #   endpoint: https://xxx.documents.azure.com:443
   sqlite: {}
 
-cache:
-  # mode: redis
-  # redis:
-  #   host: claim-ai.redis.cache.windows.net
-  #   password: xxx
-  memory: {}
-
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
