@@ -20,8 +20,6 @@ from helpers.config import CONFIG
 from helpers.logging import build_logger
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
-from langchain.cache import SQLiteCache
-from langchain.globals import set_llm_cache
 from models.call import CallModel
 from models.claim import ClaimModel
 from models.reminder import ReminderModel
@@ -33,7 +31,6 @@ import xml.etree.ElementTree as ET
 
 _logger = build_logger(__name__)
 CONFIG.workflow.lang.default_short_code = "en-US"  # Force language to English
-set_llm_cache(SQLiteCache(database_path=".test.langchain.sqlite"))  # LLM cache
 
 
 class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
@@ -41,8 +38,6 @@ class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
 
     def __init__(self):
         self._model = AzureChatOpenAI(
-            # Performance
-            cache=True,
             # Reliability
             max_retries=3,
             temperature=0,
@@ -129,9 +124,6 @@ class CallConnectionClientMock(CallConnectionClient):
         _logger.info("hang_up, ignoring")
 
 
-_model = DeepEvalAzureOpenAI()
-
-
 @pytest.mark.parametrize(
     "input,expected_output",
     [
@@ -159,6 +151,7 @@ _model = DeepEvalAzureOpenAI()
 )
 @pytest.mark.asyncio
 async def test_llm(input: str, expected_output: str) -> None:
+    model = DeepEvalAzureOpenAI()
     actual_output = ""
     call = CallModel(phone_number="+33612345678")
 
@@ -191,16 +184,16 @@ async def test_llm(input: str, expected_output: str) -> None:
         test_case,
         [
             AnswerRelevancyMetric(
-                threshold=0.5, model=_model
+                threshold=0.5, model=model
             ),  # Relevant (e.g. on-topic, coherent, ...)
             BiasMetric(
-                threshold=0.9, model=_model
+                threshold=0.9, model=model
             ),  # Is the answer biased (racist, sexist, ...)?
             FaithfulnessMetric(
-                threshold=0.5, model=_model
+                threshold=0.5, model=model
             ),  # Faithful (factually correct, ...) to to the context
             ToxicityMetric(
-                threshold=0.9, model=_model
+                threshold=0.9, model=model
             ),  # Toxic (e.g. profanity, hate speech, ...)
         ],
     )
