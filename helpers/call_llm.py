@@ -61,11 +61,11 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
             system=system,
         )
     except ReadError:
-        _logger.warn("Network error", exc_info=True)
+        _logger.warning("Network error", exc_info=True)
     except APIError as e:
-        _logger.warn(f"OpenAI API call error: {e}")
+        _logger.warning(f"OpenAI API call error: {e}")
     except SafetyCheckError as e:
-        _logger.warn(f"OpenAI safety check error: {e}")
+        _logger.warning(f"OpenAI safety check error: {e}")
 
     return content
 
@@ -94,9 +94,9 @@ async def llm_model(
             system=system,
         )
     except ReadError:
-        _logger.warn("Network error", exc_info=True)
+        _logger.warning("Network error", exc_info=True)
     except APIError as e:
-        _logger.warn(f"OpenAI API call error: {e}")
+        _logger.warning(f"OpenAI API call error: {e}")
 
     return res
 
@@ -148,7 +148,7 @@ async def load_llm_chat(
         try:
             await safety_check(text)
         except SafetyCheckError as e:
-            _logger.warn(f"Unsafe text detected, not playing: {e}")
+            _logger.warning(f"Unsafe text detected, not playing: {e}")
             return
 
         should_play_sound = False
@@ -161,7 +161,7 @@ async def load_llm_chat(
         )
 
     if _backup_model:
-        _logger.warn("Using backup model")
+        _logger.warning("Using backup model")
 
     chat_task = asyncio.create_task(
         _execute_llm_chat(
@@ -200,7 +200,7 @@ async def load_llm_chat(
                 break
 
             if hard_timeout_task.done():  # Break when hard timeout is reached
-                _logger.warn(
+                _logger.warning(
                     f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached"
                 )
                 # Clean up
@@ -212,7 +212,7 @@ async def load_llm_chat(
                 if (
                     soft_timeout_task.done() and not soft_timeout_triggered
                 ):  # Speak when soft timeout is reached
-                    _logger.warn(
+                    _logger.warning(
                         f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached"
                     )
                     soft_timeout_triggered = True
@@ -234,11 +234,11 @@ async def load_llm_chat(
             await asyncio.sleep(5)
 
     except Exception:
-        _logger.warn("Error loading intelligence", exc_info=True)
+        _logger.warning("Error loading intelligence", exc_info=True)
 
     if is_error:  # Error during chat
         if not continue_chat or _iterations_remaining < 1:  # Maximum retries reached
-            _logger.warn("Maximum retries reached, stopping chat")
+            _logger.warning("Maximum retries reached, stopping chat")
             should_user_answer = True
             content = await CONFIG.prompts.tts.error(call)
             style = MessageStyleEnum.NONE
@@ -377,7 +377,7 @@ async def _execute_llm_chat(
 
     tools = []
     if not use_tools:
-        _logger.warn("Tools disabled for this chat")
+        _logger.warning("Tools disabled for this chat")
     else:
         tools = plugins.to_openai()
         _logger.debug(f"Tools: {tools}")
@@ -408,10 +408,10 @@ async def _execute_llm_chat(
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _content_callback(sentence, plugins.style)
     except ReadError:
-        _logger.warn("Network error", exc_info=True)
+        _logger.warning("Network error", exc_info=True)
         return True, True, should_user_answer, call
     except APIError as e:
-        _logger.warn(f"OpenAI API call error: {e}")
+        _logger.warning(f"OpenAI API call error: {e}")
         return True, True, should_user_answer, call
 
     # Flush the remaining buffer
@@ -435,12 +435,12 @@ async def _execute_llm_chat(
     if any(
         tool_call.function_name == "multi_tool_use.parallel" for tool_call in tool_calls
     ):
-        _logger.warn(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
+        _logger.warning(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
         return True, True, should_user_answer, call
 
     # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
     if not content_full and not tool_calls:
-        _logger.warn("Empty content, retrying")
+        _logger.warning("Empty content, retrying")
         return True, True, should_user_answer, call
 
     # Execute tools

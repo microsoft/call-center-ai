@@ -58,7 +58,7 @@ class AiSearchSearch(ISearch):
             try:
                 return TypeAdapter(List[TrainingModel]).validate_json(cached)
             except ValidationError:
-                _logger.warn(f"Error parsing cached training: {cached}")
+                _logger.warning(f"Error parsing cached training: {cached}")
                 pass
 
         # Try live
@@ -108,7 +108,7 @@ class AiSearchSearch(ISearch):
                             )
                         )
                     except ValidationError as e:
-                        _logger.warn(f"Error parsing training: {e.errors()}")
+                        _logger.warning(f"Error parsing training: {e.errors()}")
         except HttpResponseError as e:
             _logger.error(f"Error requesting AI Search, {e}")
         except ServiceRequestError as e:

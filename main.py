@@ -250,10 +250,10 @@ async def _communication_event_worker(
 ) -> None:
     call = await _db.call_asearch_one(phone_number)
     if not call:
-        _logger.warn(f"Call {phone_number} not found")
+        _logger.warning(f"Call {phone_number} not found")
         return
     if call.callback_secret != secret:
-        _logger.warn(f"Secret for call {phone_number} does not match")
+        _logger.warning(f"Secret for call {phone_number} does not match")
         return
 
     event = CloudEvent.from_dict(event_dict)
