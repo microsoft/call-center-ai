@@ -38,9 +38,13 @@ class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
 
     def __init__(self):
         self._model = AzureChatOpenAI(
+            # Repeatability
+            model_kwargs={
+                "seed": 42,
+            },
+            temperature=0,
             # Reliability
             max_retries=3,
-            temperature=0,
             timeout=60,
             # Azure deployment
             api_version="2023-12-01-preview",

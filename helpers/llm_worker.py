@@ -90,6 +90,7 @@ async def completion_stream(
             max_tokens=max_tokens,
             messages=prompt,
             model=model,
+            seed=42,  # Reproducible results
             stream=True,
             temperature=0,  # Most focused and deterministic
             **extra,
@@ -139,6 +140,7 @@ async def completion_sync(
             max_tokens=max_tokens,
             messages=prompt,
             model=model,
+            seed=42,  # Reproducible results
             temperature=0,  # Most focused and deterministic
             **extra,
         )
