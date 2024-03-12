@@ -25,7 +25,7 @@ from models.call import CallModel
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import TypeAdapter
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 import pytest
 import time
 import xml.etree.ElementTree as ET
@@ -288,8 +288,8 @@ async def test_llm(
         latency=latency_per_input,
         retrieval_context=[
             call.claim.model_dump_json(),
-            TypeAdapter(List[ReminderModel]).dump_json(call.reminders).decode(),
-            TypeAdapter(List[TrainingModel]).dump_json(await call.trainings()).decode(),
+            TypeAdapter(list[ReminderModel]).dump_json(call.reminders).decode(),
+            TypeAdapter(list[TrainingModel]).dump_json(await call.trainings()).decode(),
         ],
     )
 

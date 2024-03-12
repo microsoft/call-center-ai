@@ -4,7 +4,7 @@ from azure.core.credentials import AzureKeyCredential
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional
 from azure.core.exceptions import HttpResponseError
 from tenacity import (
     retry,
@@ -45,7 +45,7 @@ async def translate_text(
     # Try live
     translation: Optional[str] = None
     async with _use_client() as client:  # Perform translation
-        res: List[TranslatedTextItem] = await client.translate(
+        res: list[TranslatedTextItem] = await client.translate(
             content=[InputTextItem(text=text)],  # type: ignore
             from_parameter=source_lang,
             to=[target_lang],

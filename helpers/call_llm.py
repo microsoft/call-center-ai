@@ -1,4 +1,4 @@
-from typing import Awaitable, Callable, List, Optional, Tuple, Type
+from typing import Awaitable, Callable, Optional, Tuple, Type
 from azure.communication.callautomation import (
     CallConnectionClient,
 )
@@ -103,7 +103,7 @@ async def llm_model(
 
 def _llm_completion_system(
     system: str, call: CallModel
-) -> List[ChatCompletionSystemMessageParam]:
+) -> list[ChatCompletionSystemMessageParam]:
     messages = [
         ChatCompletionSystemMessageParam(
             content=CONFIG.prompts.llm.default_system(

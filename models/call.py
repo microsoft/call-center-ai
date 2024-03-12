@@ -7,7 +7,7 @@ from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from models.training import TrainingModel
 from pydantic import BaseModel, Field, computed_field
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID, uuid4
 import asyncio
 import random
@@ -28,11 +28,11 @@ class CallModel(BaseModel):
     lang_short_code: Optional[str] = None
     # Editable fields
     claim: ClaimModel = Field(default_factory=ClaimModel)
-    messages: List[MessageModel] = []
+    messages: list[MessageModel] = []
     next: Optional[NextModel] = None
     phone_number: str
     recognition_retry: int = Field(default=0)
-    reminders: List[ReminderModel] = []
+    reminders: list[ReminderModel] = []
     synthesis: Optional[SynthesisModel] = None
 
     @computed_field
@@ -54,7 +54,7 @@ class CallModel(BaseModel):
     def lang(self, value: LanguageEntryModel) -> None:
         self.lang_short_code = value.short_code
 
-    async def trainings(self) -> List[TrainingModel]:
+    async def trainings(self) -> list[TrainingModel]:
         """
         Get the trainings from the last messages.
 

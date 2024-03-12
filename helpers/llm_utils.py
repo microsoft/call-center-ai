@@ -10,7 +10,6 @@ from typing import (
     Callable,
     Dict,
     ForwardRef,
-    List,
     Set,
     Tuple,
     Type,
@@ -35,7 +34,7 @@ class Parameters(BaseModel):
     """
 
     properties: Dict[str, JsonSchemaValue]
-    required: List[str]
+    required: list[str]
     type: str = "object"
 
 
@@ -149,7 +148,7 @@ def _param_annotations(
     return {
         k: v.annotation
         for k, v in typed_signature.parameters.items()
-        if v.annotation is not inspect.Signature.empty and k != "self"
+        if v.annotation != inspect.Signature.empty and k != "self"
     }
 
 
@@ -193,7 +192,7 @@ def _parameter_json_schema(
     return schema
 
 
-def _required_params(typed_signature: inspect.Signature) -> List[str]:
+def _required_params(typed_signature: inspect.Signature) -> list[str]:
     """
     Get the required parameters of a function.
 
@@ -228,7 +227,7 @@ def _default_values(typed_signature: inspect.Signature) -> Dict[str, Any]:
 
 
 def _parameters(
-    required: List[str],
+    required: list[str],
     param_annotations: Dict[str, Union[Annotated[Type[Any], str], Type[Any]]],
     default_values: Dict[str, Any],
 ) -> Parameters:
@@ -246,14 +245,14 @@ def _parameters(
         properties={
             k: _parameter_json_schema(k, v, default_values)
             for k, v in param_annotations.items()
-            if v is not inspect.Signature.empty and k != "self"
+            if v != inspect.Signature.empty and k != "self"
         },
         required=required,
     )
 
 
 def _missing_annotations(
-    typed_signature: inspect.Signature, required: List[str]
+    typed_signature: inspect.Signature, required: list[str]
 ) -> Tuple[Set[str], Set[str]]:
     """
     Get the missing annotations of a function.
@@ -270,7 +269,7 @@ def _missing_annotations(
     all_missing = {
         k
         for k, v in typed_signature.parameters.items()
-        if v.annotation is inspect.Signature.empty and k != "self"
+        if v.annotation == inspect.Signature.empty and k != "self"
     }
     missing = all_missing.intersection(set(required))
     unannotated_with_default = all_missing.difference(missing)

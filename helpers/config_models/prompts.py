@@ -9,7 +9,7 @@ from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import TypeAdapter, BaseModel
 from textwrap import dedent
-from typing import List, Optional
+from typing import Optional
 
 
 class SoundModel(BaseModel):
@@ -303,7 +303,7 @@ class LlmModel(BaseModel):
             )
         )
 
-    def chat_system(self, call: CallModel, trainings: List[TrainingModel]) -> str:
+    def chat_system(self, call: CallModel, trainings: list[TrainingModel]) -> str:
         from helpers.config import CONFIG
         from models.message import (
             ActionEnum as MessageActionEnum,
@@ -316,7 +316,7 @@ class LlmModel(BaseModel):
             bot_company=CONFIG.workflow.bot_company,
             claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            reminders=TypeAdapter(List[ReminderModel])
+            reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)
             .decode(),
             styles=", ".join([style.value for style in MessageStyleEnum]),
@@ -328,8 +328,8 @@ class LlmModel(BaseModel):
             self.sms_summary_system_tpl,
             claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
-            reminders=TypeAdapter(List[ReminderModel])
+            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)
             .decode(),
         )
@@ -339,8 +339,8 @@ class LlmModel(BaseModel):
             self.synthesis_short_system_tpl,
             claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
-            reminders=TypeAdapter(List[ReminderModel])
+            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)
             .decode(),
         )
@@ -350,8 +350,8 @@ class LlmModel(BaseModel):
             self.synthesis_long_system_tpl,
             claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
-            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
-            reminders=TypeAdapter(List[ReminderModel])
+            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)
             .decode(),
         )
@@ -370,17 +370,17 @@ class LlmModel(BaseModel):
         return self._return(
             self.citations_system_tpl,
             claim=call.claim.model_dump_json(),
-            messages=TypeAdapter(List[MessageModel])
+            messages=TypeAdapter(list[MessageModel])
             .dump_json(
                 [
                     message
                     for message in call.messages
-                    if message.persona is not MessagePersonaEnum.TOOL
+                    if message.persona != MessagePersonaEnum.TOOL
                 ],
                 exclude={"tool_calls"},
             )
             .decode(),  # Filter out tool messages, to avoid LLM to cite itself
-            reminders=TypeAdapter(List[ReminderModel])
+            reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)
             .decode(),
             text=text,
@@ -391,8 +391,8 @@ class LlmModel(BaseModel):
             self.next_system_tpl,
             actions=", ".join([action.value for action in NextActionEnum]),
             claim=call.claim.model_dump_json(),
-            messages=TypeAdapter(List[MessageModel]).dump_json(call.messages).decode(),
-            reminders=TypeAdapter(List[ReminderModel])
+            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
+            reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)
             .decode(),
         )
@@ -400,7 +400,7 @@ class LlmModel(BaseModel):
     def _return(
         self,
         prompt_tpl: str,
-        trainings: Optional[List[TrainingModel]] = None,
+        trainings: Optional[list[TrainingModel]] = None,
         **kwargs: str,
     ) -> str:
         # Build template

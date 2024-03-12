@@ -10,7 +10,7 @@ from helpers.logging import build_logger
 from models.call import CallModel
 from persistence.istore import IStore
 from pydantic import ValidationError
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional
 from uuid import UUID
 from tenacity import (
     retry,
@@ -112,7 +112,7 @@ class CosmosDbStore(IStore):
         stop=stop_after_attempt(3),
         wait=wait_random_exponential(multiplier=0.5, max=30),
     )
-    async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
+    async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
         calls = []
         try:

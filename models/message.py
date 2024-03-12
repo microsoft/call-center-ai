@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -100,7 +100,7 @@ class ToolModel(BaseModel):
             return_objects=True,
         )  # type: ignore
 
-        if args is None:
+        if args == None:
             logger.warn(
                 f"Error decoding JSON args for function {name}: {self.function_arguments[:20]}...{self.function_arguments[-20:]}"
             )
@@ -118,7 +118,7 @@ class ToolModel(BaseModel):
         self.content = res
 
     @staticmethod
-    def _available_function_names() -> List[str]:
+    def _available_function_names() -> list[str]:
         from helpers.llm_tools import LlmPlugins
 
         return [name for name, _ in getmembers(LlmPlugins, isfunction)]
@@ -132,11 +132,11 @@ class MessageModel(BaseModel):
     content: str
     persona: PersonaEnum
     style: StyleEnum = StyleEnum.NONE
-    tool_calls: List[ToolModel] = []
+    tool_calls: list[ToolModel] = []
 
     def to_openai(
         self,
-    ) -> List[
+    ) -> list[
         Union[
             ChatCompletionAssistantMessageParam,
             ChatCompletionToolMessageParam,

@@ -10,7 +10,7 @@ from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
-from typing import Awaitable, Callable, Annotated, List, Literal
+from typing import Awaitable, Callable, Annotated, Literal
 import asyncio
 
 
@@ -231,7 +231,7 @@ class LlmPlugins:
         return f"Notifying {service} for {reason}."
 
     @staticmethod
-    def to_openai() -> List[ChatCompletionToolParam]:
+    def to_openai() -> list[ChatCompletionToolParam]:
         return [
             function_schema(func[1])
             for func in getmembers(LlmPlugins, isfunction)
