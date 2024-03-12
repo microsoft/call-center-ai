@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from helpers.config_models.workflow import LanguageEntryModel
 from models.claim import ClaimModel
 from models.message import MessageModel
@@ -15,7 +15,7 @@ import string
 class CallModel(BaseModel):
     # Immutable fields
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     callback_secret: str = Field(
         default="".join(
             random.choice(string.ascii_letters + string.digits) for _ in range(16)

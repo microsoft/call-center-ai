@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 from typing import Any, List, Optional, Tuple, Union
@@ -126,7 +126,7 @@ class ToolModel(BaseModel):
 
 class MessageModel(BaseModel):
     # Immutable fields
-    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     # Editable fields
     action: ActionEnum = ActionEnum.TALK
     content: str

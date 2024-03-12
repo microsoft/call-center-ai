@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from pydantic import BaseModel, Field
 from pydantic import EmailStr
 from pydantic_extra_types.phone_numbers import PhoneNumber
@@ -21,7 +21,7 @@ class ClaimModel(BaseModel):
         ),
         frozen=True,
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     # Editable fields
     extra_details: Optional[str] = None
     incident_date_time: Optional[datetime] = None
