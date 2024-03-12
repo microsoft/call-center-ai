@@ -68,5 +68,7 @@ async def _use_client() -> AsyncGenerator[TextTranslationClient, None]:
         ),
         endpoint=CONFIG.ai_translation.endpoint,
     )
-    yield client
-    await client.close()
+    try:
+        yield client
+    finally:
+        await client.close()
