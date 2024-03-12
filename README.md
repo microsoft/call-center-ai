@@ -282,7 +282,6 @@ ai_search:
 
 content_safety:
   access_key: xxx
-  blocklists: []
   endpoint: https://xxx.cognitiveservices.azure.com
 ```
 
