@@ -3,7 +3,7 @@ from helpers.config import CONFIG
 from helpers.logging import build_logger
 from models.call import CallModel
 from models.message import StyleEnum as MessageStyleEnum
-from typing import Generator, List, Optional
+from typing import Generator, Optional
 from azure.communication.callautomation import (
     FileSource,
     PhoneNumberIdentifier,
@@ -209,7 +209,7 @@ async def handle_recognize_ivr(
     client: CallConnectionClient,
     call: CallModel,
     text: str,
-    choices: List[RecognitionChoice],
+    choices: list[RecognitionChoice],
 ) -> None:
     _logger.info(f"Playing text before IVR: {text}")
     _logger.debug(f"Recognizing IVR")

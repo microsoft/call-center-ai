@@ -7,7 +7,7 @@ from helpers.logging import build_logger
 from models.call import CallModel
 from persistence.istore import IStore
 from pydantic import ValidationError
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional
 from uuid import UUID
 import json
 import os
@@ -27,6 +27,7 @@ class SqliteStore(IStore):
 
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
+        call = None
         async with self._use_db() as db:
             cursor = await db.execute(
                 f"SELECT data FROM {self._config.table} WHERE id = ?",
@@ -35,10 +36,10 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
             if row:
                 try:
-                    return CallModel.model_validate_json(row[0])
+                    call = CallModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.warn(f"Error parsing call: {e.errors()}")
-        return None
+                    _logger.warning(f"Error parsing call: {e.errors()}")
+        return call
 
     async def call_aset(self, call: CallModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
@@ -57,6 +58,7 @@ class SqliteStore(IStore):
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
+        call = None
         async with self._use_db() as db:
             cursor = await db.execute(
                 f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
@@ -68,12 +70,12 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
             if row:
                 try:
-                    return CallModel.model_validate_json(row[0])
+                    call = CallModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.warn(f"Error parsing call: {e.errors()}")
-        return None
+                    _logger.warning(f"Error parsing call: {e.errors()}")
+        return call
 
-    async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
+    async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
         _logger.debug(f"Loading all {self._config.table} for {phone_number}")
         calls = []
         async with self._use_db() as db:
@@ -91,7 +93,7 @@ class SqliteStore(IStore):
                 try:
                     calls.append(CallModel.model_validate_json(row[0]))
                 except ValidationError as e:
-                    _logger.warn(f"Error parsing call: {e.errors()}")
+                    _logger.warning(f"Error parsing call: {e.errors()}")
         return calls or None
 
     async def _init_db(self, db: SQLiteConnection):
@@ -123,6 +125,9 @@ class SqliteStore(IStore):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SQLiteConnection, None]:
+        """
+        Generate the SQLite client and close it after use.
+        """
         # Create folder
         db_path = self._config.full_path()
         first_run = False

@@ -28,7 +28,7 @@ from tenacity import (
     wait_random_exponential,
     retry_if_exception_type,
 )
-from typing import AsyncGenerator, List, Optional, Tuple, Type, TypeVar, Union
+from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
 from httpx import ReadError
 from models.message import MessageModel
 import tiktoken
@@ -62,9 +62,9 @@ class SafetyCheckError(Exception):
 async def completion_stream(
     is_backup: bool,
     max_tokens: int,
-    messages: List[MessageModel],
-    system: List[ChatCompletionSystemMessageParam],
-    tools: Optional[List[ChatCompletionToolParam]] = None,
+    messages: list[MessageModel],
+    system: list[ChatCompletionSystemMessageParam],
+    tools: Optional[list[ChatCompletionToolParam]] = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
     """
     Returns a stream of completion results.
@@ -90,6 +90,7 @@ async def completion_stream(
             max_tokens=max_tokens,
             messages=prompt,
             model=model,
+            seed=42,  # Reproducible results
             stream=True,
             temperature=0,  # Most focused and deterministic
             **extra,
@@ -112,8 +113,8 @@ async def completion_stream(
 )
 async def completion_sync(
     max_tokens: int,
-    messages: List[MessageModel],
-    system: List[ChatCompletionSystemMessageParam],
+    messages: list[MessageModel],
+    system: list[ChatCompletionSystemMessageParam],
     json_output: bool = False,
 ) -> Optional[str]:
     """
@@ -139,6 +140,7 @@ async def completion_sync(
             max_tokens=max_tokens,
             messages=prompt,
             model=model,
+            seed=42,  # Reproducible results
             temperature=0,  # Most focused and deterministic
             **extra,
         )
@@ -160,9 +162,9 @@ async def completion_sync(
 )
 async def completion_model_sync(
     max_tokens: int,
-    messages: List[MessageModel],
+    messages: list[MessageModel],
     model: Type[ModelType],
-    system: List[ChatCompletionSystemMessageParam],
+    system: list[ChatCompletionSystemMessageParam],
 ) -> Optional[ModelType]:
     """
     Returns an object validated against a given model, from a completion result.
@@ -182,12 +184,12 @@ async def completion_model_sync(
 
 def _prepare_messages(
     context: int,
-    messages: List[MessageModel],
+    messages: list[MessageModel],
     model: str,
-    system: List[ChatCompletionSystemMessageParam],
+    system: list[ChatCompletionSystemMessageParam],
     max_messages: int = 1000,
-    tools: Optional[List[ChatCompletionToolParam]] = None,
-) -> List[
+    tools: Optional[list[ChatCompletionToolParam]] = None,
+) -> list[
     Union[
         ChatCompletionAssistantMessageParam,
         ChatCompletionSystemMessageParam,
@@ -303,7 +305,7 @@ async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
 
 
 def _contentsafety_category_test(
-    res: List[TextCategoriesAnalysis],
+    res: list[TextCategoriesAnalysis],
     category: TextCategory,
     score: int,
 ) -> bool:

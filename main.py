@@ -10,7 +10,6 @@ _logger.info(f"claim-ai v{CONFIG.version}")
 # General imports
 from typing import (
     Any,
-    List,
     Optional,
     Union,
 )
@@ -148,7 +147,7 @@ async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
     "/call",
     description="Get all calls by phone number.",
 )
-async def call_get(phone_number: str) -> List[CallModel]:
+async def call_get(phone_number: str) -> list[CallModel]:
     return await _db.call_asearch_all(phone_number) or []
 
 
@@ -250,10 +249,10 @@ async def _communication_event_worker(
 ) -> None:
     call = await _db.call_asearch_one(phone_number)
     if not call:
-        _logger.warn(f"Call {phone_number} not found")
+        _logger.warning(f"Call {phone_number} not found")
         return
     if call.callback_secret != secret:
-        _logger.warn(f"Secret for call {phone_number} does not match")
+        _logger.warning(f"Secret for call {phone_number} does not match")
         return
 
     event = CloudEvent.from_dict(event_dict)
@@ -288,7 +287,7 @@ async def _communication_event_worker(
         if recognition_result == "speech":  # Handle voice
             speech_text = event.data["speechResult"]["speech"]
             if (
-                speech_text is not None and len(speech_text) > 0
+                speech_text != None and len(speech_text) > 0
             ):  # TODO: Is this check necessary?
                 await on_speech_recognized(
                     background_tasks=background_tasks,

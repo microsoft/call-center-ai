@@ -1,13 +1,15 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from helpers.config_models.workflow import LanguageEntryModel
 from models.claim import ClaimModel
 from models.message import MessageModel
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
+from models.training import TrainingModel
 from pydantic import BaseModel, Field, computed_field
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID, uuid4
+import asyncio
 import random
 import string
 
@@ -15,7 +17,7 @@ import string
 class CallModel(BaseModel):
     # Immutable fields
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, frozen=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     callback_secret: str = Field(
         default="".join(
             random.choice(string.ascii_letters + string.digits) for _ in range(16)
@@ -26,11 +28,11 @@ class CallModel(BaseModel):
     lang_short_code: Optional[str] = None
     # Editable fields
     claim: ClaimModel = Field(default_factory=ClaimModel)
-    messages: List[MessageModel] = []
+    messages: list[MessageModel] = []
     next: Optional[NextModel] = None
     phone_number: str
     recognition_retry: int = Field(default=0)
-    reminders: List[ReminderModel] = []
+    reminders: list[ReminderModel] = []
     synthesis: Optional[SynthesisModel] = None
 
     @computed_field
@@ -51,3 +53,27 @@ class CallModel(BaseModel):
     @lang.setter
     def lang(self, value: LanguageEntryModel) -> None:
         self.lang_short_code = value.short_code
+
+    async def trainings(self) -> list[TrainingModel]:
+        """
+        Get the trainings from the last messages.
+
+        Is using query expansion from last messages. Then, data is sorted by score.
+        """
+        from helpers.config import CONFIG
+
+        search = CONFIG.ai_search.instance()
+        trainings_tasks = await asyncio.gather(
+            *[
+                search.training_asearch_all(message.content, self)
+                for message in self.messages[-CONFIG.ai_search.expansion_k :]
+            ],
+        )  # Get trainings from last messages
+        trainings = sorted(
+            set(
+                training
+                for trainings in trainings_tasks
+                for training in trainings or []
+            )
+        )  # Flatten, remove duplicates, and sort by score
+        return trainings

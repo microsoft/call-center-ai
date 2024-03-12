@@ -247,25 +247,6 @@ Place a file called `config.yaml` in the root of the project with the following 
 
 ```yaml
 # config.yaml
-api:
-  root_path: "/"
-
-database:
-  # mode: cosmos_db
-  # cosmos_db:
-  #   access_key: xxx
-  #   container: calls
-  #   database: claim-ai
-  #   endpoint: https://xxx.documents.azure.com:443
-  sqlite: {}
-
-cache:
-  # mode: redis
-  # redis:
-  #   host: claim-ai.redis.cache.windows.net
-  #   password: xxx
-  memory: {}
-
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
@@ -301,7 +282,6 @@ ai_search:
 
 content_safety:
   access_key: xxx
-  blocklists: []
   endpoint: https://xxx.cognitiveservices.azure.com
 ```
 

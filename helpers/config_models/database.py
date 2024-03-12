@@ -34,7 +34,7 @@ class SqliteModel(BaseModel, frozen=True):
 class DatabaseModel(BaseModel, frozen=True):
     cosmos_db: Optional[CosmosDbModel] = None
     mode: ModeEnum = ModeEnum.SQLITE
-    sqlite: Optional[SqliteModel] = None
+    sqlite: Optional[SqliteModel] = SqliteModel()  # Object is fully defined by default
 
     @field_validator("cosmos_db")
     def validate_cosmos_db(

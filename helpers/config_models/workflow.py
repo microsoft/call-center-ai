@@ -1,7 +1,6 @@
 from functools import cached_property
 from pydantic import BaseModel
 from pydantic_extra_types.phone_numbers import PhoneNumber
-from typing import List
 
 
 # E164 is standard accross all Microsoft services
@@ -15,7 +14,7 @@ class LanguageEntryModel(BaseModel):
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages
     """
 
-    pronunciations_en: List[str]
+    pronunciations_en: list[str]
     short_code: str
     voice: str
 
@@ -33,7 +32,7 @@ class LanguageModel(BaseModel):
     """
 
     default_short_code: str = "fr-FR"
-    availables: List[LanguageEntryModel] = [
+    availables: list[LanguageEntryModel] = [
         LanguageEntryModel(
             pronunciations_en=["French", "FR", "France"],
             short_code="fr-FR",

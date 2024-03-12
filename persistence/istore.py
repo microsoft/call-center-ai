@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from models.call import CallModel
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 
@@ -18,5 +18,5 @@ class IStore(ABC):
         pass
 
     @abstractmethod
-    async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
+    async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
         pass

@@ -146,9 +146,9 @@ async def on_speech_unknown_error(
     error_code: int,
 ) -> None:
     if error_code == 8511:  # Failure while trying to play the prompt
-        _logger.warn("Failed to play prompt")
+        _logger.warning("Failed to play prompt")
     else:
-        _logger.warn(
+        _logger.warning(
             f"Recognition failed with unknown error code {error_code}, answering with default error"
         )
     await handle_recognize_text(
@@ -187,17 +187,17 @@ async def on_play_error(
     _logger.debug("Play failed")
     # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
     if error_code == 8535:  # Action failed, file format
-        _logger.warn("Error during media play, file format is invalid")
+        _logger.warning("Error during media play, file format is invalid")
     elif error_code == 8536:  # Action failed, file downloaded
-        _logger.warn("Error during media play, file could not be downloaded")
+        _logger.warning("Error during media play, file could not be downloaded")
     elif error_code == 8565:  # Action failed, AI services config
         _logger.error(
             "Error during media play, impossible to connect with Azure AI services"
         )
     elif error_code == 9999:  # Unknown
-        _logger.warn("Error during media play, unknown internal server error")
+        _logger.warning("Error during media play, unknown internal server error")
     else:
-        _logger.warn(f"Error during media play, unknown error code {error_code}")
+        _logger.warning(f"Error during media play, unknown error code {error_code}")
 
 
 async def on_ivr_recognized(
@@ -212,7 +212,7 @@ async def on_ivr_recognized(
             CONFIG.workflow.lang.default_lang,
         )
     except ValueError:
-        _logger.warn(f"Unknown IVR {label}, code not implemented")
+        _logger.warning(f"Unknown IVR {label}, code not implemented")
         return
 
     _logger.info(f"Setting call language to {lang}")
@@ -305,7 +305,7 @@ async def _post_call_sms(call: CallModel) -> None:
     )
 
     if not content:
-        _logger.warn("Error generating SMS report")
+        _logger.warning("Error generating SMS report")
         return
 
     _logger.info(f"SMS report: {content}")
@@ -328,7 +328,7 @@ async def _post_call_sms(call: CallModel) -> None:
             )
             await _db.call_aset(call)
         else:
-            _logger.warn(
+            _logger.warning(
                 f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message}"
             )
 
@@ -339,7 +339,7 @@ async def _post_call_sms(call: CallModel) -> None:
     except HttpResponseError as e:
         _logger.error(f"Error sending SMS: {e}")
     except Exception:
-        _logger.warn(f"Failed SMS to {call.phone_number}", exc_info=True)
+        _logger.warning(f"Failed SMS to {call.phone_number}", exc_info=True)
 
 
 async def _post_call_synthesis(call: CallModel) -> None:
@@ -366,7 +366,7 @@ async def _post_call_synthesis(call: CallModel) -> None:
     )
 
     if not short or not long:
-        _logger.warn("Error generating synthesis")
+        _logger.warning("Error generating synthesis")
         return
 
     _logger.info(f"Short synthesis: {short}")
@@ -390,7 +390,7 @@ async def _post_call_next(call: CallModel) -> None:
     )
 
     if not next:
-        _logger.warn("Error generating next action")
+        _logger.warning("Error generating next action")
         return
 
     _logger.info(f"Next action: {next}")

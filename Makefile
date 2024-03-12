@@ -59,7 +59,12 @@ test:
 	python3 -m black --check .
 
 	@echo "➡️ Running Pytest..."
-	pytest --alluredir=test-reports -ra test.py
+	pytest \
+		--alluredir test-reports \
+		--maxprocesses 4 \
+		-n logical \
+		-ra \
+		test.py
 
 test-serve:
 	allure serve test-reports

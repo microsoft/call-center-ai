@@ -15,7 +15,7 @@ from persistence.icache import ICache
 from persistence.isearch import ISearch
 from pydantic import TypeAdapter
 from pydantic import ValidationError
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -46,7 +46,7 @@ class AiSearchSearch(ISearch):
     )
     async def training_asearch_all(
         self, text: str, call: CallModel
-    ) -> Optional[List[TrainingModel]]:
+    ) -> Optional[list[TrainingModel]]:
         _logger.debug(f'Searching training data for "{text}"')
         if not text:
             return None
@@ -56,13 +56,13 @@ class AiSearchSearch(ISearch):
         cached = await self._cache.aget(cache_key)
         if cached:
             try:
-                return TypeAdapter(List[TrainingModel]).validate_json(cached)
+                return TypeAdapter(list[TrainingModel]).validate_json(cached)
             except ValidationError:
-                _logger.warn(f"Error parsing cached training: {cached}")
+                _logger.warning(f"Error parsing cached training: {cached}")
                 pass
 
         # Try live
-        trainings: List[TrainingModel] = []
+        trainings: list[TrainingModel] = []
         try:
             async with self._use_db() as db:
                 results = await db.search(
@@ -108,7 +108,7 @@ class AiSearchSearch(ISearch):
                             )
                         )
                     except ValidationError as e:
-                        _logger.warn(f"Error parsing training: {e.errors()}")
+                        _logger.warning(f"Error parsing training: {e.errors()}")
         except HttpResponseError as e:
             _logger.error(f"Error requesting AI Search, {e}")
         except ServiceRequestError as e:
@@ -118,7 +118,7 @@ class AiSearchSearch(ISearch):
         await self._cache.aset(
             cache_key,
             (
-                TypeAdapter(List[TrainingModel]).dump_json(trainings)
+                TypeAdapter(list[TrainingModel]).dump_json(trainings)
                 if trainings
                 else None
             ),
@@ -128,6 +128,9 @@ class AiSearchSearch(ISearch):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SearchClient, None]:
+        """
+        Generate the AI Search client and close it after use.
+        """
         db = SearchClient(
             credential=AzureKeyCredential(self._config.access_key.get_secret_value()),
             endpoint=self._config.endpoint,

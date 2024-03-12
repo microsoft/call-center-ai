@@ -10,7 +10,7 @@ from helpers.logging import build_logger
 from models.call import CallModel
 from persistence.istore import IStore
 from pydantic import ValidationError
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional
 from uuid import UUID
 from tenacity import (
     retry,
@@ -38,7 +38,7 @@ class CosmosDbStore(IStore):
     )
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
-        res = None
+        call = None
         try:
             async with self._use_db() as db:
                 items = db.query_items(
@@ -47,14 +47,14 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    res = CallModel(**raw)
+                    call = CallModel(**raw)
                 except ValidationError as e:
-                    _logger.warn(f"Error parsing call: {e.errors()}")
+                    _logger.warning(f"Error parsing call: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e}")
-        return res
+        return call
 
     @retry(
         reraise=True,
@@ -82,7 +82,7 @@ class CosmosDbStore(IStore):
     )
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
-        res = None
+        call = None
         try:
             async with self._use_db() as db:
                 items = db.query_items(
@@ -97,14 +97,14 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    res = CallModel(**raw)
+                    call = CallModel(**raw)
                 except ValidationError as e:
-                    _logger.warn(f"Error parsing call: {e.errors()}")
+                    _logger.warning(f"Error parsing call: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB: {e}")
-        return res
+        return call
 
     @retry(
         reraise=True,
@@ -112,7 +112,7 @@ class CosmosDbStore(IStore):
         stop=stop_after_attempt(3),
         wait=wait_random_exponential(multiplier=0.5, max=30),
     )
-    async def call_asearch_all(self, phone_number: str) -> Optional[List[CallModel]]:
+    async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
         calls = []
         try:
@@ -132,13 +132,16 @@ class CosmosDbStore(IStore):
                     try:
                         calls.append(CallModel(**raw))
                     except ValidationError as e:
-                        _logger.warn(f"Error parsing call: {e.errors()}")
+                        _logger.warning(f"Error parsing call: {e.errors()}")
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e}")
         return calls or None
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
+        """
+        Generate the Cosmos DB client and close it after use.
+        """
         client = CosmosClient(
             # Reliability
             connection_timeout=10,

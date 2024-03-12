@@ -28,12 +28,12 @@ class RootModel(BaseSettings):
     # Editable fields
     ai_search: AiSearchModel
     ai_translation: AiTranslationModel
-    api: ApiModel
-    cache: CacheModel
+    api: ApiModel = ApiModel()  # Object is fully defined by default
+    cache: CacheModel = CacheModel()  # Object is fully defined by default
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
     content_safety: ContentSafetyModel
-    database: DatabaseModel
+    database: DatabaseModel = DatabaseModel()  # Object is fully defined by default
     monitoring: MonitoringModel = (
         MonitoringModel()
     )  # Object is fully defined by default
