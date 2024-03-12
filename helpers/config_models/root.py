@@ -33,7 +33,7 @@ class RootModel(BaseSettings):
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
     content_safety: ContentSafetyModel
-    database: DatabaseModel
+    database: DatabaseModel = DatabaseModel()  # Object is fully defined by default
     monitoring: MonitoringModel = (
         MonitoringModel()
     )  # Object is fully defined by default

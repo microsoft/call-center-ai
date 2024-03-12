@@ -250,15 +250,6 @@ Place a file called `config.yaml` in the root of the project with the following 
 api:
   root_path: "/"
 
-database:
-  # mode: cosmos_db
-  # cosmos_db:
-  #   access_key: xxx
-  #   container: calls
-  #   database: claim-ai
-  #   endpoint: https://xxx.documents.azure.com:443
-  sqlite: {}
-
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
