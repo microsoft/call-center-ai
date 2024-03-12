@@ -61,6 +61,7 @@ test:
 	@echo "➡️ Running Pytest..."
 	pytest \
 		--alluredir test-reports \
+		--maxprocesses 4 \
 		-n logical \
 		-ra \
 		test.py
