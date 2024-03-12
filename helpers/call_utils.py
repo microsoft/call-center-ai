@@ -141,7 +141,7 @@ async def handle_play(
     """
     if store:
         if (
-            call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
+            call.messages and call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
         ):  # If the last message was from the assistant, append to it
             call.messages[-1].content += f" {text}"
         else:  # Otherwise, create a new message
