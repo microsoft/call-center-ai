@@ -57,7 +57,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+            "Sentence for the customer to confirm the creation of a new claim. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
         ],
     ) -> str:
         """
@@ -77,11 +77,11 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Contextual description of the reminder. Should be detailed enough to be understood by anyone. Example: 'Watch model is Rolex Submariner 116610LN', 'Customer said the witnesses car was red but the police report says it was blue. Double check with the involved parties'.",
+            "Sentence for the customer to confirm the update. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call you back', 'I am creating a todo for next week to send the report'.",
         ],
         description: Annotated[
             str,
-            "Sentence to be said to the customer to confirm the reminder. Only speak about this action. Use an imperative sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
+            "Sentence for the customer to confirm the reminder. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
         ],
         due_date_time: Annotated[
             str,
@@ -97,7 +97,7 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values. Example: 'Remind Assitant thuesday at 10am to call back the customer', 'Remind Assitant next week to send the report', 'Remind the customer next week to send the documents by the end of the month'.
+        Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values.
         """
         await self.user_callback(customer_response, self.style)
 
@@ -127,7 +127,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+            "Sentence for the customer to confirm the update. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info your home address, 123 rue De La Paix, and your phone ending with 75'.",
         ],
         field: Annotated[
             str, f"The claim field to update: {list(ClaimModel.editable_fields())}"
@@ -138,7 +138,7 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if the customer wants to update a claim field with a new value. Example: 'Update claim explanation to: I was driving on the highway when a car hit me from behind', 'Update contact contact info to: 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.
+        Use this if the customer wants to update a claim field with a new value. It is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now).
         """
         await self.user_callback(customer_response, self.style)
 
@@ -171,7 +171,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am searching for the document about the car accident', 'I am searching for the document about the stolen watch'.",
+            "Sentence for the customer to confirm the search. Describe what you're doing in one sentence. Example: 'I am searching for the document about the car accident', 'I am looking for the contract details'.",
         ],
         queries: Annotated[
             list[str],
@@ -179,7 +179,7 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if the customer wants to search for a public specific information you don't have. Example: contract, law, regulation, article, etc.
+        Use this if the customer wants to search for a public specific information you don't have. Examples: contract, law, regulation, article.
         """
         await self.user_callback(customer_response, self.style)
 
@@ -201,7 +201,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence to be said to the customer to confirm the update. Only speak about this action. Use an imperative sentence. Example: 'I am notifying the emergency services', 'I am notifying the police'.",
+            "Text for the customer to confirm the action. Describe what you're doing in one sentence. Example: 'I am notifying the emergency services', 'I am notifying the police'.",
         ],
         reason: Annotated[
             str,
@@ -220,6 +220,9 @@ class LlmPlugins:
             "The emergency service to notify.",
         ],
     ) -> str:
+        """
+        Use this if the customer wants to notify the emergency services for a specific reason. This will notify the emergency services. Use it only if the situation is critical and requires immediate intervention. Examples: 'My neighbor is having a heart attack', 'A child is lying on the ground and is not moving', 'I am stuck in a car in fire'.
+        """
         await self.user_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
         _logger.info(
