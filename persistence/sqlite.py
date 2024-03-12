@@ -132,7 +132,10 @@ class SqliteStore(IStore):
             first_run = True
 
         # Connect to DB
-        async with sqlite_connect(database=db_path) as db:
+        db = sqlite_connect(database=db_path)
+        try:
             if first_run:
                 await self._init_db(db)
             yield db
+        finally:
+            await db.close()
