@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from functools import wraps
 from helpers.config_models.cache import RedisModel
 from helpers.logging import build_logger
 from persistence.icache import ICache
@@ -7,7 +6,7 @@ from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
 from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError
-from typing import AsyncGenerator, Awaitable, Callable, Optional, Union
+from typing import AsyncGenerator, Optional, Union
 import hashlib
 
 
@@ -22,27 +21,7 @@ class RedisCache(ICache):
         _logger.info(f"Using Redis cache {config.host}:{config.port}")
         self._config = config
 
-    @staticmethod
-    def _key_as_sha(func: Callable[..., Awaitable]):
-        """
-        Decorator to convert the key to a SHA-256 hash.
-        """
-
-        @wraps(func)
-        async def wrapper(self, key: Union[str, bytes], *args, **kwargs):
-            bytes_key = key.encode() if isinstance(key, str) else key
-            sha_key = hashlib.sha256(bytes_key, usedforsecurity=False).digest()
-            return await func(
-                self,
-                *args,
-                key=sha_key,
-                **kwargs,
-            )
-
-        return wrapper
-
-    @_key_as_sha
-    async def aget(self, key: Union[str, bytes]) -> Optional[bytes]:
+    async def aget(self, key: str) -> Optional[bytes]:
         """
         Get a value from the cache.
 
@@ -50,15 +29,13 @@ class RedisCache(ICache):
 
         Catch errors for a maximum of 3 times, then raise the error.
         """
+        sha_key = self._key_to_hash(key)
         res = None
         async with self._use_db() as db:
-            res = await db.get(key)
+            res = await db.get(sha_key)
         return res
 
-    @_key_as_sha
-    async def aset(
-        self, key: Union[str, bytes], value: Union[str, bytes, None]
-    ) -> bool:
+    async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
         """
         Set a value in the cache.
 
@@ -66,9 +43,9 @@ class RedisCache(ICache):
 
         Catch errors for a maximum of 3 times, then raise the error.
         """
-        # TODO: Catch errors
+        sha_key = self._key_to_hash(key)
         async with self._use_db() as db:
-            await db.set(key, value if value else "")
+            await db.set(sha_key, value if value else "")
         return True
 
     @asynccontextmanager
@@ -94,3 +71,7 @@ class RedisCache(ICache):
             yield client
         finally:
             await client.aclose()
+
+    @staticmethod
+    def _key_to_hash(key: str) -> bytes:
+        return hashlib.sha256(key.encode(), usedforsecurity=False).digest()
