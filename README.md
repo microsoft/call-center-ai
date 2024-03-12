@@ -247,9 +247,6 @@ Place a file called `config.yaml` in the root of the project with the following 
 
 ```yaml
 # config.yaml
-api:
-  root_path: "/"
-
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
