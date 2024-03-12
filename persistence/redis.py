@@ -48,6 +48,9 @@ class RedisCache(ICache):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[Redis, None]:
+        """
+        Generate the Redis client and close it after use.
+        """
         client = Redis(
             # Database location
             db=self._config.database,

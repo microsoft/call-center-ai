@@ -139,6 +139,9 @@ class CosmosDbStore(IStore):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
+        """
+        Generate the Cosmos DB client and close it after use.
+        """
         client = CosmosClient(
             # Reliability
             connection_timeout=10,

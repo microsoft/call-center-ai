@@ -123,6 +123,9 @@ class SqliteStore(IStore):
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[SQLiteConnection, None]:
+        """
+        Generate the SQLite client and close it after use.
+        """
         # Create folder
         db_path = self._config.full_path()
         first_run = False
