@@ -334,16 +334,8 @@ async def _execute_llm_chat(
         _logger.info("Chat stopped by tool")
         should_user_answer = False
 
-    # Build RAG using query expansion from last messages
-    trainings_tasks = await asyncio.gather(
-        *[
-            _search.training_asearch_all(message.content, call)
-            for message in call.messages[-CONFIG.ai_search.expansion_k :]
-        ],
-    )
-    trainings = sorted(
-        set(training for trainings in trainings_tasks for training in trainings or [])
-    )  # Flatten, remove duplicates, and sort by score
+    # Build RAG
+    trainings = await call.trainings()
     _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
     _logger.debug(f"Trainings: {trainings}")
 

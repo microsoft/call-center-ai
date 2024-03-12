@@ -5,9 +5,11 @@ from models.message import MessageModel
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
+from models.training import TrainingModel
 from pydantic import BaseModel, Field, computed_field
 from typing import List, Optional
 from uuid import UUID, uuid4
+import asyncio
 import random
 import string
 
@@ -51,3 +53,27 @@ class CallModel(BaseModel):
     @lang.setter
     def lang(self, value: LanguageEntryModel) -> None:
         self.lang_short_code = value.short_code
+
+    async def trainings(self) -> List[TrainingModel]:
+        """
+        Get the trainings from the last messages.
+
+        Is using query expansion from last messages. Then, data is sorted by score.
+        """
+        from helpers.config import CONFIG
+
+        search = CONFIG.ai_search.instance()
+        trainings_tasks = await asyncio.gather(
+            *[
+                search.training_asearch_all(message.content, self)
+                for message in self.messages[-CONFIG.ai_search.expansion_k :]
+            ],
+        )  # Get trainings from last messages
+        trainings = sorted(
+            set(
+                training
+                for trainings in trainings_tasks
+                for training in trainings or []
+            )
+        )  # Flatten, remove duplicates, and sort by score
+        return trainings
