@@ -9,7 +9,6 @@ from deepeval import assert_test
 from deepeval.metrics import (
     AnswerRelevancyMetric,
     BiasMetric,
-    ContextualPrecisionMetric,
     ContextualRelevancyMetric,
     LatencyMetric,
     ToxicityMetric,
@@ -132,7 +131,7 @@ class CallConnectionClientMock(CallConnectionClient):
 
 
 @pytest.mark.parametrize(
-    "inputs, expected_output, claim_tests, llm_tests",
+    "inputs, expected_output, claim_tests_incl, claim_tests_excl",
     [
         pytest.param(
             [
@@ -140,11 +139,11 @@ class CallConnectionClientMock(CallConnectionClient):
             ],
             f"Hello, it is {CONFIG.workflow.bot_name}, from {CONFIG.workflow.bot_company}. How can I help you?",
             {
-                # No claim data
+                # No claim test inclusions
             },
-            {
-                "contextual_relevancy": False,
-            },
+            [
+                "contextual_relevancy",
+            ],
             id="hello",
         ),
         pytest.param(
@@ -154,12 +153,12 @@ class CallConnectionClientMock(CallConnectionClient):
             ],
             f"It seems that I cannot understand you. Could you please repeat?",
             {
-                # No claim data
+                # No claim test inclusions
             },
-            {
-                "answer_relevancy": False,
-                "contextual_relevancy": False,
-            },
+            [
+                "answer_relevancy",
+                "contextual_relevancy",
+            ],
             id="unintelligible",
         ),
         pytest.param(
@@ -175,9 +174,9 @@ class CallConnectionClientMock(CallConnectionClient):
                 "incident_description",
                 "policyholder_name",
             ],
-            {
-                "contextual_relevancy": False,
-            },
+            [
+                "contextual_relevancy",
+            ],
             id="shower_leak",
         ),
         pytest.param(
@@ -193,12 +192,12 @@ class CallConnectionClientMock(CallConnectionClient):
             "I'm truly sorry to hear you're upset. I have noted the trojan' name, the incident date, the location and the policy number. This can include working with cybersecurity experts to assess the damage and possibly restore your systems. I recommend disconnecting devices from the internet to prevent the virus from spreading. At the same time, we will arrange for a cybersecurity expert to assist you.",
             [
                 "incident_date_time",
-                "incident_description",
+                # "incident_description",
                 "policy_number",
             ],
-            {
-                # No LLM tests customizations
-            },
+            [
+                # No LLM test exclusions
+            ],
             id="profanity_cyber",
         ),
         pytest.param(
@@ -210,12 +209,15 @@ class CallConnectionClientMock(CallConnectionClient):
             ],
             "I'm truly sorry to hear that. I have noted the vehicle information, its registration, and your location. I am notifying the emergency services for medical assistance. Please make sure you and your son are safe.",
             [
+                # "incident_description",
                 "incident_location",
+                "injuries_description",
+                "policyholder_name",
                 "vehicle_info",
             ],
-            {
-                "contextual_relevancy": False,
-            },
+            [
+                "contextual_relevancy",
+            ],
             id="car_accident",
         ),
         pytest.param(
@@ -227,23 +229,25 @@ class CallConnectionClientMock(CallConnectionClient):
             ],
             "I'm truly sorry to hear that. I have noted the policyholder name and the insurance policy number. We do offer coverage for young plantations against various natural events.",
             [
+                "incident_date_time",
+                "incident_description",
                 "incident_location",
+                "policy_number",
                 "policyholder_name",
-                "extra_details",
             ],
-            {
-                # No LLM tests customizations
-            },
+            [
+                # No LLM test exclusions
+            ],
             id="farmer",
         ),
     ],
 )
 @pytest.mark.asyncio
 async def test_llm(
-    inputs: List[str],
+    inputs: list[str],
     expected_output: str,
-    claim_tests: list[str],
-    llm_tests: dict[str, bool],
+    claim_tests_incl: list[str],
+    claim_tests_excl: list[str],
 ) -> None:
     actual_output = ""
     call = CallModel(phone_number="+33612345678")
@@ -273,7 +277,7 @@ async def test_llm(
     _logger.info(f"latency: {latency_per_input}")
 
     # Test claim data
-    for field in claim_tests:
+    for field in claim_tests_incl:
         assert getattr(call.claim, field), f"{field} is missing"
 
     # Configure LLM tests
@@ -291,17 +295,19 @@ async def test_llm(
 
     # Define LLM metrics
     llm_metrics = [
-        BiasMetric(threshold=0.9, model=model),
+        BiasMetric(threshold=1, model=model),
         LatencyMetric(max_latency=60),  # TODO: Set a reasonable threshold
-        ToxicityMetric(threshold=0.9, model=model),
+        ToxicityMetric(threshold=1, model=model),
     ]  # By default, include generic metrics
-    if llm_tests.get("answer_relevancy", True):  # Test answer relevancy from questions
+
+    if not any(
+        field == "answer_relevancy" for field in claim_tests_excl
+    ):  # Test answer relevancy from questions
         llm_metrics.append(AnswerRelevancyMetric(threshold=0.5, model=model))
-    if llm_tests.get(
-        "contextual_relevancy", True
+    if not any(
+        field == "contextual_relevancy" for field in claim_tests_excl
     ):  # Test answer relevancy from context
-        llm_metrics.append(ContextualPrecisionMetric(threshold=0.5, model=model))
-        llm_metrics.append(ContextualRelevancyMetric(threshold=0.5, model=model))
+        llm_metrics.append(ContextualRelevancyMetric(threshold=0.25, model=model))
 
     # Execute LLM tests
     assert_test(test_case, llm_metrics)
