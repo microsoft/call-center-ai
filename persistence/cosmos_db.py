@@ -38,7 +38,7 @@ class CosmosDbStore(IStore):
     )
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
-        res = None
+        call = None
         try:
             async with self._use_db() as db:
                 items = db.query_items(
@@ -47,14 +47,14 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    res = CallModel(**raw)
+                    call = CallModel(**raw)
                 except ValidationError as e:
                     _logger.warning(f"Error parsing call: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e}")
-        return res
+        return call
 
     @retry(
         reraise=True,
@@ -82,7 +82,7 @@ class CosmosDbStore(IStore):
     )
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
-        res = None
+        call = None
         try:
             async with self._use_db() as db:
                 items = db.query_items(
@@ -97,14 +97,14 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    res = CallModel(**raw)
+                    call = CallModel(**raw)
                 except ValidationError as e:
                     _logger.warning(f"Error parsing call: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB: {e}")
-        return res
+        return call
 
     @retry(
         reraise=True,
