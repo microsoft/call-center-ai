@@ -52,7 +52,7 @@ class AiSearchSearch(ISearch):
             return None
 
         # Try cache
-        cache_key = f"{self.__class__.__name__}:training_asearch_all:{text}"
+        cache_key = f"{self.__class__.__name__}-training_asearch_all-{text}"
         cached = await self._cache.aget(cache_key)
         if cached:
             try:
@@ -80,9 +80,9 @@ class AiSearchSearch(ISearch):
                     # Vector search
                     vector_queries=[
                         VectorizableTextQuery(
-                            exhaustive=True,
+                            exhaustive=True,  # Use exhaustive k-nearest neighbors (KNN)
                             fields="vectors",
-                            k_nearest_neighbors=self._config.top_k,
+                            k_nearest_neighbors=50,  # TODO: Fine-tune this?
                             text=text,
                         )
                     ],
@@ -103,7 +103,9 @@ class AiSearchSearch(ISearch):
                             TrainingModel.model_validate(
                                 {
                                     **result,
-                                    "score": result["@search.score"],
+                                    "score": result[
+                                        "@search.score"
+                                    ],  # TODO: Use score from semantic ranking with "@search.rerankerScore"
                                 }
                             )
                         )

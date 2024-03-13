@@ -21,7 +21,7 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDelta
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, TypeAdapter
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -39,6 +39,7 @@ _logger = build_logger(__name__)
 _logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")
 _logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 
+_cache = CONFIG.cache.instance()
 ModelType = TypeVar("ModelType", bound=BaseModel)
 
 
@@ -71,12 +72,21 @@ async def completion_stream(
 
     Catch errors for a maximum of 3 times (internal + `RateLimitError`), then raise the error.
     """
-    extra = {}
+    # Try cache
+    cache_key = f"{__name__}-completion_stream-{is_backup}-{system}-{tools}-{messages}-{max_tokens}"
+    cached = await _cache.aget(cache_key)
+    if cached:
+        for chunck in TypeAdapter(list[ChoiceDelta]).validate_json(cached):
+            yield chunck
+        return
 
-    if tools:
-        extra["tools"] = tools
-
+    # Try live
+    to_cache: list[ChoiceDelta] = []
     async with _use_oai(is_backup) as (client, model, context):
+        extra = {}
+        if tools:
+            extra["tools"] = tools
+
         prompt = _prepare_messages(
             context=context,
             max_messages=20,  # Quick response
@@ -96,8 +106,14 @@ async def completion_stream(
             **extra,
         )
         async for chunck in stream:
-            if chunck.choices:  # Skip empty chunks, happens with GPT-4 Turbo
-                yield chunck.choices[0].delta
+            choices = chunck.choices
+            if choices:  # Skip empty chunks, happens with GPT-4 Turbo
+                delta = choices[0].delta
+                yield delta
+                to_cache.append(delta)
+
+    # Update cache
+    await _cache.aset(cache_key, TypeAdapter(list[ChoiceDelta]).dump_json(to_cache))
 
 
 @retry(
@@ -122,13 +138,19 @@ async def completion_sync(
 
     Catch errors for a maximum of 3 times (internal + `RateLimitError` + `SafetyCheckError`), then raise the error. Safety check is only performed for text responses (= not JSON).
     """
-    extra = {}
+    # Try cache
+    cache_key = f"{__name__}-completion_sync-{system}-{messages}-{max_tokens}"
+    cached = await _cache.aget(cache_key)
+    if cached:
+        return cached.decode()
 
-    if json_output:
-        extra["response_format"] = {"type": "json_object"}
-
+    # Try live
     content = None
     async with _use_oai(False) as (client, model, context):
+        extra = {}
+        if json_output:
+            extra["response_format"] = {"type": "json_object"}
+
         prompt = _prepare_messages(
             context=context,
             messages=messages,
@@ -146,9 +168,12 @@ async def completion_sync(
         )
         content = res.choices[0].message.content
 
+    # Update cache
+    if content:
+        await _cache.aset(cache_key, content.encode())
+
     if not content:
         return None
-
     if not json_output:
         await safety_check(content)
     return content

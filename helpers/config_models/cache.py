@@ -13,6 +13,12 @@ class ModeEnum(str, Enum):
 class MemoryModel(BaseModel, frozen=True):
     max_size: int = Field(default=100, ge=10)
 
+    @cache
+    def instance(self) -> ICache:
+        from persistence.memory import MemoryCache
+
+        return MemoryCache(self)
+
 
 class RedisModel(BaseModel, frozen=True):
     database: int = Field(default=0, ge=0)
@@ -21,8 +27,14 @@ class RedisModel(BaseModel, frozen=True):
     port: int = 6379
     ssl: bool = True
 
+    @cache
+    def instance(self) -> ICache:
+        from persistence.redis import RedisCache
 
-class CacheModel(BaseModel, frozen=True):
+        return RedisCache(self)
+
+
+class CacheModel(BaseModel):
     memory: Optional[MemoryModel] = MemoryModel()  # Object is fully defined by default
     mode: ModeEnum = ModeEnum.MEMORY
     redis: Optional[RedisModel] = None
@@ -47,15 +59,10 @@ class CacheModel(BaseModel, frozen=True):
             raise ValueError("Memory config required")
         return memory
 
-    @cache
     def instance(self) -> ICache:
         if self.mode == ModeEnum.MEMORY:
-            from persistence.memory import MemoryCache
-
             assert self.memory
-            return MemoryCache(self.memory)
-
-        from persistence.redis import RedisCache
+            return self.memory.instance()
 
         assert self.redis
-        return RedisCache(self.redis)
+        return self.redis.instance()

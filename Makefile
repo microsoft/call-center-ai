@@ -64,7 +64,7 @@ test:
 		--maxprocesses 4 \
 		-n logical \
 		-ra \
-		test.py
+		tests/*
 
 test-serve:
 	allure serve test-reports

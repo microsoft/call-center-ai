@@ -74,4 +74,9 @@ class RedisCache(ICache):
 
     @staticmethod
     def _key_to_hash(key: str) -> bytes:
+        """
+        Transform the key into a hash.
+
+        SHA-256 lower the collision probability. Plus, it reduce the key size, which is useful for memory usage.
+        """
         return hashlib.sha256(key.encode(), usedforsecurity=False).digest()
