@@ -82,7 +82,7 @@ class AiSearchSearch(ISearch):
                         VectorizableTextQuery(
                             exhaustive=True,  # Use exhaustive k-nearest neighbors (KNN)
                             fields="vectors",
-                            k_nearest_neighbors=self._config.top_k,
+                            k_nearest_neighbors=50,  # TODO: Fine-tune this?
                             text=text,
                         )
                     ],
