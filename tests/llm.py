@@ -1,10 +1,3 @@
-from azure.communication.callautomation import (
-    FileSource,
-    SsmlSource,
-    TextSource,
-    CallConnectionClient,
-)
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from deepeval import assert_test
 from deepeval.metrics import (
     AnswerRelevancyMetric,
@@ -15,119 +8,23 @@ from deepeval.metrics import (
 )
 from deepeval.models.base_model import DeepEvalBaseLLM
 from deepeval.test_case import LLMTestCase
-from fastapi import BackgroundTasks
 from helpers.call_events import on_speech_recognized
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from langchain_core.language_models import BaseChatModel
-from langchain_openai import AzureChatOpenAI
 from models.call import CallModel
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import TypeAdapter
-from typing import Callable, Optional, Union
 import pytest
 import time
-import xml.etree.ElementTree as ET
+from tests.conftest import (
+    BackgroundTasksMock,
+    CallConnectionClientMock,
+)
 
 
 _logger = build_logger(__name__)
 CONFIG.workflow.lang.default_short_code = "en-US"  # Force language to English
-
-
-class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
-    _model: BaseChatModel
-
-    def __init__(self):
-        self._model = AzureChatOpenAI(
-            # Repeatability
-            model_kwargs={
-                "seed": 42,
-            },
-            temperature=0,
-            # Reliability
-            max_retries=3,
-            timeout=60,
-            # Azure deployment
-            api_version="2023-12-01-preview",
-            azure_deployment=CONFIG.openai.gpt_backup_deployment,
-            azure_endpoint=CONFIG.openai.endpoint,
-            model=CONFIG.openai.gpt_backup_model,
-            # Authentication, either RBAC or API key
-            api_key=CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,  # type: ignore
-            azure_ad_token_provider=(
-                get_bearer_token_provider(
-                    DefaultAzureCredential(),
-                    "https://cognitiveservices.azure.com/.default",
-                )
-                if not CONFIG.openai.api_key
-                else None
-            ),
-        )
-
-    def load_model(self) -> BaseChatModel:
-        return self._model
-
-    def generate(self, prompt: str) -> str:
-        model = self.load_model()
-        return model.invoke(prompt).content  # type: ignore
-
-    async def a_generate(self, prompt: str) -> str:
-        model = self.load_model()
-        res = await model.ainvoke(prompt)
-        return res.content  # type: ignore
-
-    def get_model_name(self) -> str:
-        return "Azure OpenAI"
-
-
-class BackgroundTasksMock(BackgroundTasks):
-    def add_task(self, *args, **kwargs) -> None:
-        _logger.info("add_task, ignoring")
-
-
-class CallConnectionClientMock(CallConnectionClient):
-    _play_media_callback: Callable[[str], None]
-
-    def __init__(self, play_media_callback: Callable[[str], None]) -> None:
-        self._play_media_callback = play_media_callback
-
-    def start_recognizing_media(
-        self,
-        *args,
-        **kwargs,
-    ) -> None:
-        _logger.info("start_recognizing_media, ignoring")
-
-    def play_media(
-        self,
-        play_source: Union[FileSource, TextSource, SsmlSource],
-        *args,
-        operation_context: Optional[str] = None,
-        **kwargs,
-    ) -> None:
-        if isinstance(play_source, TextSource):
-            self._play_media_callback(play_source.text.strip())
-        elif isinstance(play_source, SsmlSource):
-            for text in ET.fromstring(play_source.ssml_text).itertext():
-                if text.strip():
-                    self._play_media_callback(text.strip())
-        else:
-            _logger.warning(f"play_media, ignoring: {play_source}")
-
-    def transfer_call_to_participant(
-        self,
-        *args,
-        **kwargs,
-    ) -> None:
-        _logger.info("transfer_call_to_participant, ignoring")
-
-    def hang_up(
-        self,
-        *args,
-        **kwargs,
-    ) -> None:
-        _logger.info("hang_up, ignoring")
 
 
 @pytest.mark.parametrize(
@@ -244,15 +141,15 @@ class CallConnectionClientMock(CallConnectionClient):
 )
 @pytest.mark.asyncio
 async def test_llm(
-    inputs: list[str],
-    expected_output: str,
-    claim_tests_incl: list[str],
+    call_mock: CallModel,
     claim_tests_excl: list[str],
+    claim_tests_incl: list[str],
+    deepeval_model: DeepEvalBaseLLM,
+    expected_output: str,
+    inputs: list[str],
 ) -> None:
     actual_output = ""
-    call = CallModel(phone_number="+33612345678")
     latency_per_input = 0
-    model = DeepEvalAzureOpenAI()
 
     def _play_media_callback(text: str) -> None:
         nonlocal actual_output
@@ -263,7 +160,7 @@ async def test_llm(
         start_time = time.time()
         await on_speech_recognized(
             background_tasks=BackgroundTasksMock(),
-            call=call,
+            call=call_mock,
             client=CallConnectionClientMock(play_media_callback=_play_media_callback),
             text=input,
         )
@@ -278,7 +175,7 @@ async def test_llm(
 
     # Test claim data
     for field in claim_tests_incl:
-        assert getattr(call.claim, field), f"{field} is missing"
+        assert getattr(call_mock.claim, field), f"{field} is missing"
 
     # Configure LLM tests
     test_case = LLMTestCase(
@@ -287,27 +184,31 @@ async def test_llm(
         input=full_input,
         latency=latency_per_input,
         retrieval_context=[
-            call.claim.model_dump_json(),
-            TypeAdapter(list[ReminderModel]).dump_json(call.reminders).decode(),
-            TypeAdapter(list[TrainingModel]).dump_json(await call.trainings()).decode(),
+            call_mock.claim.model_dump_json(),
+            TypeAdapter(list[ReminderModel]).dump_json(call_mock.reminders).decode(),
+            TypeAdapter(list[TrainingModel])
+            .dump_json(await call_mock.trainings())
+            .decode(),
         ],
     )
 
     # Define LLM metrics
     llm_metrics = [
-        BiasMetric(threshold=1, model=model),
+        BiasMetric(threshold=1, model=deepeval_model),
         LatencyMetric(max_latency=60),  # TODO: Set a reasonable threshold
-        ToxicityMetric(threshold=1, model=model),
+        ToxicityMetric(threshold=1, model=deepeval_model),
     ]  # By default, include generic metrics
 
     if not any(
         field == "answer_relevancy" for field in claim_tests_excl
     ):  # Test answer relevancy from questions
-        llm_metrics.append(AnswerRelevancyMetric(threshold=0.5, model=model))
+        llm_metrics.append(AnswerRelevancyMetric(threshold=0.5, model=deepeval_model))
     if not any(
         field == "contextual_relevancy" for field in claim_tests_excl
     ):  # Test answer relevancy from context
-        llm_metrics.append(ContextualRelevancyMetric(threshold=0.25, model=model))
+        llm_metrics.append(
+            ContextualRelevancyMetric(threshold=0.25, model=deepeval_model)
+        )
 
     # Execute LLM tests
     assert_test(test_case, llm_metrics)
