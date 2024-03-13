@@ -24,6 +24,12 @@ _logger = build_logger(__name__)
 
 
 @pytest.fixture
+def random_text() -> str:
+    text = "".join(random.choice(string.printable) for _ in range(100))
+    return text
+
+
+@pytest.fixture
 def call_mock() -> CallModel:
     phone_number = "+336" + "".join(random.choice("0123456789") for _ in range(8))
     call = CallModel(phone_number=phone_number)
