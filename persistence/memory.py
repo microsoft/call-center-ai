@@ -1,15 +1,25 @@
+from collections import OrderedDict
 from helpers.config_models.cache import MemoryModel
 from helpers.logging import build_logger
 from persistence.icache import ICache
-from typing import Dict, Optional, Union
+from typing import Optional, Union
+import hashlib
 
 
 _logger = build_logger(__name__)
 
 
 class MemoryCache(ICache):
+    """
+    A simple in-memory cache.
+
+    Use the least recently used (LRU) policy to remove the oldest used items when the cache is full.
+
+    See: https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)
+    """
+
+    _cache: OrderedDict[str, Union[bytes, None]] = OrderedDict()
     _config: MemoryModel
-    _cache: Dict[str, Union[bytes, None]] = {}
 
     def __init__(self, config: MemoryModel):
         _logger.info(f"Using memory cache with {config.max_size} size limit")
@@ -21,15 +31,30 @@ class MemoryCache(ICache):
 
         If the key does not exist, return `None`.
         """
-        return self._cache.get(key, None)
+        sha_key = self._key_to_hash(key)
+        res = self._cache.get(sha_key, None)
+        if not res:
+            return None
+        self._cache.move_to_end(sha_key, last=False)  # Move to first
+        return res
 
     async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
         """
         Set a value in the cache.
-
-        If the value is `None`, set an empty string. If the cache is full, delete the cache and start over.
         """
+        sha_key = self._key_to_hash(key)
         if len(self._cache) >= self._config.max_size:
-            self._cache = {}
-        self._cache[key] = value.encode() if isinstance(value, str) else value
+            self._cache.popitem()  # Delete the last
+        # Add to first
+        self._cache[sha_key] = value.encode() if isinstance(value, str) else value
+        self._cache.move_to_end(sha_key, last=False)
         return True
+
+    @staticmethod
+    def _key_to_hash(key: str) -> str:
+        """
+        Transform the key into a hash.
+
+        SHA-256 lower the collision probability. Plus, it reduce the key size, which is useful for memory usage.
+        """
+        return hashlib.sha256(key.encode(), usedforsecurity=False).hexdigest()
