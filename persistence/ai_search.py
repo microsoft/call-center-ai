@@ -52,7 +52,7 @@ class AiSearchSearch(ISearch):
             return None
 
         # Try cache
-        cache_key = f"{self.__class__.__name__}:training_asearch_all:{text}"
+        cache_key = f"{self.__class__.__name__}-training_asearch_all-{text}"
         cached = await self._cache.aget(cache_key)
         if cached:
             try:

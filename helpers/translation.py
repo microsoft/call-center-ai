@@ -16,6 +16,7 @@ from tenacity import (
 
 _logger = build_logger(__name__)
 _logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
+
 _cache = CONFIG.cache.instance()
 
 
@@ -37,7 +38,7 @@ async def translate_text(
         return text
 
     # Try cache
-    cache_key = f"{__name__}:translate_text:{text}:{source_lang}:{target_lang}"
+    cache_key = f"{__name__}-translate_text-{text}-{source_lang}-{target_lang}"
     cached = await _cache.aget(cache_key)
     if cached:
         return cached.decode()

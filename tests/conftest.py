@@ -126,7 +126,7 @@ class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
     def _cache_key(self, prompt: str) -> str:
         langchain_hash = self._model._get_llm_string(**self._langchain_kwargs)
         suffix = hashlib.sha256(
-            f"{langchain_hash}:{prompt}".encode(),
+            f"{langchain_hash}-{prompt}".encode(),
             usedforsecurity=False,
         ).digest()  # Arguments contain secrets, so hash them
         return f"claim-ai/{suffix}"
