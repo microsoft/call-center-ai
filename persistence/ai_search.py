@@ -80,7 +80,7 @@ class AiSearchSearch(ISearch):
                     # Vector search
                     vector_queries=[
                         VectorizableTextQuery(
-                            exhaustive=True,
+                            exhaustive=True,  # Use exhaustive k-nearest neighbors (KNN)
                             fields="vectors",
                             k_nearest_neighbors=self._config.top_k,
                             text=text,
@@ -103,7 +103,9 @@ class AiSearchSearch(ISearch):
                             TrainingModel.model_validate(
                                 {
                                     **result,
-                                    "score": result["@search.score"],
+                                    "score": result[
+                                        "@search.score"
+                                    ],  # TODO: Use score from semantic ranking with "@search.rerankerScore"
                                 }
                             )
                         )
