@@ -93,7 +93,7 @@ jobs:
           version: v${{ env.BUILDX_VERSION }}
 
       - name: Login to registry - GitHub
-        uses: docker/login-action@v3.0.0
+        uses: docker/login-action@v3.1.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
           username: ${{ github.actor }}
