@@ -14,7 +14,7 @@ jinja2==3.1.3
 json-repair==0.10.1
 mistune==3.0.2
 openai==1.13.3
-phonenumbers==8.13.31  # Required for pydantic-extra-types
+phonenumbers==8.13.32  # Required for pydantic-extra-types
 pydantic-extra-types==2.6.0  # Required for pydantic
 pydantic-settings==2.2.1
 python-dotenv==1.0.1
