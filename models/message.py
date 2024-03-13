@@ -100,7 +100,7 @@ class ToolModel(BaseModel):
             return_objects=True,
         )  # type: ignore
 
-        if args == None:
+        if not args:
             logger.warn(
                 f"Error decoding JSON args for function {name}: {self.function_arguments[:20]}...{self.function_arguments[-20:]}"
             )
