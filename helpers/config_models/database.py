@@ -16,6 +16,12 @@ class CosmosDbModel(BaseModel, frozen=True):
     database: str
     endpoint: str
 
+    @cache
+    def instance(self) -> IStore:
+        from persistence.cosmos_db import CosmosDbStore
+
+        return CosmosDbStore(self)
+
 
 class SqliteModel(BaseModel, frozen=True):
     path: str = ".local"
@@ -30,8 +36,14 @@ class SqliteModel(BaseModel, frozen=True):
         """
         return f"{self.path}-v{self.schema_version}.sqlite"
 
+    @cache
+    def instance(self) -> IStore:
+        from persistence.sqlite import SqliteStore
 
-class DatabaseModel(BaseModel, frozen=True):
+        return SqliteStore(self)
+
+
+class DatabaseModel(BaseModel):
     cosmos_db: Optional[CosmosDbModel] = None
     mode: ModeEnum = ModeEnum.SQLITE
     sqlite: Optional[SqliteModel] = SqliteModel()  # Object is fully defined by default
@@ -56,15 +68,10 @@ class DatabaseModel(BaseModel, frozen=True):
             raise ValueError("SQLite config required")
         return sqlite
 
-    @cache
     def instance(self) -> IStore:
         if self.mode == ModeEnum.SQLITE:
-            from persistence.sqlite import SqliteStore
-
             assert self.sqlite
-            return SqliteStore(self.sqlite)
-
-        from persistence.cosmos_db import CosmosDbStore
+            return self.sqlite.instance()
 
         assert self.cosmos_db
-        return CosmosDbStore(self.cosmos_db)
+        return self.cosmos_db.instance()
