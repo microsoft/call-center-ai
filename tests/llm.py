@@ -139,7 +139,7 @@ CONFIG.workflow.lang.default_short_code = "en-US"  # Force language to English
         ),
     ],
 )
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # Allow async functions
 @pytest.mark.repeat(3)  # Catch non deterministic issues
 async def test_llm(
     call_mock: CallModel,
@@ -149,6 +149,15 @@ async def test_llm(
     expected_output: str,
     inputs: list[str],
 ) -> None:
+    """
+    Test the LLM with a mocked conversation against the expected output.
+
+    Steps:
+    1. Run application with mocked inputs
+    2. Combine all outputs
+    3. Test claim data exists
+    4. Test LLM metrics
+    """
     actual_output = ""
     latency_per_input = 0
 
