@@ -31,8 +31,7 @@ def random_text() -> str:
 
 @pytest.fixture
 def call_mock() -> CallModel:
-    phone_number = "+336" + "".join(random.choice("0123456789") for _ in range(8))
-    call = CallModel(phone_number=phone_number)
+    call = CallModel(phone_number="+33601234567")
     return call
 
 
