@@ -140,6 +140,7 @@ CONFIG.workflow.lang.default_short_code = "en-US"  # Force language to English
     ],
 )
 @pytest.mark.asyncio
+@pytest.mark.repeat(3)  # Catch non deterministic issues
 async def test_llm(
     call_mock: CallModel,
     claim_tests_excl: list[str],

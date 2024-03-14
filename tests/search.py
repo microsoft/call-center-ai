@@ -36,6 +36,7 @@ _search = CONFIG.ai_search.instance()
     ],
 )
 @pytest.mark.asyncio
+@pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_relevancy(
     call_mock: CallModel,
     deepeval_model: DeepEvalBaseLLM,

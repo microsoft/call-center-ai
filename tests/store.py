@@ -21,6 +21,7 @@ _db = CONFIG.database.instance()
     ],
 )
 @pytest.mark.asyncio
+@pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_acid(call_mock: CallModel, database_mode: DatabaseModeEnum) -> None:
     # Set database mode
     CONFIG.database.mode = database_mode
