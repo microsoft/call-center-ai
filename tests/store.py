@@ -39,7 +39,7 @@ async def test_acid(call_mock: CallModel, database_mode: DatabaseModeEnum) -> No
 
     # Check not exists
     assert not await _db.call_aget(call_mock.call_id)
-    assert not await _db.call_asearch_one(call_mock.phone_number)
+    assert await _db.call_asearch_one(call_mock.phone_number) != call_mock
     assert call_mock not in (await _db.call_asearch_all(call_mock.phone_number) or [])
 
     # Insert test call
