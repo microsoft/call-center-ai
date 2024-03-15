@@ -8,7 +8,6 @@ from helpers.logging import build_logger
 from typing import (
     Any,
     Callable,
-    Dict,
     ForwardRef,
     Set,
     Tuple,
@@ -33,7 +32,7 @@ class Parameters(BaseModel):
     Parameters of a function as defined by the OpenAI API.
     """
 
-    properties: Dict[str, JsonSchemaValue]
+    properties: dict[str, JsonSchemaValue]
     required: list[str]
     type: str = "object"
 
@@ -92,7 +91,7 @@ def function_schema(f: Callable[..., Any]) -> ChatCompletionToolParam:
     return function
 
 
-def _typed_annotation(annotation: Any, globalns: Dict[str, Any]) -> Any:
+def _typed_annotation(annotation: Any, globalns: dict[str, Any]) -> Any:
     """
     Get the type annotation of a parameter.
 
@@ -135,7 +134,7 @@ def _typed_signature(call: Callable[..., Any]) -> inspect.Signature:
 
 def _param_annotations(
     typed_signature: inspect.Signature,
-) -> Dict[str, Union[Annotated[Type[Any], str], Type[Any]]]:
+) -> dict[str, Union[Annotated[Type[Any], str], Type[Any]]]:
     """
     Get the type annotations of the parameters of a function.
 
@@ -155,7 +154,7 @@ def _param_annotations(
 def _parameter_json_schema(
     k: str,
     v: Union[Annotated[Type[Any], str], Type[Any]],
-    default_values: Dict[str, Any],
+    default_values: dict[str, Any],
 ) -> JsonSchemaValue:
     """
     Get a JSON schema for a parameter as defined by the OpenAI API.
@@ -209,7 +208,7 @@ def _required_params(typed_signature: inspect.Signature) -> list[str]:
     ]
 
 
-def _default_values(typed_signature: inspect.Signature) -> Dict[str, Any]:
+def _default_values(typed_signature: inspect.Signature) -> dict[str, Any]:
     """
     Get default values of parameters of a function.
 
@@ -228,8 +227,8 @@ def _default_values(typed_signature: inspect.Signature) -> Dict[str, Any]:
 
 def _parameters(
     required: list[str],
-    param_annotations: Dict[str, Union[Annotated[Type[Any], str], Type[Any]]],
-    default_values: Dict[str, Any],
+    param_annotations: dict[str, Union[Annotated[Type[Any], str], Type[Any]]],
+    default_values: dict[str, Any],
 ) -> Parameters:
     """
     Get the parameters of a function as defined by the OpenAI API.
