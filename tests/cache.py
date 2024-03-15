@@ -19,8 +19,20 @@ _cache = CONFIG.cache.instance()
         ),
     ],
 )
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # Allow async functions
+@pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_acid(random_text: str, cache_mode: CacheModeEnum) -> None:
+    """
+    Test ACID properties of the cache backend.
+
+    Steps:
+    1. Create a mock data
+    2. Test not exists
+    3. Insert test data
+    4. Check it exists
+
+    Test is repeated 10 times to catch multi-threading and concurrency issues.
+    """
     # Set cache mode
     CONFIG.cache.mode = cache_mode
 

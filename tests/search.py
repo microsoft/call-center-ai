@@ -35,13 +35,24 @@ _search = CONFIG.ai_search.instance()
         ),
     ],
 )
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # Allow async functions
+@pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_relevancy(
     call_mock: CallModel,
     deepeval_model: DeepEvalBaseLLM,
     user_lang: str,
     user_message: str,
 ) -> None:
+    """
+    Test the relevancy of the user message to the training data.
+
+    Steps:
+    1. Search for training data
+    2. Ask the LLM for relevancy score
+    3. Assert the relevancy score is above 0.5
+
+    Test is repeated 10 times to catch multi-threading and concurrency issues.
+    """
     # Configure context
     call_mock.lang.short_code = user_lang
 

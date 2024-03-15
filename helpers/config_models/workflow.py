@@ -32,26 +32,36 @@ class LanguageModel(BaseModel):
     """
 
     default_short_code: str = "fr-FR"
+    # Voice list from Azure TTS
+    # See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     availables: list[LanguageEntryModel] = [
         LanguageEntryModel(
             pronunciations_en=["French", "FR", "France"],
             short_code="fr-FR",
-            voice="fr-FR-DeniseNeural",
+            # Use voice optimized for conversational use
+            # See: https://techcommunity.microsoft.com/t5/ai-azure-ai-services-blog/introducing-more-multilingual-ai-voices-optimized-for/ba-p/4012832
+            voice="fr-FR-VivienneMultilingualNeural",
         ),
         LanguageEntryModel(
             short_code="en-US",
             pronunciations_en=["English", "EN", "United States"],
-            voice="en-US-AvaNeural",
+            # Use voice optimized for conversational use
+            # See: https://techcommunity.microsoft.com/t5/ai-azure-ai-services-blog/introducing-more-multilingual-ai-voices-optimized-for/ba-p/4012832
+            voice="en-US-AvaMultilingualNeural",
         ),
         LanguageEntryModel(
             short_code="es-ES",
             pronunciations_en=["Spanish", "ES", "Spain"],
-            voice="es-ES-ElviraNeural",
+            # Use voice optimized for conversational use
+            # See: https://techcommunity.microsoft.com/t5/ai-azure-ai-services-blog/introducing-7-new-realistic-ai-voices-optimized-for/ba-p/3971966
+            voice="es-ES-XimenaNeural",
         ),
         LanguageEntryModel(
             short_code="zh-CN",
             pronunciations_en=["Chinese", "ZH", "China"],
-            voice="zh-CN-XiaoxiaoNeural",
+            # Use voice optimized for conversational use
+            # See: https://techcommunity.microsoft.com/t5/ai-azure-ai-services-blog/introducing-more-multilingual-ai-voices-optimized-for/ba-p/4012832
+            voice="zh-CN-XiaoxiaoMultilingualNeural",
         ),
     ]
 
