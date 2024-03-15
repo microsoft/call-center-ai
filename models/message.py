@@ -134,6 +134,17 @@ class MessageModel(BaseModel):
     style: StyleEnum = StyleEnum.NONE
     tool_calls: list[ToolModel] = []
 
+    @field_validator("created_at")
+    def validate_created_at(cls, created_at: datetime) -> datetime:
+        """
+        Ensure the created_at field is timezone-aware.
+
+        Backward compatibility with models created before the timezone was added. All dates require the same timezone to be compared.
+        """
+        if not created_at.tzinfo:
+            return created_at.replace(tzinfo=UTC)
+        return created_at
+
     def to_openai(
         self,
     ) -> list[
