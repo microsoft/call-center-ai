@@ -1,9 +1,5 @@
 from pydantic import SecretStr, BaseModel
-from pydantic_extra_types.phone_numbers import PhoneNumber
-
-
-# E164 is standard accross all Microsoft services
-PhoneNumber.phone_format = "E164"
+from helpers.pydantic_types.phone_numbers import PhoneNumber
 
 
 class CommunicationServiceModel(BaseModel):

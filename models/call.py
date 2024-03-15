@@ -1,5 +1,6 @@
-from datetime import datetime, UTC
+from datetime import datetime, UTC, tzinfo
 from helpers.config_models.workflow import LanguageEntryModel
+from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.claim import ClaimModel
 from models.message import MessageModel
 from models.next import NextModel
@@ -30,7 +31,7 @@ class CallModel(BaseModel):
     claim: ClaimModel = Field(default_factory=ClaimModel)
     messages: list[MessageModel] = []
     next: Optional[NextModel] = None
-    phone_number: str
+    phone_number: PhoneNumber
     recognition_retry: int = Field(default=0)
     reminders: list[ReminderModel] = []
     synthesis: Optional[SynthesisModel] = None
@@ -53,6 +54,9 @@ class CallModel(BaseModel):
     @lang.setter
     def lang(self, value: LanguageEntryModel) -> None:
         self.lang_short_code = value.short_code
+
+    def tz(self) -> tzinfo:
+        return PhoneNumber.tz(self.phone_number)
 
     async def trainings(self) -> list[TrainingModel]:
         """

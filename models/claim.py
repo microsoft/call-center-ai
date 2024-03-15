@@ -1,14 +1,10 @@
 from datetime import datetime, UTC
 from pydantic import BaseModel, Field
 from pydantic import EmailStr
-from pydantic_extra_types.phone_numbers import PhoneNumber
+from helpers.pydantic_types.phone_numbers import PhoneNumber
 from typing import Optional, Set
 import random
 import string
-
-
-# E164 is standard accross all Microsoft services
-PhoneNumber.phone_format = "E164"
 
 
 class ClaimModel(BaseModel):
