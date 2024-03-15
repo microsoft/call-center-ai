@@ -54,6 +54,9 @@ upgrade:
 	@echo "➡️ Upgrading Python dev dependencies..."
 	python3 -m pur -r requirements-dev.txt
 
+	@echo "➡️ Upgrading Bicep CLI..."
+	az bicep upgrade
+
 test:
 	@echo "➡️ Running Black..."
 	python3 -m black --check .
@@ -183,7 +186,7 @@ eventgrid-register:
 		--event-ttl 3 \
 		--included-event-types Microsoft.Communication.IncomingCall \
 		--max-delivery-attempts 8 \
-		--name $(name) \
+		--name $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-') \
 		--source-resource-id $(source)
 
 copy-resources:
