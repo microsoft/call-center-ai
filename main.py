@@ -43,7 +43,6 @@ from helpers.call_events import (
     on_transfer_completed,
     on_transfer_error,
 )
-import html
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 
@@ -93,7 +92,7 @@ FastAPIInstrumentor.instrument_app(api)
 
 assert CONFIG.api.events_domain, "api.events_domain config is not set"
 _CALL_EVENT_URL = urljoin(
-    str(CONFIG.api.events_domain), "/call/event/{phone_number}/{callback_secret}"
+    str(CONFIG.api.events_domain), "/call/event/{call_id}/{callback_secret}"
 )
 _logger.info(f"Using call event URL {_CALL_EVENT_URL}")
 
@@ -230,21 +229,19 @@ async def _call_inbound_worker(
 
 
 @api.post(
-    "/call/event/{phone_number}/{secret}",
+    "/call/event/{call_id}/{secret}",
     description="Handle callbacks from Azure Communication Services.",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def call_event_post(
     request: Request,
     background_tasks: BackgroundTasks,
-    phone_number: str,
+    call_id: UUID,
     secret: str,
 ) -> None:
     await asyncio.gather(
         *[
-            _communication_event_worker(
-                background_tasks, event_dict, phone_number, secret
-            )
+            _communication_event_worker(background_tasks, event_dict, call_id, secret)
             for event_dict in await request.json()
         ]
     )
@@ -253,15 +250,15 @@ async def call_event_post(
 async def _communication_event_worker(
     background_tasks: BackgroundTasks,
     event_dict: dict,
-    phone_number: str,
+    call_id: UUID,
     secret: str,
 ) -> None:
-    call = await _db.call_asearch_one(phone_number)
+    call = await _db.call_aget(call_id)
     if not call:
-        _logger.warning(f"Call {phone_number} not found")
+        _logger.warning(f"Call {call_id} not found")
         return
     if call.callback_secret != secret:
-        _logger.warning(f"Secret for call {phone_number} does not match")
+        _logger.warning(f"Secret for call {call_id} does not match")
         return
 
     event = CloudEvent.from_dict(event_dict)
@@ -370,17 +367,17 @@ async def _communication_event_worker(
     )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
-async def _callback_url(caller_id: str) -> str:
+async def _callback_url(phone_number: str) -> str:
     """
     Generate the callback URL for a call.
 
     If the caller has already called, use the same call ID, to keep the conversation history. Otherwise, create a new call ID.
     """
-    call = await _db.call_asearch_one(caller_id)
+    call = await _db.call_asearch_one(phone_number)
     if not call:
-        call = CallModel(phone_number=caller_id)
+        call = CallModel(phone_number=phone_number)
         await _db.call_aset(call)  # Create for the first time
     return _CALL_EVENT_URL.format(
-        callback_secret=html.escape(call.callback_secret),
-        phone_number=html.escape(call.phone_number),
+        callback_secret=call.callback_secret,
+        call_id=str(call.call_id),
     )

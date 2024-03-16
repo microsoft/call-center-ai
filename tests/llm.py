@@ -78,10 +78,10 @@ CONFIG.workflow.lang.default_short_code = "en-US"  # Force language to English
         ),
         pytest.param(
             [
-                "Hello! Fuck the hackers! Fuck your shitty insurance company! I'm Anna from the IT support of Ada Inc."
+                "Hello! Fuck the hackers! Fuck your shitty insurance company! I'm Anna from the IT support of Ada Inc.",
                 "All my hard drives are encrypted with a virus. I thought you were going to help me!",
                 "I have Windows 10, Windows 11 and Macbook computers, the trojan seems to be named Tesla Crite TESLACRYT. The countdown clock reads 20 hours!",
-                "My contract number is #12081388733."
+                "My contract number is #12081388733.",
                 "We detected the attack 4h ago, I would say.",
                 "I'm so sad and stresses. I risk losing my job..."
                 "How are you going to help?",
