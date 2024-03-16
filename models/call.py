@@ -65,19 +65,21 @@ class CallModel(BaseModel):
         Is using query expansion from last messages. Then, data is sorted by score.
         """
         from helpers.config import CONFIG
+        from helpers.logging import TRACER
 
-        search = CONFIG.ai_search.instance()
-        trainings_tasks = await asyncio.gather(
-            *[
-                search.training_asearch_all(message.content, self)
-                for message in self.messages[-CONFIG.ai_search.expansion_k :]
-            ],
-        )  # Get trainings from last messages
-        trainings = sorted(
-            set(
-                training
-                for trainings in trainings_tasks
-                for training in trainings or []
-            )
-        )  # Flatten, remove duplicates, and sort by score
-        return trainings
+        with TRACER.start_as_current_span("trainings"):
+            search = CONFIG.ai_search.instance()
+            trainings_tasks = await asyncio.gather(
+                *[
+                    search.training_asearch_all(message.content, self)
+                    for message in self.messages[-CONFIG.ai_search.expansion_k :]
+                ],
+            )  # Get trainings from last messages
+            trainings = sorted(
+                set(
+                    training
+                    for trainings in trainings_tasks
+                    for training in trainings or []
+                )
+            )  # Flatten, remove duplicates, and sort by score
+            return trainings
