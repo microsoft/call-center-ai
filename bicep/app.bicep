@@ -26,6 +26,11 @@ var config = {
   api: {
     events_domain: appUrl
   }
+  monitoring: {
+    application_insights: {
+      connection_string: applicationInsights.properties.ConnectionString
+    }
+  }
   database: {
     mode: 'cosmos_db'
     cosmos_db: {
@@ -104,6 +109,17 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10
     sku: {
       name: 'PerGB2018'  // Pay-as-you-go
     }
+  }
+}
+
+resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: prefix
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
   }
 }
 

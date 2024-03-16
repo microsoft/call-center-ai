@@ -2,7 +2,6 @@ from azure.core.exceptions import ServiceResponseError
 from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
 from fastapi.encoders import jsonable_encoder
 from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel

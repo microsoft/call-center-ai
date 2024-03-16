@@ -1,5 +1,10 @@
 from enum import Enum
-from pydantic import BaseModel
+from typing import Optional
+from pydantic import BaseModel, SecretStr
+
+
+class ApplicationInsightsModel(BaseModel):
+    connection_string: SecretStr
 
 
 class LoggingLevelEnum(str, Enum):
@@ -12,12 +17,11 @@ class LoggingLevelEnum(str, Enum):
     WARNING = "WARNING"
 
 
-class LoggingMonitoringModel(BaseModel):
+class LoggingModel(BaseModel):
     app_level: LoggingLevelEnum = LoggingLevelEnum.INFO
     sys_level: LoggingLevelEnum = LoggingLevelEnum.WARNING
 
 
 class MonitoringModel(BaseModel):
-    logging: LoggingMonitoringModel = (
-        LoggingMonitoringModel()
-    )  # Object is fully defined by default
+    logging: LoggingModel = LoggingModel()  # Object is fully defined by default
+    application_insights: ApplicationInsightsModel

@@ -44,6 +44,7 @@ from helpers.call_events import (
     on_transfer_error,
 )
 import html
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 
 # Jinja configuration
@@ -85,6 +86,9 @@ api = FastAPI(
     title="claim-ai-phone-bot",
     version=CONFIG.version,
 )
+
+# OpenTelemetry
+FastAPIInstrumentor.instrument_app(api)
 
 
 assert CONFIG.api.events_domain, "api.events_domain config is not set"
