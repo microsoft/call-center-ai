@@ -22,6 +22,7 @@ from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models.call import CallModel
 from models.next import ActionEnum as NextActionEnum
@@ -100,6 +101,10 @@ _logger.info(f"Using call event URL {_CALL_EVENT_URL}")
 )
 async def health_liveness_get() -> None:
     pass
+
+
+# Serve static files
+api.mount("/static", StaticFiles(directory="public_website/static"))
 
 
 @api.get(
