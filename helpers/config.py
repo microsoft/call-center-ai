@@ -11,8 +11,8 @@ import os
 import yaml
 
 
-CONFIG_ENV = "CONFIG_JSON"
-CONFIG_FILE = "config.yaml"
+_CONFIG_ENV = "CONFIG_JSON"
+_CONFIG_FILE = "config.yaml"
 
 
 class ConfigNotFound(Exception):
@@ -23,15 +23,15 @@ class ConfigBadFormat(Exception):
     pass
 
 
-if CONFIG_ENV in os.environ:
-    CONFIG = RootModel.model_validate_json(os.environ[CONFIG_ENV])
-    print(f'Config from env "{CONFIG_ENV}" loaded')
+if _CONFIG_ENV in os.environ:
+    CONFIG = RootModel.model_validate_json(os.environ[_CONFIG_ENV])
+    print(f'Config from env "{_CONFIG_ENV}" loaded')
 
 else:
-    print(f'Config from env "{CONFIG_ENV}" not found')
-    path = find_dotenv(filename=CONFIG_FILE)
+    print(f'Config from env "{_CONFIG_ENV}" not found')
+    path = find_dotenv(filename=_CONFIG_FILE)
     if not path:
-        raise ConfigNotFound(f'Cannot find config file "{CONFIG_FILE}"')
+        raise ConfigNotFound(f'Cannot find config file "{_CONFIG_FILE}"')
     try:
         with open(path, "r", encoding="utf-8") as f:
             CONFIG = RootModel.model_validate(yaml.safe_load(f))

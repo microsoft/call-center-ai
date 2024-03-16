@@ -5,6 +5,7 @@ from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
 from helpers.logging import build_logger
 from models.call import CallModel
+from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
@@ -12,6 +13,9 @@ from uuid import UUID
 import json
 import os
 
+
+# Instrument sqlite
+SQLite3Instrumentor().instrument()
 
 _logger = build_logger(__name__)
 
