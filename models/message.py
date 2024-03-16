@@ -108,19 +108,24 @@ class ToolModel(BaseModel):
             self.content = f"Bad arguments, available are {ToolModel._available_function_names()}. Please try again."
             return
 
-        with TRACER.start_as_current_span("execute_function") as span:
-            span.set_attribute("name", name)
-            span.set_attribute("args", json.dumps(args))
+        with TRACER.start_as_current_span(
+            name="execute_function",
+            attributes={
+                "args": json.dumps(args),
+                "name": name,
+            },
+        ) as span:
             try:
                 res = await getattr(plugins, name)(**args)
-                logger.info(
-                    f"Executing function {name} ({args}): {res[:20]}...{res[-20:]}"
-                )
+                res_log = f"{res[:20]}...{res[-20:]}"
+                logger.info(f"Executing function {name} ({args}): {res_log}")
             except Exception as e:
                 logger.warn(
                     f"Error executing function {self.function_name} with args {args}: {e}"
                 )
                 res = f"Error: {e}. Please try again."
+                res_log = res
+            span.set_attribute("result", res_log)
             self.content = res
 
     @staticmethod
