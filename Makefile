@@ -61,6 +61,12 @@ test:
 	@echo "➡️ Running Black..."
 	python3 -m black --check .
 
+	@echo "➡️ Running deptry..."
+	python3 -m deptry \
+		--ignore-notebooks \
+		--per-rule-ignores "DEP002=aiohttp|uvicorn" \
+		.
+
 	@echo "➡️ Running Pytest..."
 	pytest \
 		--alluredir test-reports \

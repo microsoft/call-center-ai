@@ -19,7 +19,6 @@ from helpers.call_utils import (
     handle_recognize_text,
     tts_sentence_split,
 )
-from httpx import ReadError
 from fastapi import BackgroundTasks
 from helpers.llm_tools import LlmPlugins
 import asyncio
@@ -60,8 +59,6 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
             messages=call.messages,
             system=system,
         )
-    except ReadError:
-        _logger.warning("Network error", exc_info=True)
     except APIError as e:
         _logger.warning(f"OpenAI API call error: {e}")
     except SafetyCheckError as e:
@@ -93,8 +90,6 @@ async def llm_model(
             model=model,
             system=system,
         )
-    except ReadError:
-        _logger.warning("Network error", exc_info=True)
     except APIError as e:
         _logger.warning(f"OpenAI API call error: {e}")
 
@@ -399,9 +394,6 @@ async def _execute_llm_chat(
                 ):
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _content_callback(sentence, plugins.style)
-    except ReadError:
-        _logger.warning("Network error", exc_info=True)
-        return True, True, should_user_answer, call
     except APIError as e:
         _logger.warning(f"OpenAI API call error: {e}")
         return True, True, should_user_answer, call
