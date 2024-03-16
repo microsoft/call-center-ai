@@ -365,7 +365,9 @@ async def _communication_event_worker(
             error_code=sub_code,
         )
 
-    await _db.call_aset(call)
+    await _db.call_aset(
+        call
+    )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
 async def _callback_url(caller_id: str) -> str:
@@ -377,7 +379,7 @@ async def _callback_url(caller_id: str) -> str:
     call = await _db.call_asearch_one(caller_id)
     if not call:
         call = CallModel(phone_number=caller_id)
-        await _db.call_aset(call)
+        await _db.call_aset(call)  # Create for the first time
     return _CALL_EVENT_URL.format(
         callback_secret=html.escape(call.callback_secret),
         phone_number=html.escape(call.phone_number),
