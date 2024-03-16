@@ -34,9 +34,7 @@ class RootModel(BaseSettings):
     communication_service: CommunicationServiceModel
     content_safety: ContentSafetyModel
     database: DatabaseModel = DatabaseModel()  # Object is fully defined by default
-    monitoring: MonitoringModel = (
-        MonitoringModel()
-    )  # Object is fully defined by default
+    monitoring: MonitoringModel
     openai: OpenAiModel
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel

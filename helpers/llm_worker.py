@@ -10,7 +10,7 @@ from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from helpers.config import CONFIG
 from contextlib import asynccontextmanager
-from helpers.logging import build_logger
+from helpers.logging import build_logger, TRACER
 from openai import AsyncAzureOpenAI, AsyncStream, RateLimitError, APIError
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
@@ -59,6 +59,7 @@ class SafetyCheckError(Exception):
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
+@TRACER.start_as_current_span("completion_stream")
 async def completion_stream(
     is_backup: bool,
     max_tokens: int,
@@ -125,6 +126,7 @@ async def completion_stream(
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
+@TRACER.start_as_current_span("completion_sync")
 async def completion_sync(
     max_tokens: int,
     messages: list[MessageModel],
@@ -183,6 +185,7 @@ async def completion_sync(
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
+@TRACER.start_as_current_span("completion_model_sync")
 async def completion_model_sync(
     max_tokens: int,
     messages: list[MessageModel],
@@ -255,6 +258,7 @@ def _prepare_messages(
     ]
 
 
+@TRACER.start_as_current_span("safety_check")
 async def safety_check(text: str) -> None:
     """
     Raise `SafetyCheckError` if the text is safe, nothing otherwise.

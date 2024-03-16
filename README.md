@@ -60,6 +60,7 @@ Extract of the data stored during the call:
 - [x] Has access to a documentation database (few-shot training / RAG)
 - [x] Help the user to find the information needed to complete the claim
 - [x] Lower AI Search cost by usign a Redis cache
+- [x] Monitoring and tracing with Application Insights
 - [x] Responses are streamed from the LLM to the user, to avoid long pauses
 - [x] Send a SMS report after the call
 - [x] Take back a conversation after a disengagement
@@ -247,6 +248,10 @@ Place a file called `config.yaml` in the root of the project with the following 
 
 ```yaml
 # config.yaml
+monitoring:
+  application_insights:
+    connection_string: xxx
+
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 

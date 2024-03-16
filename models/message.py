@@ -12,6 +12,7 @@ from inspect import getmembers, isfunction
 from json_repair import repair_json
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 import re
+import json
 
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
@@ -87,7 +88,7 @@ class ToolModel(BaseModel):
         return self
 
     async def execute_function(self, plugins: object) -> None:
-        from helpers.logging import build_logger
+        from helpers.logging import build_logger, TRACER
 
         logger = build_logger(__name__)
         json_str = self.function_arguments
@@ -107,15 +108,20 @@ class ToolModel(BaseModel):
             self.content = f"Bad arguments, available are {ToolModel._available_function_names()}. Please try again."
             return
 
-        try:
-            res = await getattr(plugins, name)(**args)
-            logger.info(f"Executing function {name} ({args}): {res[:20]}...{res[-20:]}")
-        except Exception as e:
-            logger.warn(
-                f"Error executing function {self.function_name} with args {args}: {e}"
-            )
-            res = f"Error: {e}. Please try again."
-        self.content = res
+        with TRACER.start_as_current_span("execute_function") as span:
+            span.set_attribute("name", name)
+            span.set_attribute("args", json.dumps(args))
+            try:
+                res = await getattr(plugins, name)(**args)
+                logger.info(
+                    f"Executing function {name} ({args}): {res[:20]}...{res[-20:]}"
+                )
+            except Exception as e:
+                logger.warn(
+                    f"Error executing function {self.function_name} with args {args}: {e}"
+                )
+                res = f"Error: {e}. Please try again."
+            self.content = res
 
     @staticmethod
     def _available_function_names() -> list[str]:

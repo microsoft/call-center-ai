@@ -6,7 +6,7 @@ from azure.communication.callautomation import (
     PhoneNumberIdentifier,
 )
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import build_logger, TRACER
 from azure.core.exceptions import (
     ClientAuthenticationError,
     HttpResponseError,
@@ -40,6 +40,7 @@ _sms_client = SmsClient(
 _db = CONFIG.database.instance()
 
 
+@TRACER.start_as_current_span("on_new_call")
 async def on_new_call(
     client: CallAutomationClient, context: str, phone_number: str, callback_url: str
 ) -> bool:
@@ -73,6 +74,7 @@ async def on_new_call(
     return False
 
 
+@TRACER.start_as_current_span("on_call_connected")
 async def on_call_connected(
     call: CallModel,
     client: CallConnectionClient,
@@ -93,6 +95,7 @@ async def on_call_connected(
     )  # Every time a call is answered, confirm the language
 
 
+@TRACER.start_as_current_span("on_call_disconnected")
 async def on_call_disconnected(
     background_tasks: BackgroundTasks,
     call: CallModel,
@@ -102,6 +105,7 @@ async def on_call_disconnected(
     await _handle_hangup(background_tasks, client, call)
 
 
+@TRACER.start_as_current_span("on_speech_recognized")
 async def on_speech_recognized(
     background_tasks: BackgroundTasks,
     call: CallModel,
@@ -118,6 +122,7 @@ async def on_speech_recognized(
     )
 
 
+@TRACER.start_as_current_span("on_speech_timeout_error")
 async def on_speech_timeout_error(
     call: CallModel,
     client: CallConnectionClient,
@@ -140,6 +145,7 @@ async def on_speech_timeout_error(
         )
 
 
+@TRACER.start_as_current_span("on_speech_unknown_error")
 async def on_speech_unknown_error(
     call: CallModel,
     client: CallConnectionClient,
@@ -159,6 +165,7 @@ async def on_speech_unknown_error(
     )
 
 
+@TRACER.start_as_current_span("on_play_completed")
 async def on_play_completed(
     background_tasks: BackgroundTasks,
     call: CallModel,
@@ -181,6 +188,7 @@ async def on_play_completed(
         )
 
 
+@TRACER.start_as_current_span("on_play_error")
 async def on_play_error(
     error_code: int,
 ) -> None:
@@ -200,6 +208,7 @@ async def on_play_error(
         _logger.warning(f"Error during media play, unknown error code {error_code}")
 
 
+@TRACER.start_as_current_span("on_ivr_recognized")
 async def on_ivr_recognized(
     client: CallConnectionClient,
     call: CallModel,
@@ -242,11 +251,13 @@ async def on_ivr_recognized(
         )
 
 
+@TRACER.start_as_current_span("on_transfer_completed")
 async def on_transfer_completed() -> None:
     _logger.info("Call transfer accepted event")
     # TODO: Is there anything to do here?
 
 
+@TRACER.start_as_current_span("on_transfer_error")
 async def on_transfer_error(
     call: CallModel,
     client: CallConnectionClient,

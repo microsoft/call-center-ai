@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from helpers.config_models.cache import RedisModel
 from helpers.logging import build_logger
+from opentelemetry.instrumentation.redis import RedisInstrumentor
 from persistence.icache import ICache
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
@@ -9,6 +10,9 @@ from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError
 from typing import AsyncGenerator, Optional, Union
 import hashlib
 
+
+# Instrument redis
+RedisInstrumentor().instrument()
 
 _logger = build_logger(__name__)
 _retry = Retry(ExponentialBackoff(), 3)
