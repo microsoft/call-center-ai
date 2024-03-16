@@ -29,7 +29,6 @@ from tenacity import (
     retry_if_exception_type,
 )
 from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
-from httpx import ReadError
 from models.message import MessageModel
 import tiktoken
 import json
@@ -122,7 +121,6 @@ async def completion_stream(
         retry_if_exception_type(SafetyCheckError)
         | retry_if_exception_type(APIError)
         | retry_if_exception_type(RateLimitError)
-        | retry_if_exception_type(ReadError)
     ),
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
