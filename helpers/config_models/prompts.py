@@ -285,6 +285,24 @@ class LlmModel(BaseModel):
             "action": "commercial_offer",
             "justification": "The company planned the customer taxi ride from the wrong address. The customer is not happy about this situation."
         }}
+
+        ## Example 3
+        {{
+            "action": "customer_will_send_info",
+            "justification": "Document related to the damaged bike are missing. Documents are bike invoice, and the bike repair quote. The customer confirmed they will send them tomorrow by email."
+        }}
+
+        ## Example 4
+        {{
+            "action": "requires_expertise",
+            "justification": "Described damages on the roof are more important than expected. Plus, customer is not sure if the insurance policy covers this kind of damage. The company needs to send an expert to evaluate the situation."
+        }}
+
+        ## Example 5
+        {{
+            "action": "case_closed",
+            "justification": "Customer is satisfied with the service and confirmed the repair of the car is done. The case can be closed."
+        }}
     """
 
     def default_system(self, phone_number: str) -> str:
