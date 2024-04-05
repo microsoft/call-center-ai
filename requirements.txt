@@ -30,4 +30,4 @@ redis==5.0.3
 tenacity==8.2.3
 tiktoken==0.6.0
 typing-extensions==4.10.0
-uvicorn[standard]==0.29.0
+uvicorn[standard]==0.28.0
