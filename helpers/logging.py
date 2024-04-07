@@ -1,6 +1,6 @@
 from azure.monitor.opentelemetry import configure_azure_monitor
 from helpers.config import CONFIG
-from logging import Logger, getLogger, basicConfig
+from logging import Logger, getLogger, basicConfig, StreamHandler
 from opentelemetry import trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -9,6 +9,7 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 configure_azure_monitor(
     connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
 )  # Configure Azure monitor collection
+getLogger("").addHandler(StreamHandler())  # Re-enable logging to stdout
 AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
 HTTPXClientInstrumentor().instrument()  # Instrument httpx
 
