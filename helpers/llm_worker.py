@@ -32,7 +32,15 @@ from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
 from models.message import MessageModel
 import tiktoken
 import json
+from opentelemetry.instrumentation.openai import OpenAIInstrumentor
+from os import environ
 
+
+# Instrument OpenAI
+environ["TRACELOOP_TRACE_CONTENT"] = str(
+    True
+)  # Instrumentation logs prompts, completions, and embeddings to span attributes, set to False to lower monitoring costs or to avoid logging PII
+OpenAIInstrumentor(enrich_token_usage=True).instrument()
 
 _logger = build_logger(__name__)
 _logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")

@@ -6,8 +6,8 @@ load_dotenv(find_dotenv())
 
 # Load deps
 from helpers.config_models.root import RootModel
+from os import environ
 from pydantic import ValidationError
-import os
 import yaml
 
 
@@ -23,8 +23,8 @@ class ConfigBadFormat(Exception):
     pass
 
 
-if _CONFIG_ENV in os.environ:
-    CONFIG = RootModel.model_validate_json(os.environ[_CONFIG_ENV])
+if _CONFIG_ENV in environ:
+    CONFIG = RootModel.model_validate_json(environ[_CONFIG_ENV])
     print(f'Config from env "{_CONFIG_ENV}" loaded')
 
 else:

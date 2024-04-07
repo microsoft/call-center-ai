@@ -4,8 +4,10 @@ from logging import Logger, getLogger, basicConfig, StreamHandler
 from opentelemetry import trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from os import environ
 
 
+environ["OTEL_TRACES_SAMPLER_ARG"] = str(0.5)  # Sample 50% of traces
 configure_azure_monitor(
     connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
 )  # Configure Azure monitor collection
