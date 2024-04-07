@@ -57,7 +57,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence for the customer to confirm the creation of a new claim. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info to 123 rue de la paix 75000 Paris, +33735119775, only call after 6pm'.",
+            "Phrase used to confirm the creation of a new claim. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a new claim for a car accident.', 'A new claim for a stolen watch is being created.'.",
         ],
     ) -> str:
         """
@@ -77,11 +77,11 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence for the customer to confirm the update. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call you back', 'I am creating a todo for next week to send the report'.",
+            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call you back.', 'A todo for next week is planned.'.",
         ],
         description: Annotated[
             str,
-            "Sentence for the customer to confirm the reminder. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call back the customer', 'I am creating a reminder for next week to send the report'.",
+            "Description of the reminder. Should be detailed enough to be understood by anyone. Example: 'Call back customer to get more details about the accident', 'Send analysis report to the customer'.",
         ],
         due_date_time: Annotated[
             str,
@@ -127,7 +127,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence for the customer to confirm the update. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre', 'I am updating the contact contact info your home address, 123 rue De La Paix, and your phone ending with 75'.",
+            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre.', 'The contact contact info for your home address is now, 123 rue De La Paix.'.",
         ],
         field: Annotated[
             str, f"The claim field to update: {list(ClaimModel.editable_fields())}"
@@ -171,7 +171,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Sentence for the customer to confirm the search. Describe what you're doing in one sentence. Example: 'I am searching for the document about the car accident', 'I am looking for the contract details'.",
+            "Phrase used to confirm the search. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am searching for the document about the car accident.', 'I am looking for the contract details.'.",
         ],
         queries: Annotated[
             list[str],
@@ -201,7 +201,7 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Text for the customer to confirm the action. Describe what you're doing in one sentence. Example: 'I am notifying the emergency services', 'I am notifying the police'.",
+            "Phrase used to confirm the action. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am notifying the emergency services.', 'Police number is confirmed.'.",
         ],
         reason: Annotated[
             str,
