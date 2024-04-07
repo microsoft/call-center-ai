@@ -18,7 +18,7 @@ opentelemetry-instrumentation-aiohttp-client==0.44b0
 opentelemetry-instrumentation-fastapi==0.44b0
 opentelemetry-instrumentation-httpx==0.44b0
 opentelemetry-instrumentation-redis==0.44b0
-opentelemetry-instrumentation-sqlite3==0.44b0
+opentelemetry-instrumentation-sqlite3==0.45b0
 phonenumbers==8.13.34  # Required for pydantic-extra-types
 pydantic-extra-types==2.6.0  # Required for pydantic
 pydantic-settings==2.2.1
