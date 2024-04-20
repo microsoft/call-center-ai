@@ -182,6 +182,7 @@ async def test_llm(
     _logger.info(f"full_input: {full_input}")
     _logger.info(f"actual_output: {actual_output}")
     _logger.info(f"latency: {latency_per_input}")
+    _logger.info(f"claim: {call_mock.claim}")
 
     # Test claim data
     for field in claim_tests_incl:

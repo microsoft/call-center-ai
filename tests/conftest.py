@@ -163,7 +163,7 @@ class CallConnectionClientMock(CallConnectionClient):
                 if text.strip():
                     self._play_media_callback(text.strip())
         else:
-            _logger.warning(f"play_media, ignoring: {play_source}")
+            _logger.warning("play_media, ignoring")
 
     def transfer_call_to_participant(
         self,
