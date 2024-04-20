@@ -6,7 +6,7 @@ from persistence.icache import ICache
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
-from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError
+from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError, RedisError
 from typing import AsyncGenerator, Optional, Union
 import hashlib
 
@@ -35,8 +35,11 @@ class RedisCache(ICache):
         """
         sha_key = self._key_to_hash(key)
         res = None
-        async with self._use_db() as db:
-            res = await db.get(sha_key)
+        try:
+            async with self._use_db() as db:
+                res = await db.get(sha_key)
+        except RedisError as e:
+            _logger.error(f"Error getting value, {e}")
         return res
 
     async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
@@ -48,8 +51,12 @@ class RedisCache(ICache):
         Catch errors for a maximum of 3 times, then raise the error.
         """
         sha_key = self._key_to_hash(key)
-        async with self._use_db() as db:
-            await db.set(sha_key, value if value else "")
+        try:
+            async with self._use_db() as db:
+                await db.set(sha_key, value if value else "")
+        except RedisError as e:
+            _logger.error(f"Error setting value, {e}")
+            return False
         return True
 
     @asynccontextmanager
