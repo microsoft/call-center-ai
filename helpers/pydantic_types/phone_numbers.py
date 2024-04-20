@@ -1,5 +1,5 @@
 from datetime import tzinfo
-from functools import cache
+from functools import lru_cache
 from pydantic_extra_types.phone_numbers import PhoneNumber as PydanticPhoneNumber
 from pytz import country_timezones, timezone, utc
 import phonenumbers
@@ -8,7 +8,7 @@ import phonenumbers
 class PhoneNumber(PydanticPhoneNumber):
     phone_format = "E164"  # E164 is standard accross all Microsoft services
 
-    @cache  # TODO: Is it necessary to cache this?
+    @lru_cache  # Cache results in memory as func is executed many times on the same content
     def tz(self: PydanticPhoneNumber) -> tzinfo:
         """
         Return timezone of a phone number.
