@@ -128,24 +128,27 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre.', 'The contact contact info for your home address is now, 123 rue De La Paix.'.",
+            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre and the contact contact info for your home address is now, 123 rue De La Paix.'.",
         ],
-        field: Annotated[
-            str, f"The claim field to update: {list(ClaimModel.editable_fields())}"
-        ],
-        value: Annotated[
-            str,
-            "The claim field value to update. For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58). For phone numbers, use E164 format (e.g. +33612345678).",
+        values: Annotated[
+            dict[str, str],
+            f"The claim fields to update. Available fields are {list(ClaimModel.editable_fields())}. For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58). For phone numbers, use E164 format (e.g. +33612345678). Example: {{'involved_parties': 'Marie-Jeanne and Jean-Pierre', 'contact_info': '123 rue De La Paix'}}",
         ],
     ) -> str:
         """
-        Use this if the customer wants to update a claim field with a new value. It is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now).
+        Use this if the customer wants to update multiple claim fields with new values. It is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now).
         """
         await self.user_callback(customer_response, self.style)
+        # Update all claim fields
+        res = "# Updated fields"
+        for field, value in values.items():
+            res += f"\n- {self._update_claim_field(field, value)}"
+        return res
 
+    def _update_claim_field(self, field: str, value: str) -> str:
+        # Check if field is editable
         if not field in ClaimModel.editable_fields():
             return f'Failed to update a non-editable field "{field}".'
-
         try:
             # Define the field and force to trigger validation
             copy = self.call.claim.model_dump()
