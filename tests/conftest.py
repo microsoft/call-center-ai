@@ -48,36 +48,40 @@ class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
     All calls are cached at best effort with Pytest implementation. Thread safe, can be used across processes.
     """
 
+    _langchain_kwargs: dict[str, Any]
     _cache: pytest.Cache
     _model: BaseChatModel
-    _langchain_kwargs: dict[str, Any] = {
-        # Repeatability
-        "model_kwargs": {
-            "seed": 42,
-        },
-        "temperature": 0,
-        # Reliability
-        "max_retries": 3,
-        "timeout": 60,
-        # Azure deployment
-        "api_version": "2023-12-01-preview",
-        "azure_deployment": CONFIG.openai.gpt_backup_deployment,
-        "azure_endpoint": CONFIG.openai.endpoint,
-        "model": CONFIG.openai.gpt_backup_model,
-        # Authentication, either RBAC or API
-        "api_key": CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None,  # type: ignore
-        "azure_ad_token_provider": (
-            get_bearer_token_provider(
-                DefaultAzureCredential(),
-                "https://cognitiveservices.azure.com/.default",
-            )
-            if not CONFIG.openai.api_key
-            else None
-        ),
-    }
 
     def __init__(self, cache: pytest.Cache):
+        platform = CONFIG.llm.backup.azure_openai
+        assert platform
+
         self._cache = cache
+        self._langchain_kwargs = {
+            # Repeatability
+            "model_kwargs": {
+                "seed": 42,
+            },
+            "temperature": 0,
+            # Reliability
+            "max_retries": 3,
+            "timeout": 60,
+            # Azure deployment
+            "api_version": "2023-12-01-preview",
+            "azure_deployment": platform.deployment,
+            "azure_endpoint": platform.endpoint,
+            "model": platform.model,
+            # Authentication, either RBAC or API
+            "api_key": platform.api_key.get_secret_value() if platform.api_key else None,  # type: ignore
+            "azure_ad_token_provider": (
+                get_bearer_token_provider(
+                    DefaultAzureCredential(),
+                    "https://cognitiveservices.azure.com/.default",
+                )
+                if not platform.api_key
+                else None
+            ),
+        }
         self._model = AzureChatOpenAI(**self._langchain_kwargs)
 
     def load_model(self) -> BaseChatModel:
@@ -123,9 +127,9 @@ class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
         return "Azure OpenAI"
 
     def _cache_key(self, prompt: str) -> str:
-        langchain_hash = self._model._get_llm_string(**self._langchain_kwargs)
+        langchain_config = self._model._get_llm_string(**self._langchain_kwargs)
         suffix = hashlib.sha256(
-            f"{langchain_hash}-{prompt}".encode(),
+            f"{langchain_config}-{prompt}".encode(),
             usedforsecurity=False,
         ).digest()  # Arguments contain secrets, so hash them
         return f"claim-ai/{suffix}"
