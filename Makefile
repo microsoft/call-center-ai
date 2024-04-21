@@ -16,6 +16,7 @@ agent_phone_number ?= $(shell cat config.yaml | yq '.workflow.agent_phone_number
 bot_company ?= $(shell cat config.yaml | yq '.workflow.bot_company')
 bot_name ?= $(shell cat config.yaml | yq '.workflow.bot_name')
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_number')
+event_subscription_name ?= $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
 # Bicep outputs
 app_url ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
@@ -181,7 +182,7 @@ logs-history:
 
 eventgrid-register:
 	@echo "⚙️ Deleting previous event grid subscription..."
-	az eventgrid event-subscription delete --name $(name) || true
+	az eventgrid event-subscription delete --name $(event_subscription_name) || true
 
 	@echo "⚙️ Creating event grid subscription..."
 	az eventgrid event-subscription create \
@@ -192,7 +193,7 @@ eventgrid-register:
 		--event-ttl 3 \
 		--included-event-types Microsoft.Communication.IncomingCall \
 		--max-delivery-attempts 8 \
-		--name $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-') \
+		--name $(event_subscription_name) \
 		--source-resource-id $(source)
 
 copy-resources:
