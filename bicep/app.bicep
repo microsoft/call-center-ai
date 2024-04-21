@@ -57,14 +57,27 @@ var config = {
   cognitive_service: {
     endpoint: cognitiveCommunication.properties.endpoint
   }
-  openai: {
-    endpoint: cognitiveOpenai.properties.endpoint
-    gpt_backup_context: gptBackupContext
-    gpt_backup_deployment: gptBackup.name
-    gpt_backup_model: gptBackupModel
-    gpt_context: gptContext
-    gpt_deployment: gpt.name
-    gpt_model: gptModel
+  llm: {
+    backup: {
+      mode: 'azure_openai'
+      azure_openai: {
+        context: gptBackupContext
+        deployment: gptBackup.name
+        endpoint: cognitiveOpenai.properties.endpoint
+        model: gptBackupModel
+        streaming: true
+      }
+    }
+    primary: {
+      mode: 'azure_openai'
+      azure_openai: {
+        context: gptContext
+        deployment: gpt.name
+        endpoint: cognitiveOpenai.properties.endpoint
+        model: gptModel
+        streaming: true
+      }
+    }
   }
   ai_search: {
     access_key: search.listAdminKeys().primaryKey

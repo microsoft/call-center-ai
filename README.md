@@ -269,15 +269,25 @@ cognitive_service:
   # Must be of type "AI services multi-service account"
   endpoint: https://xxx.cognitiveservices.azure.com
 
-openai:
-  api_key: xxx
-  endpoint: https://xxx.openai.azure.com
-  gpt_backup_context: 16385
-  gpt_backup_deployment: gpt-35-turbo-1106
-  gpt_backup_model: gpt-35-turbo-1106
-  gpt_context: 128000
-  gpt_deployment: gpt-4-1106-preview
-  gpt_model: gpt-4-1106-preview
+llm:
+  backup:
+    mode: azure_openai
+    azure_openai:
+      api_key: xxx
+      context: 16385
+      deployment: gpt-35-turbo-0125
+      endpoint: https://xxx.openai.azure.com
+      model: gpt-35-turbo
+      streaming: true
+  primary:
+    mode: azure_openai
+    azure_openai:
+      api_key: xxx
+      context: 128000
+      deployment: gpt-4-0125-preview
+      endpoint: https://xxx.openai.azure.com
+      model: gpt-4
+      streaming: true
 
 ai_search:
   access_key: xxx
