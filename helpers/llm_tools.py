@@ -64,13 +64,12 @@ class LlmPlugins:
         Use this if the customer wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.
         """
         await self.user_callback(customer_response, self.style)
-
+        # Launch post-call intelligence for the current call
         self.post_call_intelligence(self.call)
-
+        # Store the last message and use it at first message of the new claim
         last_message = self.call.messages[-1]
         call = CallModel(phone_number=self.call.phone_number)
         call.messages.append(last_message)
-
         return "Claim, reminders and messages reset"
 
     async def new_or_updated_reminder(
@@ -101,6 +100,7 @@ class LlmPlugins:
         """
         await self.user_callback(customer_response, self.style)
 
+        # Check if reminder already exists, if so update it
         for reminder in self.call.reminders:
             if reminder.title == title:
                 try:
@@ -111,6 +111,7 @@ class LlmPlugins:
                 except ValidationError as e:  # Catch error
                     return f'Failed to edit reminder "{title}": {e.json()}'
 
+        # Create new reminder
         try:
             reminder = ReminderModel(
                 description=description,
@@ -182,19 +183,16 @@ class LlmPlugins:
         Use this if the customer wants to search for a public specific information you don't have. Examples: contract, law, regulation, article.
         """
         await self.user_callback(customer_response, self.style)
-
         # Execute in parallel
         tasks = await asyncio.gather(
             *[_search.training_asearch_all(query, self.call) for query in queries]
         )
         # Flatten, remove duplicates, and sort by score
         trainings = sorted(set(training for task in tasks for training in task or []))
-
         # Format results
         res = "# Search results"
         for training in trainings:
             res += f"\n- {training.title}: {training.content}"
-
         return res
 
     async def notify_emergencies(
