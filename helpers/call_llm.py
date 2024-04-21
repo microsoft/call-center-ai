@@ -36,7 +36,6 @@ from openai.types.chat import ChatCompletionSystemMessageParam
 
 _logger = build_logger(__name__)
 _db = CONFIG.database.instance()
-_search = CONFIG.ai_search.instance()
 
 
 async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:

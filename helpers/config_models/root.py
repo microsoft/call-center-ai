@@ -7,7 +7,7 @@ from helpers.config_models.communication_service import CommunicationServiceMode
 from helpers.config_models.content_safety import ContentSafetyModel
 from helpers.config_models.database import DatabaseModel
 from helpers.config_models.monitoring import MonitoringModel
-from helpers.config_models.openai import OpenAiModel
+from helpers.config_models.llm import LlmModel
 from helpers.config_models.prompts import PromptsModel
 from helpers.config_models.resources import ResourcesModel
 from helpers.config_models.workflow import WorkflowModel
@@ -34,8 +34,8 @@ class RootModel(BaseSettings):
     communication_service: CommunicationServiceModel
     content_safety: ContentSafetyModel
     database: DatabaseModel = DatabaseModel()  # Object is fully defined by default
+    llm: LlmModel
     monitoring: MonitoringModel
-    openai: OpenAiModel
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel
     workflow: WorkflowModel

@@ -7,12 +7,12 @@ from azure.ai.contentsafety.models import (
 )
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from helpers.config import CONFIG
 from contextlib import asynccontextmanager
 from helpers.logging import build_logger, TRACER
-from openai import AsyncAzureOpenAI, AsyncStream, RateLimitError, APIError
+from openai import AsyncAzureOpenAI, AsyncStream, RateLimitError, APIError, AsyncOpenAI
 from openai.types.chat import (
+    ChatCompletion,
     ChatCompletionAssistantMessageParam,
     ChatCompletionChunk,
     ChatCompletionSystemMessageParam,
@@ -20,7 +20,11 @@ from openai.types.chat import (
     ChatCompletionToolParam,
     ChatCompletionUserMessageParam,
 )
-from openai.types.chat.chat_completion_chunk import ChoiceDelta
+from openai.types.chat.chat_completion_chunk import (
+    ChoiceDelta,
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
+)
 from pydantic import BaseModel, ValidationError, TypeAdapter
 from tenacity import (
     retry,
@@ -34,6 +38,8 @@ import tiktoken
 import json
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from os import environ
+from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
+from functools import lru_cache
 
 
 # Instrument OpenAI
@@ -43,7 +49,7 @@ environ["TRACELOOP_TRACE_CONTENT"] = str(
 OpenAIInstrumentor(enrich_token_usage=True).instrument()
 
 _logger = build_logger(__name__)
-_logger.info(f"Using OpenAI GPT model {CONFIG.openai.gpt_model}")
+# _logger.info(f"Using OpenAI GPT model {CONFIG.llm.gpt_model}")  # TODO: Re-enable
 _logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 
 _cache = CONFIG.cache.instance()
@@ -81,7 +87,7 @@ async def completion_stream(
     Catch errors for a maximum of 3 times (internal + `RateLimitError`), then raise the error.
     """
     # Try cache
-    cache_key = f"{__name__}-completion_stream-{is_backup}-{system}-{tools}-{messages}-{max_tokens}"
+    cache_key = f"{__name__}-completion_stream-{_llm_key(is_backup)}-{system}-{tools}-{messages}-{max_tokens}"
     cached = await _cache.aget(cache_key)
     if cached:
         for chunck in TypeAdapter(list[ChoiceDelta]).validate_json(cached):
@@ -90,35 +96,64 @@ async def completion_stream(
 
     # Try live
     to_cache: list[ChoiceDelta] = []
-    async with _use_oai(is_backup) as (client, model, context):
+    async with _use_llm(is_backup) as (client, platform):
         extra = {}
         if tools:
-            extra["tools"] = tools
+            extra["tools"] = tools  # Add tools if any
 
-        prompt = _prepare_messages(
-            context=context,
+        prompt = _limit_messages(
+            context=platform.context,
             max_messages=20,  # Quick response
             messages=messages,
-            model=model,
+            model=platform.model,
             system=system,
             tools=tools,
-        )
-
-        stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
-            max_tokens=max_tokens,
-            messages=prompt,
-            model=model,
-            seed=42,  # Reproducible results
-            stream=True,
-            temperature=0,  # Most focused and deterministic
+        )  # Limit to 20 messages for quick response and avoid hallucinations
+        chat_kwargs = {
+            "max_tokens": max_tokens,
+            "messages": prompt,
+            "model": platform.model,
+            "seed": 42,  # Reproducible results
+            "temperature": 0,  # Most focused and deterministic
             **extra,
-        )
-        async for chunck in stream:
-            choices = chunck.choices
-            if choices:  # Skip empty chunks, happens with GPT-4 Turbo
+        }  # Shared kwargs for both streaming and non-streaming
+
+        if platform.streaming:  # Streaming
+            stream: AsyncStream[ChatCompletionChunk] = (
+                await client.chat.completions.create(
+                    **chat_kwargs,
+                    stream=True,
+                )
+            )
+            async for chunck in stream:
+                choices = chunck.choices
                 delta = choices[0].delta
                 yield delta
                 to_cache.append(delta)
+
+        else:  # Non-streaming, emulate streaming with a single completion
+            completion: ChatCompletion = await client.chat.completions.create(
+                **chat_kwargs
+            )
+            message = completion.choices[0].message
+            delta = ChoiceDelta(
+                content=message.content,
+                role=message.role,
+                tool_calls=[
+                    ChoiceDeltaToolCall(
+                        id=tool.id,
+                        index=0,
+                        type=tool.type,
+                        function=ChoiceDeltaToolCallFunction(
+                            arguments=tool.function.arguments,
+                            name=tool.function.name,
+                        ),
+                    )
+                    for tool in message.tool_calls or []
+                ],
+            )
+            yield delta
+            to_cache.append(delta)
 
     # Update cache
     await _cache.aset(cache_key, TypeAdapter(list[ChoiceDelta]).dump_json(to_cache))
@@ -154,22 +189,22 @@ async def completion_sync(
 
     # Try live
     content = None
-    async with _use_oai(False) as (client, model, context):
+    async with _use_llm(False) as (client, platform):
         extra = {}
         if json_output:
             extra["response_format"] = {"type": "json_object"}
 
-        prompt = _prepare_messages(
-            context=context,
+        prompt = _limit_messages(
+            context=platform.context,
             messages=messages,
-            model=model,
+            model=platform.model,
             system=system,
         )
 
         res = await client.chat.completions.create(
             max_tokens=max_tokens,
             messages=prompt,
-            model=model,
+            model=platform.model,
             seed=42,  # Reproducible results
             temperature=0,  # Most focused and deterministic
             **extra,
@@ -216,7 +251,7 @@ async def completion_model_sync(
     return model.model_validate_json(res)
 
 
-def _prepare_messages(
+def _limit_messages(
     context: int,
     messages: list[MessageModel],
     model: str,
@@ -231,6 +266,11 @@ def _prepare_messages(
         ChatCompletionUserMessageParam,
     ]
 ]:
+    """
+    Returns a list of messages limited by the context size.
+
+    The context size is the maximum number of tokens allowed by the model. The messages are selected from the newest to the oldest, until the context or the maximum number of messages is reached.
+    """
     counter = 0
     selected_messages = []
     tokens = 0
@@ -238,17 +278,17 @@ def _prepare_messages(
 
     # Add system messages
     for message in system:
-        tokens += count_tokens(json.dumps(message), model)
+        tokens += _count_tokens(json.dumps(message), model)
         counter += 1
 
     # Add tools
     for tool in tools or []:
-        tokens += count_tokens(json.dumps(tool), model)
+        tokens += _count_tokens(json.dumps(tool), model)
 
     # Add user messages until the context is reached, from the newest to the oldest
     for message in messages[::-1]:
         openai_message = message.to_openai()
-        new_tokens = count_tokens(
+        new_tokens = _count_tokens(
             "".join([json.dumps(x) for x in openai_message]), model
         )
         if tokens + new_tokens >= context:
@@ -328,6 +368,11 @@ async def safety_check(text: str) -> None:
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
 async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
+    """
+    Returns the result of the content safety analysis.
+
+    Catch errors for a maximum of 3 times (internal + `HttpResponseError`), then raise the error.
+    """
     async with _use_contentsafety() as client:
         return await client.analyze_text(
             AnalyzeTextOptions(
@@ -358,54 +403,46 @@ def _contentsafety_category_test(
     return True
 
 
-def count_tokens(content: str, model: str) -> int:
-    enc = tiktoken.encoding_for_model(model)
-    return len(enc.encode(content))
+@lru_cache  # Cache results in memory as token count is done many times on the same content
+def _count_tokens(content: str, model: str) -> int:
+    """
+    Returns the number of tokens in the content, using the model's encoding.
+
+    If the model is unknown to TikToken, it uses the GPT-3.5 encoding.
+    """
+    try:
+        encoding_name = tiktoken.encoding_name_for_model(model)
+    except KeyError:
+        encoding_name = tiktoken.encoding_name_for_model("gpt-3.5")
+        _logger.warning(f"Unknown model {model}, using {encoding_name} encoding")
+    return len(tiktoken.get_encoding(encoding_name).encode(content))
+
+
+def _llm_key(is_backup: bool) -> str:
+    platform = CONFIG.llm.selected(is_backup)
+    return f"{platform.model}-{platform.context}"
 
 
 @asynccontextmanager
-async def _use_oai(
+async def _use_llm(
     is_backup: bool,
-) -> AsyncGenerator[Tuple[AsyncAzureOpenAI, str, int], None]:
-    deployment = (
-        CONFIG.openai.gpt_deployment
-        if not is_backup
-        else CONFIG.openai.gpt_backup_deployment
-    )
-    model = CONFIG.openai.gpt_model if not is_backup else CONFIG.openai.gpt_backup_model
-    context = (
-        CONFIG.openai.gpt_context if not is_backup else CONFIG.openai.gpt_backup_context
-    )
-    key = CONFIG.openai.api_key.get_secret_value() if CONFIG.openai.api_key else None
-    token_func = (
-        get_bearer_token_provider(
-            DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
-        )
-        if not CONFIG.openai.api_key
-        else None
-    )
+) -> AsyncGenerator[
+    Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel], None
+]:
+    """
+    Returns an LLM client and platform model.
 
-    client = AsyncAzureOpenAI(
-        # Reliability
-        max_retries=3,
-        timeout=60,
-        # Azure deployment
-        api_version="2023-12-01-preview",
-        azure_deployment=deployment,
-        azure_endpoint=CONFIG.openai.endpoint,
-        # Authentication, either RBAC or API key
-        api_key=key,
-        azure_ad_token_provider=token_func,
-    )
-
-    try:
-        yield client, model, context
-    finally:
-        await client.close()
+    The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
+    """
+    async with CONFIG.llm.selected(is_backup).instance() as (client, platform):
+        yield client, platform
 
 
 @asynccontextmanager
 async def _use_contentsafety() -> AsyncGenerator[ContentSafetyClient, None]:
+    """
+    Returns a Content Safety client.
+    """
     client = ContentSafetyClient(
         # Azure deployment
         endpoint=CONFIG.content_safety.endpoint,
