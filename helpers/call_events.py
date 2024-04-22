@@ -27,16 +27,12 @@ from helpers.call_utils import (
 )
 from fastapi import BackgroundTasks
 import asyncio
-from azure.communication.sms import SmsClient
 from models.next import NextModel
 from helpers.call_llm import llm_completion, llm_model, load_llm_chat
 
 
 _logger = build_logger(__name__)
-_sms_client = SmsClient(
-    credential=CONFIG.communication_service.access_key.get_secret_value(),
-    endpoint=CONFIG.communication_service.endpoint,
-)
+_sms = CONFIG.sms.instance()
 _db = CONFIG.database.instance()
 
 
@@ -320,37 +316,21 @@ async def _post_call_sms(call: CallModel) -> None:
         return
 
     _logger.info(f"SMS report: {content}")
-    try:
-        responses = _sms_client.send(
-            from_=str(CONFIG.communication_service.phone_number),
-            message=content,
-            to=call.phone_number,
-        )
-        response = responses[0]
+    success = await _sms.asend(content, call.phone_number)
 
-        if response.successful:
-            _logger.debug(f"SMS report sent {response.message_id} to {response.to}")
-            call.messages.append(
-                MessageModel(
-                    action=MessageActionEnum.SMS,
-                    content=content,
-                    persona=MessagePersonaEnum.ASSISTANT,
-                )
-            )
-            await _db.call_aset(call)
-        else:
-            _logger.warning(
-                f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message}"
-            )
+    if not success:
+        _logger.warning("Failed sending SMS report")
+        return
 
-    except ClientAuthenticationError:
-        _logger.error(
-            "Authentication error for SMS, check the credentials", exc_info=True
+    # Store the SMS in the call messages
+    call.messages.append(
+        MessageModel(
+            action=MessageActionEnum.SMS,
+            content=content,
+            persona=MessagePersonaEnum.ASSISTANT,
         )
-    except HttpResponseError as e:
-        _logger.error(f"Error sending SMS: {e}")
-    except Exception:
-        _logger.warning(f"Failed SMS to {call.phone_number}", exc_info=True)
+    )
+    await _db.call_aset(call)
 
 
 async def _post_call_synthesis(call: CallModel) -> None:

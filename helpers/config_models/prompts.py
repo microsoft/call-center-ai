@@ -154,6 +154,18 @@ class LlmModel(BaseModel):
 
         # Conversation history
         {messages}
+
+        # Response format
+        Hello, I understand [customer's situation]. I confirm [next steps]. [Salutation]. {bot_name} from {bot_company}.
+
+        ## Example 1
+        Hello, I understand you had a car accident in Paris yesterday. I confirm the appointment with the garage is planned for tomorrow. Have a nice day! {bot_name} from {bot_company}.
+
+        ## Example 2
+        Hello, I understand your roof has holes since yesterday's big storm. I confirm the appointment with the roofer is planned for tomorrow. Best wishes for recovery! {bot_name} from {bot_company}.
+
+        ## Example 3
+        Hello, I had difficulties to hear you. If you need help, let me know how I can help you. Have a nice day! {bot_name} from {bot_company}.
     """
     synthesis_short_system_tpl: str = """
         # Objective
@@ -345,8 +357,12 @@ class LlmModel(BaseModel):
         )
 
     def sms_summary_system(self, call: CallModel) -> str:
+        from helpers.config import CONFIG
+
         return self._return(
             self.sms_summary_system_tpl,
+            bot_company=CONFIG.workflow.bot_company,
+            bot_name=CONFIG.workflow.bot_name,
             claim=call.claim.model_dump_json(),
             default_lang=call.lang.human_name,
             messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),

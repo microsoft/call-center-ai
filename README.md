@@ -223,6 +223,8 @@ workflow:
 communication_service:
   phone_number: "+33612345678"
 
+sms: {}
+
 prompts:
   llm: {}
   tts: {}
@@ -493,3 +495,26 @@ class ClaimModel(BaseModel):
 
     # Built-in functions
     [...]
+```
+
+### Use Twilio for SMS
+
+To use Twilio for SMS, you need to create an account and get the following information:
+
+- Account SID
+- Auth Token
+- Phone number
+
+Then, add the following in the `config.yaml` file:
+
+```yaml
+# config.yaml
+[...]
+
+sms:
+  mode: twilio
+  twilio:
+    account_sid: xxx
+    auth_token: xxx
+    phone_number: "+33612345678"
+```

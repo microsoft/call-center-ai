@@ -10,6 +10,7 @@ from helpers.config_models.llm import LlmModel
 from helpers.config_models.monitoring import MonitoringModel
 from helpers.config_models.prompts import PromptsModel
 from helpers.config_models.resources import ResourcesModel
+from helpers.config_models.sms import SmsModel
 from helpers.config_models.workflow import WorkflowModel
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,4 +39,5 @@ class RootModel(BaseSettings):
     monitoring: MonitoringModel
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel
+    sms: SmsModel = SmsModel()  # Object is fully defined by default
     workflow: WorkflowModel
