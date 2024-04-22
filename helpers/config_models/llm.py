@@ -76,7 +76,7 @@ class OpenaiPlatformModel(AbstractPlatformModel, frozen=True):
             await client.close()
 
 
-class SelectedPlatformModel(BaseModel, frozen=True):
+class SelectedPlatformModel(BaseModel):
     azure_openai: Optional[AzureOpenaiPlatformModel] = None
     mode: ModeEnum
     openai: Optional[OpenaiPlatformModel] = None

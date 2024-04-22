@@ -6,8 +6,8 @@ from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_service import CommunicationServiceModel
 from helpers.config_models.content_safety import ContentSafetyModel
 from helpers.config_models.database import DatabaseModel
-from helpers.config_models.monitoring import MonitoringModel
 from helpers.config_models.llm import LlmModel
+from helpers.config_models.monitoring import MonitoringModel
 from helpers.config_models.prompts import PromptsModel
 from helpers.config_models.resources import ResourcesModel
 from helpers.config_models.workflow import WorkflowModel
