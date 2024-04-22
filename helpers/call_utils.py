@@ -23,6 +23,7 @@ import re
 
 _logger = build_logger(__name__)
 _SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"
+_TTS_SANITIZER_R = re.compile(r"[^\w\s,.!?;\-_@/]")  # Sanitize text for TTS
 
 
 class ContextEnum(str, Enum):
@@ -139,6 +140,10 @@ async def handle_play(
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
     """
+    # Sanitize text for TTS
+    text = re.sub(_TTS_SANITIZER_R, "", text)
+
+    # Store text in call messages
     if store:
         if (
             call.messages and call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
