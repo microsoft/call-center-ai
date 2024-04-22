@@ -22,14 +22,20 @@ import re
 
 
 _logger = build_logger(__name__)
-_SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"
+_SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"  # Split by sentence by punctuation
 _TTS_SANITIZER_R = re.compile(r"[^\w\s,.!?;\-_@/]")  # Sanitize text for TTS
 
 
 class ContextEnum(str, Enum):
-    CONNECT_AGENT = "connect_agent"
-    GOODBYE = "goodbye"
-    TRANSFER_FAILED = "transfer_failed"
+    """
+    Enum for call context.
+
+    Used to track the operation context of a call in Azure Communication Services.
+    """
+
+    CONNECT_AGENT = "connect_agent"  # Transfer to agent
+    GOODBYE = "goodbye"  # Hang up
+    TRANSFER_FAILED = "transfer_failed"  # Transfer failed
 
 
 def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, None]:
@@ -83,6 +89,11 @@ async def handle_media(
     sound_url: str,
     context: Optional[str] = None,
 ) -> None:
+    """
+    Play a media to a call participant.
+
+    If `context` is provided, it will be used to track the operation.
+    """
     try:
         client.play_media(
             operation_context=context,
@@ -169,6 +180,7 @@ async def handle_play(
     if chunk:
         chunks.append(chunk)
 
+    # Play each chunk
     try:
         for chunk in chunks:
             _logger.info(f"Playing text: {text} ({style})")
@@ -216,6 +228,11 @@ async def handle_recognize_ivr(
     text: str,
     choices: list[RecognitionChoice],
 ) -> None:
+    """
+    Recognize an IVR response after playing a text.
+
+    Starts by playing text, then starts recognizing the response. The recognition will be interrupted by the user if they start speaking. The recognition will be played in the call language.
+    """
     _logger.info(f"Playing text before IVR: {text}")
     _logger.debug(f"Recognizing IVR")
     try:
