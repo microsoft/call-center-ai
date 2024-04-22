@@ -223,6 +223,8 @@ workflow:
 communication_service:
   phone_number: "+33612345678"
 
+sms: {}
+
 prompts:
   llm: {}
   tts: {}
@@ -493,3 +495,61 @@ class ClaimModel(BaseModel):
 
     # Built-in functions
     [...]
+```
+
+### Use an OpenAI compatible model for the LLM
+
+To use a model compatible with the OpenAI completion API, you need to create an account and get the following information:
+
+- API key
+- Context window size
+- Endpoint URL
+- Model name
+- Streaming capability
+
+Then, add the following in the `config.yaml` file:
+
+```yaml
+# config.yaml
+[...]
+
+llm:
+  backup:
+    mode: openai
+    openai:
+      api_key: xxx
+      context: 16385
+      endpoint: https://api.openai.com
+      model: gpt-35-turbo
+      streaming: true
+  primary:
+    mode: openai
+    openai:
+      api_key: xxx
+      context: 128000
+      endpoint: https://api.openai.com
+      model: gpt-4
+      streaming: true
+```
+
+### Use Twilio for SMS
+
+To use Twilio for SMS, you need to create an account and get the following information:
+
+- Account SID
+- Auth Token
+- Phone number
+
+Then, add the following in the `config.yaml` file:
+
+```yaml
+# config.yaml
+[...]
+
+sms:
+  mode: twilio
+  twilio:
+    account_sid: xxx
+    auth_token: xxx
+    phone_number: "+33612345678"
+```

@@ -54,6 +54,7 @@ var config = {
     endpoint: communication.properties.hostName
     phone_number: botPhoneNumber
   }
+  sms: loadYamlContent('../config.yaml').sms
   cognitive_service: {
     endpoint: cognitiveCommunication.properties.endpoint
   }
