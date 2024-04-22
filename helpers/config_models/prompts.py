@@ -317,7 +317,9 @@ class LlmModel(BaseModel):
                 bot_phone_number=CONFIG.communication_service.phone_number,
                 date=datetime.now(UTC)
                 .astimezone()
-                .strftime("%Y-%m-%d %H:%M %Z%z"),  # Example 2024-02-01 18:58 CET+0100
+                .strftime(
+                    "%Y-%m-%d %H:%M"
+                ),  # Don't include seconds to enhance cache during unit tests. Example: "2024-02-01 18:58".
                 phone_number=phone_number,
             )
         )
