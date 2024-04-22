@@ -6,12 +6,12 @@ from helpers.config import CONFIG
 from helpers.logging import build_logger
 from models.call import CallModel
 from models.message import (
+    extract_message_style,
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
+    remove_message_action,
     StyleEnum as MessageStyleEnum,
     ToolModel as MessageToolModel,
-    extract_message_style,
-    remove_message_action,
 )
 from helpers.call_utils import (
     handle_media,
@@ -406,7 +406,7 @@ async def _execute_llm_chat(
     # Convert tool calls buffer
     tool_calls = [tool_call for _, tool_call in tool_calls_buffer.items()]
 
-    # Get data from full content to be able to store it in the DB
+    # Delete action and style from the message as they are in the history and LLM hallucinates them
     _, content_full = extract_message_style(remove_message_action(content_full))
 
     _logger.debug(f"Chat response: {content_full}")

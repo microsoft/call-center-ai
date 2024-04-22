@@ -16,8 +16,10 @@ from models.synthesis import SynthesisModel
 from models.call import CallModel
 from models.message import (
     ActionEnum as MessageActionEnum,
+    extract_message_style,
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
+    remove_message_action,
 )
 from helpers.call_utils import (
     ContextEnum as CallContextEnum,
@@ -310,6 +312,9 @@ async def _post_call_sms(call: CallModel) -> None:
         text=CONFIG.prompts.llm.sms_summary_system(call),
         call=call,
     )
+
+    # Delete action and style from the message as they are in the history and LLM hallucinates them
+    _, content = extract_message_style(remove_message_action(content or ""))
 
     if not content:
         _logger.warning("Error generating SMS report")
