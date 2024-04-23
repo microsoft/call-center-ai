@@ -1,10 +1,16 @@
 from abc import ABC, abstractmethod
 from models.call import CallModel
+from models.readiness import ReadinessStatus
 from typing import Optional
 from uuid import UUID
 
 
 class IStore(ABC):
+
+    @abstractmethod
+    async def areadiness(self) -> ReadinessStatus:
+        pass
+
     @abstractmethod
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         pass

@@ -7,10 +7,11 @@ from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
 from helpers.logging import build_logger
 from models.call import CallModel
+from models.readiness import ReadinessStatus
 from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -28,6 +29,55 @@ class CosmosDbStore(IStore):
     def __init__(self, config: CosmosDbModel):
         _logger.info(f"Using Cosmos DB {config.database}/{config.container}")
         self._config = config
+
+    async def areadiness(self) -> ReadinessStatus:
+        """
+        Check the readiness of the Cosmos DB service.
+
+        This will validate the ACID properties of the database: Create, Read, Update, Delete.
+        """
+        test_id = str(uuid4())
+        test_partition = "+33612345678"
+        test_dict = {
+            "id": test_id,  # unique id
+            "phone_number": test_partition,  # partition key
+            "test": "test",
+        }
+        try:
+            async with self._use_db() as db:
+                # Test the item does not exist
+                try:
+                    await db.read_item(item=test_id, partition_key=test_partition)
+                    return ReadinessStatus.FAIL
+                except CosmosHttpResponseError as e:
+                    if e.status_code != 404:
+                        _logger.error(f"Error requesting CosmosDB, {e}")
+                        return ReadinessStatus.FAIL
+                # Create a new item
+                await db.upsert_item(body=test_dict)
+                # Test the item is the same
+                read_item = await db.read_item(
+                    item=test_id, partition_key=test_partition
+                )
+                assert {
+                    k: v for k, v in read_item.items() if k in test_dict
+                } == test_dict  # Check only the relevant fields, Cosmos DB adds metadata
+                # Delete the item
+                await db.delete_item(item=test_id, partition_key=test_partition)
+                # Test the item does not exist
+                try:
+                    await db.read_item(item=test_id, partition_key=test_partition)
+                    return ReadinessStatus.FAIL
+                except CosmosHttpResponseError as e:
+                    if e.status_code != 404:
+                        _logger.error(f"Error requesting CosmosDB, {e}")
+                        return ReadinessStatus.FAIL
+            return ReadinessStatus.OK
+        except AssertionError:
+            _logger.error("Readiness test failed", exc_info=True)
+        except CosmosHttpResponseError as e:
+            _logger.error(f"Error requesting CosmosDB, {e}")
+        return ReadinessStatus.FAIL
 
     @retry(
         reraise=True,

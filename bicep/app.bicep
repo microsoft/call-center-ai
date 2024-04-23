@@ -192,9 +192,22 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           }
           probes: [
             {
+              type: 'Startup'
+              tcpSocket: {
+                port: 8080
+              }
+            }
+            {
               type: 'Liveness'
               httpGet: {
                 path: '/health/liveness'
+                port: 8080
+              }
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health/readiness'
                 port: 8080
               }
             }

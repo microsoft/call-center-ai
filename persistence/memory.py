@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from helpers.config_models.cache import MemoryModel
 from helpers.logging import build_logger
+from models.readiness import ReadinessStatus
 from persistence.icache import ICache
 from typing import Optional, Union
 import hashlib
@@ -24,6 +25,12 @@ class MemoryCache(ICache):
     def __init__(self, config: MemoryModel):
         _logger.info(f"Using memory cache with {config.max_size} size limit")
         self._config = config
+
+    async def areadiness(self) -> ReadinessStatus:
+        """
+        Check the readiness of the memory cache.
+        """
+        return ReadinessStatus.OK  # Always ready, it's memory :)
 
     async def aget(self, key: str) -> Optional[bytes]:
         """

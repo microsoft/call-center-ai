@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.logging import build_logger
 from models.call import CallModel
+from models.readiness import ReadinessStatus
 from models.training import TrainingModel
 from persistence.icache import ICache
 from persistence.isearch import ISearch
@@ -37,6 +38,20 @@ class AiSearchSearch(ISearch):
         )
         self._config = config
         super().__init__(cache)
+
+    async def areadiness(self) -> ReadinessStatus:
+        """
+        Check the readiness of the AI Search service.
+        """
+        try:
+            async with self._use_db() as db:
+                await db.get_document_count()
+            return ReadinessStatus.OK
+        except HttpResponseError as e:
+            _logger.error(f"Error requesting AI Search, {e}")
+        except ServiceRequestError as e:
+            _logger.error(f"Error connecting to AI Search, {e}")
+        return ReadinessStatus.FAIL
 
     @retry(
         reraise=True,

@@ -21,6 +21,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -44,6 +45,7 @@ from helpers.call_events import (
     on_transfer_error,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
 
 
 # Jinja configuration
@@ -67,8 +69,11 @@ _call_client = CallAutomationClient(
     ),
 )
 
-# Persistence
+# Persistences
+_cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
+_search = CONFIG.ai_search.instance()
+_sms = CONFIG.sms.instance()
 
 # FastAPI
 _logger.info(f'Using root path "{CONFIG.api.root_path}"')
@@ -104,6 +109,38 @@ _logger.info(f"Using call event URL {_CALL_EVENT_URL}")
 )
 async def health_liveness_get() -> None:
     pass
+
+
+@api.get(
+    "/health/readiness",
+    description="Readiness healthckeck, returns the status of all components, and fails if one of them is not ready. If all components are ready, returns 200, otherwise 503.",
+)
+async def health_readiness_get() -> JSONResponse:
+    # Check all components in parallel
+    cache_check, db_check, search_check, sms_check = await asyncio.gather(
+        _cache.areadiness(), _db.areadiness(), _search.areadiness(), _sms.areadiness()
+    )
+    readiness = ReadinessModel(
+        status=ReadinessStatus.OK,
+        checks=[
+            ReadinessCheckModel(id="cache", status=cache_check),
+            ReadinessCheckModel(id="index", status=db_check),
+            ReadinessCheckModel(id="startup", status=ReadinessStatus.OK),
+            ReadinessCheckModel(id="store", status=search_check),
+            ReadinessCheckModel(id="stream", status=sms_check),
+        ],
+    )
+    # If one of the checks fails, the whole readiness fails
+    status_code = status.HTTP_200_OK
+    for check in readiness.checks:
+        if check.status != ReadinessStatus.OK:
+            readiness.status = ReadinessStatus.FAIL
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            break
+    return JSONResponse(
+        content=jsonable_encoder(readiness),
+        status_code=status_code,
+    )
 
 
 # Serve static files
