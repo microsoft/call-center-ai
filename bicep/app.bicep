@@ -203,6 +203,8 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
                 path: '/health/liveness'
                 port: 8080
               }
+              periodSeconds: 10  // 2x the timeout
+              timeoutSeconds: 5  // Fast to check if the app is running
             }
             {
               type: 'Readiness'
@@ -210,6 +212,8 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
                 path: '/health/readiness'
                 port: 8080
               }
+              periodSeconds: 20  // 2x the timeout
+              timeoutSeconds: 10  // Database can take a while to be ready, query is necessary but expensive to run
             }
           ]
         }
