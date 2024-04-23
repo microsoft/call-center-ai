@@ -44,15 +44,10 @@ class CosmosDbStore(IStore):
             "test": "test",
         }
         try:
+            # Test the item does not exist
+            if await self._item_exists(test_id, test_partition):
+                return ReadinessStatus.FAIL
             async with self._use_db() as db:
-                # Test the item does not exist
-                try:
-                    await db.read_item(item=test_id, partition_key=test_partition)
-                    return ReadinessStatus.FAIL
-                except CosmosHttpResponseError as e:
-                    if e.status_code != 404:
-                        _logger.error(f"Error requesting CosmosDB, {e}")
-                        return ReadinessStatus.FAIL
                 # Create a new item
                 await db.upsert_item(body=test_dict)
                 # Test the item is the same
@@ -64,20 +59,27 @@ class CosmosDbStore(IStore):
                 } == test_dict  # Check only the relevant fields, Cosmos DB adds metadata
                 # Delete the item
                 await db.delete_item(item=test_id, partition_key=test_partition)
-                # Test the item does not exist
-                try:
-                    await db.read_item(item=test_id, partition_key=test_partition)
-                    return ReadinessStatus.FAIL
-                except CosmosHttpResponseError as e:
-                    if e.status_code != 404:
-                        _logger.error(f"Error requesting CosmosDB, {e}")
-                        return ReadinessStatus.FAIL
+            # Test the item does not exist
+            if await self._item_exists(test_id, test_partition):
+                return ReadinessStatus.FAIL
             return ReadinessStatus.OK
         except AssertionError:
             _logger.error("Readiness test failed", exc_info=True)
         except CosmosHttpResponseError as e:
             _logger.error(f"Error requesting CosmosDB, {e}")
         return ReadinessStatus.FAIL
+
+    async def _item_exists(self, test_id: str, partition_key: str) -> bool:
+        exist = False
+        async with self._use_db() as db:
+            try:
+                await db.read_item(item=test_id, partition_key=partition_key)
+                exist = True
+            except CosmosHttpResponseError as e:
+                if e.status_code != 404:
+                    _logger.error(f"Error requesting CosmosDB, {e}")
+                    exist = True
+        return exist
 
     @retry(
         reraise=True,
