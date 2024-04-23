@@ -5,6 +5,7 @@ from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
 from helpers.logging import build_logger
 from models.call import CallModel
+from models.readiness import ReadinessStatus
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from persistence.istore import IStore
 from pydantic import ValidationError
@@ -28,6 +29,20 @@ class SqliteStore(IStore):
             f"Using SQLite database at {config.path} with table {config.table}"
         )
         self._config = config
+
+    async def areadiness(self) -> ReadinessStatus:
+        """
+        Check the readiness of the SQLite database.
+
+        This checks if the database is reachable and can be queried.
+        """
+        try:
+            async with self._use_db() as db:
+                await db.execute("SELECT 1")
+            return ReadinessStatus.OK
+        except Exception as e:
+            _logger.error(f"Error requesting SQLite, {e}")
+        return ReadinessStatus.FAIL
 
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from helpers.config_models.communication_service import CommunicationServiceModel
 from helpers.logging import build_logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
+from models.readiness import ReadinessStatus
 from persistence.isms import ISms
 from typing import AsyncGenerator
 
@@ -18,6 +19,13 @@ class CommunicationServicesSms(ISms):
     def __init__(self, config: CommunicationServiceModel):
         _logger.info(f"Using Communication Services from number {config.phone_number}")
         self._config = config
+
+    async def areadiness(self) -> ReadinessStatus:
+        """
+        Check the readiness of the Communication Services SMS service.
+        """
+        # TODO: How to check the readiness of the SMS service? We could send a SMS for each test, but that would be damm expensive.
+        return ReadinessStatus.OK
 
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
         _logger.info(f"Sending SMS to {phone_number}")

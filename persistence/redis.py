@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from helpers.config_models.cache import RedisModel
 from helpers.logging import build_logger
+from models.readiness import ReadinessStatus
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from persistence.icache import ICache
 from redis.asyncio import Redis
@@ -8,6 +9,7 @@ from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
 from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError, RedisError
 from typing import AsyncGenerator, Optional, Union
+from uuid import uuid4
 import hashlib
 
 
@@ -24,6 +26,33 @@ class RedisCache(ICache):
     def __init__(self, config: RedisModel):
         _logger.info(f"Using Redis cache {config.host}:{config.port}")
         self._config = config
+
+    async def areadiness(self) -> ReadinessStatus:
+        """
+        Check the readiness of the Redis cache.
+
+        This will validate the ACID properties of the database: Create, Read, Update, Delete.
+        """
+        test_name = str(uuid4())
+        test_value = "test"
+        try:
+            async with self._use_db() as db:
+                # Test the item does not exist
+                assert await db.get(test_name) is None
+                # Create a new item
+                await db.set(test_name, test_value)
+                # Test the item is the same
+                assert (await db.get(test_name)).decode() == test_value
+                # Delete the item
+                await db.delete(test_name)
+                # Test the item does not exist
+                assert await db.get(test_name) is None
+            return ReadinessStatus.OK
+        except AssertionError as e:
+            _logger.error(f"Readiness test failed, {e}")
+        except RedisError as e:
+            _logger.error(f"Error requesting Redis, {e}")
+        return ReadinessStatus.FAIL
 
     async def aget(self, key: str) -> Optional[bytes]:
         """

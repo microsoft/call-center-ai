@@ -1,6 +1,7 @@
 from helpers.config_models.sms import TwilioModel
 from helpers.logging import build_logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
+from models.readiness import ReadinessStatus
 from persistence.isms import ISms
 from twilio.base.exceptions import TwilioRestException
 from twilio.http.async_http_client import AsyncTwilioHttpClient
@@ -22,6 +23,22 @@ class TwilioSms(ISms):
             password=config.auth_token.get_secret_value(),
             username=config.account_sid,
         )
+
+    async def areadiness(self) -> ReadinessStatus:
+        """
+        Check the readiness of the Twilio SMS service.
+
+        This only check if the Twilio API is reachable and the account has remaining balance.
+        """
+        account_sid = self._config.account_sid
+        try:
+            account = await self._client.api.accounts(account_sid).fetch_async()
+            balance = await account.balance.fetch_async()
+            assert balance.balance and float(balance.balance) > 0
+            return ReadinessStatus.OK
+        except AssertionError:
+            _logger.error("Readiness test failed", exc_info=True)
+        return ReadinessStatus.FAIL
 
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
         _logger.info(f"Sending SMS to {phone_number}")
