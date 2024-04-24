@@ -319,23 +319,29 @@ async def _post_call_sms(call: CallModel) -> None:
     if not content:
         _logger.warning("Error generating SMS report")
         return
-
     _logger.info(f"SMS report: {content}")
-    success = await _sms.asend(content, call.phone_number)
 
-    if not success:
-        _logger.warning("Failed sending SMS report")
-        return
+    # Send the SMS to both the current caller and the policyholder
+    success = False
+    for number in set([call.phone_number, call.claim.policyholder_phone]):
+        if not number:
+            continue
+        res = await _sms.asend(content, number)
+        if not res:
+            _logger.warning(f"Failed sending SMS report to {number}")
+            continue
+        success = True
 
-    # Store the SMS in the call messages
-    call.messages.append(
-        MessageModel(
-            action=MessageActionEnum.SMS,
-            content=content,
-            persona=MessagePersonaEnum.ASSISTANT,
+    if success:
+        # Store the SMS in the call messages
+        call.messages.append(
+            MessageModel(
+                action=MessageActionEnum.SMS,
+                content=content,
+                persona=MessagePersonaEnum.ASSISTANT,
+            )
         )
-    )
-    await _db.call_aset(call)
+        await _db.call_aset(call)
 
 
 async def _post_call_synthesis(call: CallModel) -> None:
