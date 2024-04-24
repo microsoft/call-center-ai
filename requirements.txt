@@ -33,4 +33,4 @@ tenacity==8.2.3
 tiktoken==0.6.0
 twilio==9.0.5
 typing-extensions==4.11.0
-uvicorn[standard]==0.28.0  # Required for Gunicorn
+uvicorn[standard]==0.29.0  # Required for Gunicorn
