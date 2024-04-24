@@ -14,7 +14,7 @@ class ModeEnum(str, Enum):
 class AbstractPlatformModel(BaseModel, frozen=True):
     _client_kwargs: dict[str, Any] = {
         # Reliability
-        "max_retries": 3,
+        "max_retries": 0,  # Retries are managed manually
         "timeout": 60,
     }
     context: int
