@@ -65,7 +65,7 @@ test:
 	@echo "➡️ Running deptry..."
 	python3 -m deptry \
 		--ignore-notebooks \
-		--per-rule-ignores "DEP002=aiohttp|uvicorn" \
+		--per-rule-ignores "DEP002=aiohttp|gunicorn" \
 		.
 
 	@echo "➡️ Running Pytest..."
@@ -94,15 +94,13 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) API__EVENTS_DOMAIN=$(tunnel_url) python3 -m uvicorn main:api \
-		--header x-version:$${VERSION} \
-		--no-server-header \
-		--port 8080 \
-		--proxy-headers \
+	VERSION=$(version_full) API__EVENTS_DOMAIN=$(tunnel_url) python3 -m gunicorn main:api \
+		--bind 0.0.0.0:8080 \
+		--proxy-protocol \
 		--reload \
-		--reload-include .env \
-		--reload-include config.yaml \
-		--timeout-keep-alive 60
+		--reload-extra-file .env \
+		--reload-extra-file config.yaml \
+		--worker-class uvicorn.workers.UvicornWorker
 
 build:
 	$(docker) build \

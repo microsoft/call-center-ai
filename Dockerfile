@@ -42,4 +42,4 @@ COPY --chown=appuser:appuser . /app
 
 WORKDIR /app
 
-CMD ["bash", "-c", "WEB_CONCURRENCY=4 uvicorn main:api --host 0.0.0.0 --port 8080 --proxy-headers --no-server-header --timeout-keep-alive 60 --header x-version:${VERSION}"]
+CMD ["bash", "-c", "gunicorn main:api --bind 0.0.0.0:8080 --proxy-protocol --workers 4 --worker-class uvicorn.workers.UvicornWorker"]

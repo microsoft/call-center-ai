@@ -7,4 +7,3 @@ pytest-asyncio==0.23.6  # Required for pytest
 pytest-repeat==0.9.3  # Required for pytest
 pytest-xdist[psutil]==3.5.0  # Required for pytest
 pytest==8.1.1
-watchfiles==0.21.0  # Required for uvicorn auto-reload
