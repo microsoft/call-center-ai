@@ -4,7 +4,6 @@ from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessStatus
 from persistence.isms import ISms
 from twilio.base.exceptions import TwilioRestException
-from twilio.http.async_http_client import AsyncTwilioHttpClient
 from twilio.rest import Client
 
 
@@ -19,10 +18,9 @@ class TwilioSms(ISms):
         _logger.info(f"Using Twilio from number {config.phone_number}")
         self._config = config
         self._client = Client(
-            http_client=AsyncTwilioHttpClient(),
             password=config.auth_token.get_secret_value(),
             username=config.account_sid,
-        )
+        )  # TODO: Use async client, but get multiple "attached to a different loop" errors with AsyncTwilioHttpClient
 
     async def areadiness(self) -> ReadinessStatus:
         """
@@ -32,8 +30,8 @@ class TwilioSms(ISms):
         """
         account_sid = self._config.account_sid
         try:
-            account = await self._client.api.accounts(account_sid).fetch_async()
-            balance = await account.balance.fetch_async()
+            account = self._client.api.accounts(account_sid).fetch()
+            balance = account.balance.fetch()
             assert balance.balance and float(balance.balance) > 0
             return ReadinessStatus.OK
         except AssertionError:
@@ -45,7 +43,7 @@ class TwilioSms(ISms):
         success = False
         _logger.info(f"SMS content: {content}")
         try:
-            res = await self._client.messages.create_async(
+            res = self._client.messages.create(
                 body=content,
                 from_=str(self._config.phone_number),
                 to=str(phone_number),
