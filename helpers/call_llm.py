@@ -119,7 +119,6 @@ async def load_llm_chat(
     call: CallModel,
     client: CallConnectionClient,
     post_call_intelligence: Callable[[CallModel, BackgroundTasks], None],
-    _backup_model: bool = False,
     _iterations_remaining: int = 3,
 ) -> CallModel:
     """
@@ -154,13 +153,9 @@ async def load_llm_chat(
             text=text,
         )
 
-    if _backup_model:
-        _logger.warning("Using backup model")
-
     chat_task = asyncio.create_task(
         _execute_llm_chat(
             background_tasks=background_tasks,
-            backup_model=_backup_model,
             call=call,
             client=client,
             post_call_intelligence=post_call_intelligence,
@@ -252,9 +247,6 @@ async def load_llm_chat(
                 call=call,
                 client=client,
                 post_call_intelligence=post_call_intelligence,
-                _backup_model=(
-                    _iterations_remaining < 2
-                ),  # Enable backup model if two retries are left, to maximize the chance of success
                 _iterations_remaining=_iterations_remaining - 1,
             )
 
@@ -265,7 +257,6 @@ async def load_llm_chat(
             call=call,
             client=client,
             post_call_intelligence=post_call_intelligence,
-            _backup_model=_backup_model,
             _iterations_remaining=_iterations_remaining - 1,
         )
 
@@ -280,7 +271,6 @@ async def load_llm_chat(
 
 async def _execute_llm_chat(
     background_tasks: BackgroundTasks,
-    backup_model: bool,
     call: CallModel,
     client: CallConnectionClient,
     post_call_intelligence: Callable[[CallModel, BackgroundTasks], None],
@@ -373,7 +363,6 @@ async def _execute_llm_chat(
     tool_calls_buffer: dict[int, MessageToolModel] = {}
     try:
         async for delta in completion_stream(
-            is_backup=backup_model,
             max_tokens=350,
             messages=call.messages,
             system=system,
