@@ -330,9 +330,9 @@ async def completion_model_sync(
     system: list[ChatCompletionSystemMessageParam],
 ) -> Optional[ModelType]:
     """
-    Returns an object validated against a given model, from a completion result.
+    Generate a Pydantic model from a completion.
 
-    Catch errors for a maximum of 3 times, but not `SafetyCheckError`.
+    Catch Pydantic validation errors for a maximum of 3 times, then raise the error.
     """
     res = await completion_sync(
         json_output=True,
