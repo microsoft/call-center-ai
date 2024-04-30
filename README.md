@@ -300,6 +300,10 @@ ai_search:
 content_safety:
   access_key: xxx
   endpoint: https://xxx.cognitiveservices.azure.com
+
+ai_translation:
+  access_key: xxx
+  endpoint: https://xxx.cognitiveservices.azure.com
 ```
 
 To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
