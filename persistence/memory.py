@@ -23,7 +23,9 @@ class MemoryCache(ICache):
     _config: MemoryModel
 
     def __init__(self, config: MemoryModel):
-        _logger.info(f"Using memory cache with {config.max_size} size limit")
+        _logger.warning(
+            f"Using memory cache with {config.max_size} size limit, memory usage can be high, prefer an external cache like Redis"
+        )
         self._config = config
 
     async def areadiness(self) -> ReadinessStatus:
