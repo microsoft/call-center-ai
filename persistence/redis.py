@@ -7,7 +7,7 @@ from persistence.icache import ICache
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
-from redis.exceptions import BusyLoadingError, ConnectionError, TimeoutError, RedisError
+from redis.exceptions import BusyLoadingError, ConnectionError, RedisError
 from typing import AsyncGenerator, Optional, Union
 from uuid import uuid4
 import hashlib
@@ -17,7 +17,7 @@ import hashlib
 RedisInstrumentor().instrument()
 
 _logger = build_logger(__name__)
-_retry = Retry(ExponentialBackoff(), 3)
+_retry = Retry(backoff=ExponentialBackoff(), retries=3)
 
 
 class RedisCache(ICache):
@@ -97,9 +97,10 @@ class RedisCache(ICache):
             # Database location
             db=self._config.database,
             # Reliability
-            retry_on_error=[BusyLoadingError, ConnectionError, TimeoutError],
+            retry_on_error=[BusyLoadingError, ConnectionError],
+            retry_on_timeout=True,
             retry=_retry,
-            socket_connect_timeout=10,
+            socket_timeout=10,  # Copied to socket_connect_timeout
             # Azure deployment
             host=self._config.host,
             port=self._config.port,
