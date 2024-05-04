@@ -166,7 +166,7 @@ class MessageModel(BaseModel):
         ]
     ]:
         # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
-        content = " ".join(self.content.splitlines()).strip()
+        content = " ".join([line.strip() for line in self.content.splitlines()])
 
         if self.persona == PersonaEnum.HUMAN:
             return [

@@ -450,7 +450,7 @@ class LlmModel(BaseModel):
                 res += f"\n- {training.title}: {training.content}"
 
         # Remove newlines to avoid hallucinations issues with GPT-4 Turbo
-        res = " ".join(res.splitlines()).strip()
+        res = " ".join([line.strip() for line in res.splitlines()])
 
         self._logger.debug(f"LLM prompt: {res}")
         return res
