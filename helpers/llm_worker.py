@@ -165,6 +165,7 @@ async def _completion_stream_worker(
         prompt = _limit_messages(
             context=platform.context,
             max_messages=20,  # Quick response
+            max_tokens=max_tokens,
             messages=messages,
             model=platform.model,
             system=system,
@@ -293,6 +294,7 @@ async def _completion_sync_worker(
 
         prompt = _limit_messages(
             context=platform.context,
+            max_tokens=max_tokens,
             messages=messages,
             model=platform.model,
             system=system,
@@ -350,6 +352,7 @@ async def completion_model_sync(
 
 def _limit_messages(
     context: int,
+    max_tokens: int,
     messages: list[MessageModel],
     model: str,
     system: list[ChatCompletionSystemMessageParam],
@@ -369,6 +372,7 @@ def _limit_messages(
     The context size is the maximum number of tokens allowed by the model. The messages are selected from the newest to the oldest, until the context or the maximum number of messages is reached.
     """
     counter = 0
+    max_context = context - max_tokens
     selected_messages = []
     tokens = 0
     total = min(len(system) + len(messages), max_messages)
@@ -382,13 +386,14 @@ def _limit_messages(
     for tool in tools or []:
         tokens += _count_tokens(json.dumps(tool), model)
 
-    # Add user messages until the context is reached, from the newest to the oldest
+    # Add user messages until the available context is reached, from the newest to the oldest
     for message in messages[::-1]:
         openai_message = message.to_openai()
         new_tokens = _count_tokens(
-            "".join([json.dumps(x) for x in openai_message]), model
+            "".join([json.dumps(x) for x in openai_message]),
+            model,
         )
-        if tokens + new_tokens >= context:
+        if tokens + new_tokens >= max_context:
             break
         if counter >= max_messages:
             break
