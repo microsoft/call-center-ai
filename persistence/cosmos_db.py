@@ -196,7 +196,6 @@ class CosmosDbStore(IStore):
         client = CosmosClient(
             # Reliability
             connection_timeout=10,
-            consistency_level="BoundedStaleness",
             # Azure deployment
             url=self._config.endpoint,
             # Authentication with API key
