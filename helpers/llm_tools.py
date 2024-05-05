@@ -232,9 +232,11 @@ class LlmPlugins:
         return f"Notifying {service} for {reason}."
 
     @staticmethod
-    def to_openai() -> list[ChatCompletionToolParam]:
-        return [
-            function_schema(func[1])
-            for func in getmembers(LlmPlugins, isfunction)
-            if not func[0].startswith("_")
-        ]
+    async def to_openai(call: CallModel) -> list[ChatCompletionToolParam]:
+        return await asyncio.gather(
+            *[
+                function_schema(type, call=call)
+                for name, type in getmembers(LlmPlugins, isfunction)
+                if not name.startswith("_") and name != "to_openai"
+            ]
+        )
