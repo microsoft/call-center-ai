@@ -118,11 +118,17 @@ class ToolModel(BaseModel):
                 res = await getattr(plugins, name)(**args)
                 res_log = f"{res[:20]}...{res[-20:]}"
                 logger.info(f"Executing function {name} ({args}): {res_log}")
+            except TypeError as e:
+                logger.warning(
+                    f"Wrong arguments for function {name}: {args}. Error: {e}"
+                )
+                res = f"Wrong arguments, please fix them and try again."
+                res_log = res
             except Exception as e:
-                logger.warn(
+                logger.warning(
                     f"Error executing function {self.function_name} with args {args}: {e}"
                 )
-                res = f"Error: {e}. Please try again."
+                res = f"Error: {e}."
                 res_log = res
             span.set_attribute("result", res_log)
             self.content = res
