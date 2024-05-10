@@ -69,14 +69,6 @@ class ToolModel(BaseModel):
             },
         )
 
-    @field_validator("function_name")
-    def _validate_function_name(cls, function_name: str) -> str:
-        if function_name not in ToolModel._available_function_names():
-            raise ValueError(
-                f'Invalid function names "{function_name}", available are {ToolModel._available_function_names()}'
-            )
-        return function_name
-
     def __add__(self, other: ChoiceDeltaToolCall) -> "ToolModel":
         if other.id:
             self.tool_id = other.id
@@ -94,6 +86,13 @@ class ToolModel(BaseModel):
         json_str = self.function_arguments
         name = self.function_name
 
+        # Confirm the function name exists, this is a security measure to prevent arbitrary code execution, plus, Pydantic validator is not used on purpose to comply with older tools plugins
+        if name not in ToolModel._available_function_names():
+            res = f"Invalid function names {name}, available are {ToolModel._available_function_names()}."
+            logger.warning(res)
+            self.content = res
+            return
+
         # Try to fix JSON args to catch LLM hallucinations
         # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
         args: dict[str, Any] = repair_json(
@@ -101,8 +100,8 @@ class ToolModel(BaseModel):
             return_objects=True,
         )  # type: ignore
 
-        if not args:
-            logger.warn(
+        if not isinstance(args, dict):
+            logger.warning(
                 f"Error decoding JSON args for function {name}: {self.function_arguments[:20]}...{self.function_arguments[-20:]}"
             )
             self.content = f"Bad arguments, available are {ToolModel._available_function_names()}. Please try again."
