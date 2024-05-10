@@ -70,7 +70,7 @@ class ToolModel(BaseModel):
         )
 
     @field_validator("function_name")
-    def validate_function_name(cls, function_name: str) -> str:
+    def _validate_function_name(cls, function_name: str) -> str:
         if function_name not in ToolModel._available_function_names():
             raise ValueError(
                 f'Invalid function names "{function_name}", available are {ToolModel._available_function_names()}'
@@ -146,7 +146,7 @@ class MessageModel(BaseModel):
     tool_calls: list[ToolModel] = []
 
     @field_validator("created_at")
-    def validate_created_at(cls, created_at: datetime) -> datetime:
+    def _validate_created_at(cls, created_at: datetime) -> datetime:
         """
         Ensure the created_at field is timezone-aware.
 

@@ -25,7 +25,7 @@ class CosmosDbModel(BaseModel, frozen=True):
 
 class SqliteModel(BaseModel, frozen=True):
     path: str = ".local"
-    schema_version: int = Field(default=3, frozen=True)
+    schema_version: int = Field(default=3)
     table: str = "calls"
 
     def full_path(self) -> str:
@@ -49,7 +49,7 @@ class DatabaseModel(BaseModel):
     sqlite: Optional[SqliteModel] = SqliteModel()  # Object is fully defined by default
 
     @field_validator("cosmos_db")
-    def validate_cosmos_db(
+    def _validate_cosmos_db(
         cls,
         cosmos_db: Optional[CosmosDbModel],
         info: ValidationInfo,
@@ -59,7 +59,7 @@ class DatabaseModel(BaseModel):
         return cosmos_db
 
     @field_validator("sqlite")
-    def validate_sqlite(
+    def _validate_sqlite(
         cls,
         sqlite: Optional[SqliteModel],
         info: ValidationInfo,
