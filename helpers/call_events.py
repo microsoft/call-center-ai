@@ -228,7 +228,7 @@ async def on_ivr_recognized(
         call
     )  # Persist language change, if the user calls back before the first message, the language will be set
 
-    if not call.messages:  # First call
+    if len(call.messages) <= 1:  # First call, or only the call action
         await handle_recognize_text(
             call=call,
             client=client,

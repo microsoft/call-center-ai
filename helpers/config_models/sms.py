@@ -47,7 +47,7 @@ class SmsModel(BaseModel):
     twilio: Optional[TwilioModel] = None
 
     @field_validator("communication_services")
-    def validate_communication_services(
+    def _validate_communication_services(
         cls,
         communication_services: Optional[CommunicationServiceModel],
         info: ValidationInfo,
@@ -60,7 +60,7 @@ class SmsModel(BaseModel):
         return communication_services
 
     @field_validator("twilio")
-    def validate_twilio(
+    def _validate_twilio(
         cls,
         twilio: Optional[TwilioModel],
         info: ValidationInfo,

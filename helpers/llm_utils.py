@@ -9,22 +9,26 @@ from typing import (
     Any,
     Callable,
     ForwardRef,
-    Set,
     Tuple,
-    Type,
     TypeVar,
     Union,
 )
+from jinja2 import Environment
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import eval_type_lenient
 from pydantic.json_schema import JsonSchemaValue
+from textwrap import dedent
 from typing_extensions import Annotated
 
 
 _logger = build_logger(__name__)
 T = TypeVar("T")
+_jinja = Environment(
+    autoescape=True,
+    enable_async=True,
+)
 
 
 class Parameters(BaseModel):
@@ -37,24 +41,23 @@ class Parameters(BaseModel):
     type: str = "object"
 
 
-def function_schema(f: Callable[..., Any]) -> ChatCompletionToolParam:
+async def function_schema(
+    f: Callable[..., Any], **kwargs: Any
+) -> ChatCompletionToolParam:
     """
-    Get a JSON schema for a function as defined by the OpenAI API.
+    Take a function and return a JSON schema for it as defined by the OpenAI API.
 
-    Args:
-        f: The function to get the JSON schema for
+    Kwargs are passed to the Jinja template for rendering the function description and parameter descriptions.
 
-    Returns:
-        A JSON schema for the function
-
-    Raises:
-        TypeError: If the function is not annotated
+    Raise TypeError if the function is not annotated.
     """
     typed_signature = _typed_signature(f)
     default_values = _default_values(typed_signature)
     param_annotations = _param_annotations(typed_signature)
-    required = _required_params(typed_signature)
-    missing, unannotated_with_default = _missing_annotations(typed_signature, required)
+    required_params = _required_params(typed_signature)
+    missing, unannotated_with_default = _missing_annotations(
+        typed_signature, required_params
+    )
 
     if unannotated_with_default != set():
         unannotated_with_default_s = [
@@ -72,11 +75,17 @@ def function_schema(f: Callable[..., Any]) -> ChatCompletionToolParam:
             + f"The annotations are missing for the following parameters: {', '.join(missing_s)}"
         )
 
-    # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
-    description = " ".join((f.__doc__ or "").splitlines()).strip()
-    name = " ".join((f.__name__).splitlines()).strip()
-    parameters: dict[str, object] = _parameters(
-        required, param_annotations, default_values=default_values
+    description = _remove_newlines(
+        await _jinja.from_string(dedent(f.__doc__ or "")).render_async(**kwargs)
+    )  # Remove possible indentation, render the description, then remove newlines to avoid hallucinations
+    name = f.__name__
+    parameters: dict[str, object] = (
+        await _parameters(
+            default_values=default_values,
+            param_annotations=param_annotations,
+            required_params=required_params,
+            **kwargs,
+        )
     ).model_dump()
 
     function = ChatCompletionToolParam(
@@ -91,34 +100,22 @@ def function_schema(f: Callable[..., Any]) -> ChatCompletionToolParam:
     return function
 
 
-def _typed_annotation(annotation: Any, globalns: dict[str, Any]) -> Any:
+def _typed_annotation(annotation: Any, global_namespace: dict[str, Any]) -> Any:
     """
-    Get the type annotation of a parameter.
-
-    Args:
-        annotation: The annotation of the parameter
-        globalns: The global namespace of the function
-
-    Returns:
-        The type annotation of the parameter
+    Get the type annotation of a parameter and return the anotated type.
     """
     if isinstance(annotation, str):
         annotation = ForwardRef(annotation)
-        annotation = eval_type_lenient(annotation, globalns, globalns)
+        annotation = eval_type_lenient(annotation, global_namespace, global_namespace)
     return annotation
 
 
-def _typed_signature(call: Callable[..., Any]) -> inspect.Signature:
-    """Get the signature of a function with type annotations.
-
-    Args:
-        call: The function to get the signature for
-
-    Returns:
-        The signature of the function with type annotations
+def _typed_signature(func: Callable[..., Any]) -> inspect.Signature:
     """
-    signature = inspect.signature(call)
-    globalns = getattr(call, "__globals__", {})
+    Get the signature of a function with type annotations and return the annotated signature.
+    """
+    signature = inspect.signature(func)
+    globalns = getattr(func, "__globals__", {})
     typed_params = [
         inspect.Parameter(
             name=param.name,
@@ -134,142 +131,128 @@ def _typed_signature(call: Callable[..., Any]) -> inspect.Signature:
 
 def _param_annotations(
     typed_signature: inspect.Signature,
-) -> dict[str, Union[Annotated[Type[Any], str], Type[Any]]]:
+) -> dict[str, Union[Annotated[type[Any], str], type[Any]]]:
     """
-    Get the type annotations of the parameters of a function.
-
-    Args:
-        typed_signature: The signature of the function with type annotations
-
-    Returns:
-        A dictionary of the type annotations of the parameters of the function
+    Get the type annotations of the parameters of a function and return a dictionary of the annotated parameters.
     """
     return {
-        k: v.annotation
-        for k, v in typed_signature.parameters.items()
-        if v.annotation != inspect.Signature.empty and k != "self"
+        name: value.annotation
+        for name, value in typed_signature.parameters.items()
+        if value.annotation != inspect.Signature.empty and name != "self"
     }
 
 
-def _parameter_json_schema(
-    k: str,
-    v: Union[Annotated[Type[Any], str], Type[Any]],
+async def _parameter_json_schema(
+    name: str,
+    value: Union[Annotated[type[Any], str], type[Any]],
     default_values: dict[str, Any],
+    **kwargs: Any,
 ) -> JsonSchemaValue:
     """
-    Get a JSON schema for a parameter as defined by the OpenAI API.
+    Get a JSON schema for a parameter as defined by the OpenAI API and return the Pydantic model for the parameter.
 
-    Args:
-        k: The name of the parameter
-        v: The type of the parameter
-        default_values: The default values of the parameters of the function
-
-    Returns:
-        A Pydanitc model for the parameter
+    Kwargs are passed to the Jinja template for rendering the parameter description.
     """
 
-    def _description(k: str, v: Union[Annotated[Type[Any], str], Type[Any]]) -> str:
+    def _description(
+        name: str, value: Union[Annotated[type[Any], str], type[Any]]
+    ) -> str:
         # Handles Annotated
-        if hasattr(v, "__metadata__"):
-            retval = v.__metadata__[0]
+        if hasattr(value, "__metadata__"):
+            retval = value.__metadata__[0]
             if isinstance(retval, str):
                 return retval
             else:
                 raise ValueError(
-                    f"Invalid description {retval} for parameter {k}, should be a string."
+                    f"Invalid description {retval} for parameter {name}, should be a string."
                 )
         else:
-            return k
+            return name
 
-    schema = TypeAdapter(v).json_schema()
-    if k in default_values:
-        dv = default_values[k]
+    schema = TypeAdapter(value).json_schema()
+    if name in default_values:
+        dv = default_values[name]
         schema["default"] = dv
 
-    schema["description"] = _description(k, v)
+    schema["description"] = _remove_newlines(
+        await _jinja.from_string(dedent(_description(name, value))).render_async(
+            **kwargs
+        )
+    )  # Remove possible indentation, render the description, then remove newlines to avoid hallucinations
 
     return schema
 
 
-def _required_params(typed_signature: inspect.Signature) -> list[str]:
+def _required_params(typed_signature: inspect.Signature) -> set[str]:
     """
-    Get the required parameters of a function.
-
-    Args:
-        signature: The signature of the function as returned by inspect.signature
-
-    Returns:
-        A list of the required parameters of the function
+    Get the required parameters of a function and return them as a set.
     """
-    return [
-        k
-        for k, v in typed_signature.parameters.items()
-        if v.default == inspect.Signature.empty and k != "self"
-    ]
+    return {
+        name
+        for name, value in typed_signature.parameters.items()
+        if value.default == inspect.Signature.empty and name != "self"
+    }
 
 
 def _default_values(typed_signature: inspect.Signature) -> dict[str, Any]:
     """
-    Get default values of parameters of a function.
-
-    Args:
-        signature: The signature of the function as returned by inspect.signature
-
-    Returns:
-        A dictionary of the default values of the parameters of the function
+    Get default values of parameters of a function and return them as a dictionary.
     """
     return {
-        k: v.default
-        for k, v in typed_signature.parameters.items()
-        if v.default != inspect.Signature.empty and k != "self"
+        name: value.default
+        for name, value in typed_signature.parameters.items()
+        if value.default != inspect.Signature.empty and name != "self"
     }
 
 
-def _parameters(
-    required: list[str],
-    param_annotations: dict[str, Union[Annotated[Type[Any], str], Type[Any]]],
+async def _parameters(
+    required_params: set[str],
+    param_annotations: dict[str, Union[Annotated[type[Any], str], type[Any]]],
     default_values: dict[str, Any],
+    **kwargs: Any,
 ) -> Parameters:
     """
-    Get the parameters of a function as defined by the OpenAI API.
+    Get the parameters of a function as defined by the OpenAI API and return the Pydantic model for the parameters.
 
-    Args:
-        required: The required parameters of the function
-        hints: The type hints of the function as returned by typing.get_type_hints
-
-    Returns:
-        A Pydantic model for the parameters of the function
+    Kwargs are passed to the Jinja template for rendering the parameter description.
     """
     return Parameters(
         properties={
-            k: _parameter_json_schema(k, v, default_values)
-            for k, v in param_annotations.items()
-            if v != inspect.Signature.empty and k != "self"
+            name: await _parameter_json_schema(
+                default_values=default_values,
+                name=name,
+                value=value,
+                **kwargs,
+            )
+            for name, value in param_annotations.items()
+            if value != inspect.Signature.empty and name != "self"
         },
-        required=required,
+        required=list(required_params),
     )
 
 
 def _missing_annotations(
-    typed_signature: inspect.Signature, required: list[str]
-) -> Tuple[Set[str], Set[str]]:
+    typed_signature: inspect.Signature, required_params: set[str]
+) -> Tuple[set[str], set[str]]:
     """
-    Get the missing annotations of a function.
+    Get the missing annotations of a function and return them as a set.
 
-    Ignores the parameters with default values as they are not required to be annotated, but logs a warning.
-
-    Args:
-        typed_signature: The signature of the function with type annotations
-        required: The required parameters of the function
-
-    Returns:
-        A set of the missing annotations of the function
+    Returns a tuple:
+    1. Missing annotations
+    2. Unannotated parameters with default values
     """
     all_missing = {
         k
         for k, v in typed_signature.parameters.items()
         if v.annotation == inspect.Signature.empty and k != "self"
     }
-    missing = all_missing.intersection(set(required))
+    missing = all_missing.intersection(required_params)
     unannotated_with_default = all_missing.difference(missing)
     return missing, unannotated_with_default
+
+
+def _remove_newlines(text: str) -> str:
+    """
+    Remove newlines from a string and return it as a single line.
+    """
+    return " ".join([line.strip() for line in text.splitlines()])

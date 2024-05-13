@@ -3,7 +3,6 @@ param adaVersion string
 param agentPhoneNumber string
 param botCompany string
 param botName string
-param botPhoneNumber string
 param gptBackupContext int
 param gptBackupModel string
 param gptBackupVersion string
@@ -22,6 +21,7 @@ var appUrl = 'https://claim-ai.${acaEnv.properties.defaultDomain}'
 var gptBackupModelFullName = toLower('${gptBackupModel}-${gptBackupVersion}')
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 var adaModelFullName = toLower('${adaModel}-${adaVersion}')
+var localConfig = loadYamlContent('../config.yaml')
 var config = {
   api: {
     events_domain: appUrl
@@ -47,14 +47,14 @@ var config = {
     agent_phone_number: agentPhoneNumber
     bot_company: botCompany
     bot_name: botName
-    lang: loadYamlContent('../config.yaml').workflow.lang
+    lang: localConfig.workflow.lang
   }
   communication_service: {
     access_key: communication.listKeys().primaryKey
     endpoint: communication.properties.hostName
-    phone_number: botPhoneNumber
+    phone_number: localConfig.communication_service.phone_number
   }
-  sms: loadYamlContent('../config.yaml').sms
+  sms: localConfig.sms
   cognitive_service: {
     endpoint: cognitiveCommunication.properties.endpoint
   }
@@ -92,8 +92,8 @@ var config = {
     endpoint: cognitiveContentsafety.properties.endpoint
   }
   prompts: {
-    llm: loadYamlContent('../config.yaml').prompts.llm
-    tts: loadYamlContent('../config.yaml').prompts.tts
+    llm: localConfig.prompts.llm
+    tts: localConfig.prompts.tts
   }
   ai_translation: {
     access_key: translate.listKeys().key1

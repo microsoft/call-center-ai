@@ -82,7 +82,7 @@ class SelectedPlatformModel(BaseModel):
     openai: Optional[OpenaiPlatformModel] = None
 
     @field_validator("azure_openai")
-    def validate_azure_openai(
+    def _validate_azure_openai(
         cls,
         azure_openai: Optional[AzureOpenaiPlatformModel],
         info: ValidationInfo,
@@ -92,7 +92,7 @@ class SelectedPlatformModel(BaseModel):
         return azure_openai
 
     @field_validator("openai")
-    def validate_openai(
+    def _validate_openai(
         cls,
         openai: Optional[OpenaiPlatformModel],
         info: ValidationInfo,

@@ -133,7 +133,6 @@ deploy:
 			'agentPhoneNumber=$(agent_phone_number)' \
 			'botCompany=$(bot_company)' \
 			'botName=$(bot_name)' \
-			'botPhoneNumber=$(bot_phone_number)' \
 			'openaiLocation=$(openai_location)' \
 			'searchLocation=$(search_location)' \
 		--template-file bicep/main.bicep \

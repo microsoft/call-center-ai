@@ -6,13 +6,12 @@ from azure.ai.contentsafety.models import (
     TextCategory,
 )
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import HttpResponseError
+from azure.core.exceptions import HttpResponseError, ServiceRequestError
 from helpers.config import CONFIG
 from contextlib import asynccontextmanager
 from helpers.logging import build_logger, TRACER
 from openai import (
     APIConnectionError,
-    APIError,
     APIResponseValidationError,
     AsyncAzureOpenAI,
     AsyncOpenAI,
@@ -43,14 +42,14 @@ from tenacity import (
     stop_after_attempt,
     wait_random_exponential,
 )
-from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
+from functools import lru_cache
+from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
 from models.message import MessageModel
-import tiktoken
-import json
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from os import environ
-from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
-from functools import lru_cache
+from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
+import json
+import tiktoken
 
 
 # Instrument OpenAI
@@ -73,6 +72,7 @@ _retried_exceptions = [
     InternalServerError,
     RateLimitError,
 ]
+
 
 class SafetyCheckError(Exception):
     message: str
@@ -148,9 +148,12 @@ async def _completion_stream_worker(
     cache_key = f"{__name__}-completion_stream-{_llm_key(is_backup)}-{system}-{tools}-{messages}-{max_tokens}"
     cached = await _cache.aget(cache_key)
     if cached:
-        for chunck in TypeAdapter(list[ChoiceDelta]).validate_json(cached):
-            yield chunck
-        return
+        try:
+            for chunck in TypeAdapter(list[ChoiceDelta]).validate_json(cached):
+                yield chunck
+            return
+        except ValidationError as e:
+            _logger.debug(f"Parsing error: {e.errors()}")
 
     # Try live
     to_cache: list[ChoiceDelta] = []
@@ -162,6 +165,7 @@ async def _completion_stream_worker(
         prompt = _limit_messages(
             context=platform.context,
             max_messages=20,  # Quick response
+            max_tokens=max_tokens,
             messages=messages,
             model=platform.model,
             system=system,
@@ -290,6 +294,7 @@ async def _completion_sync_worker(
 
         prompt = _limit_messages(
             context=platform.context,
+            max_tokens=max_tokens,
             messages=messages,
             model=platform.model,
             system=system,
@@ -347,6 +352,7 @@ async def completion_model_sync(
 
 def _limit_messages(
     context: int,
+    max_tokens: int,
     messages: list[MessageModel],
     model: str,
     system: list[ChatCompletionSystemMessageParam],
@@ -366,6 +372,7 @@ def _limit_messages(
     The context size is the maximum number of tokens allowed by the model. The messages are selected from the newest to the oldest, until the context or the maximum number of messages is reached.
     """
     counter = 0
+    max_context = context - max_tokens
     selected_messages = []
     tokens = 0
     total = min(len(system) + len(messages), max_messages)
@@ -379,13 +386,14 @@ def _limit_messages(
     for tool in tools or []:
         tokens += _count_tokens(json.dumps(tool), model)
 
-    # Add user messages until the context is reached, from the newest to the oldest
+    # Add user messages until the available context is reached, from the newest to the oldest
     for message in messages[::-1]:
         openai_message = message.to_openai()
         new_tokens = _count_tokens(
-            "".join([json.dumps(x) for x in openai_message]), model
+            "".join([json.dumps(x) for x in openai_message]),
+            model,
         )
-        if tokens + new_tokens >= context:
+        if tokens + new_tokens >= max_context:
             break
         if counter >= max_messages:
             break
@@ -407,45 +415,51 @@ async def safety_check(text: str) -> None:
 
     Text can be returned both safe and censored, before containing unsafe content.
     """
-    if not text:
+    if not text:  # Empty text is safe
         return
+
     try:
         res = await _contentsafety_analysis(text)
+    except ServiceRequestError as e:
+        _logger.error(f"Request error: {e}")
+        return  # Assume safe
     except HttpResponseError as e:
-        _logger.error(f"Failed to run safety check: {e}")
+        _logger.error(f"Response error: {e}")
         return  # Assume safe
 
-    if not res:
-        _logger.error("Failed to run safety check: No result")
-        return  # Assume safe
-
+    # Replace blocklist items with censored text
     for match in res.blocklists_match or []:
         _logger.debug(f"Matched blocklist item: {match.blocklist_item_text}")
         text = text.replace(
             match.blocklist_item_text, "*" * len(match.blocklist_item_text)
         )
 
+    # Check hate category
     hate_result = _contentsafety_category_test(
         res.categories_analysis,
         TextCategory.HATE,
         CONFIG.content_safety.category_hate_score,
     )
+    # Check self harm category
     self_harm_result = _contentsafety_category_test(
         res.categories_analysis,
         TextCategory.SELF_HARM,
         CONFIG.content_safety.category_self_harm_score,
     )
+    # Check sexual category
     sexual_result = _contentsafety_category_test(
         res.categories_analysis,
         TextCategory.SEXUAL,
         CONFIG.content_safety.category_sexual_score,
     )
+    # Check violence category
     violence_result = _contentsafety_category_test(
         res.categories_analysis,
         TextCategory.VIOLENCE,
         CONFIG.content_safety.category_violence_score,
     )
 
+    # True if all categories are safe
     safety = hate_result and self_harm_result and sexual_result and violence_result
     _logger.debug(f'Text safety "{safety}" for text: {text}')
 

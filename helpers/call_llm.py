@@ -355,7 +355,7 @@ async def _execute_llm_chat(
     if not use_tools:
         _logger.warning("Tools disabled for this chat")
     else:
-        tools = plugins.to_openai()
+        tools = await plugins.to_openai(call)
         _logger.debug(f"Tools: {tools}")
 
     # Execute LLM inference

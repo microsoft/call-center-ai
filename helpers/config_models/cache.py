@@ -40,7 +40,7 @@ class CacheModel(BaseModel):
     redis: Optional[RedisModel] = None
 
     @field_validator("redis")
-    def validate_sqlite(
+    def _validate_sqlite(
         cls,
         redis: Optional[RedisModel],
         info: ValidationInfo,
@@ -50,7 +50,7 @@ class CacheModel(BaseModel):
         return redis
 
     @field_validator("memory")
-    def validate_memory(
+    def _validate_memory(
         cls,
         memory: Optional[MemoryModel],
         info: ValidationInfo,

@@ -39,9 +39,8 @@ class ClaimModel(BaseModel):
     vehicle_info: Optional[str] = None
     witnesses: Optional[str] = None
 
-    @staticmethod
-    def editable_fields() -> Set[str]:
-        return ClaimModel.model_json_schema()["properties"].keys() - [
+    def editable_fields(self) -> Set[str]:
+        return self.model_json_schema()["properties"].keys() - [
             "id",
             "created_at",
         ]
