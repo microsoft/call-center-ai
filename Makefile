@@ -166,7 +166,7 @@ logs:
 	az containerapp logs show \
 		--follow \
 		--format text \
-		--name claim-ai \
+		--name call-center-ai \
 		--resource-group $(name) \
 		--tail 100
 

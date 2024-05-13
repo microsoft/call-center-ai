@@ -132,7 +132,7 @@ class DeepEvalAzureOpenAI(DeepEvalBaseLLM):
             f"{langchain_config}-{prompt}".encode(),
             usedforsecurity=False,
         ).digest()  # Arguments contain secrets, so hash them
-        return f"claim-ai/{suffix}"
+        return f"call-center-ai/{suffix}"
 
 
 class BackgroundTasksMock(BackgroundTasks):
