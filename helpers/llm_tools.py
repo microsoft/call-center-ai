@@ -10,12 +10,17 @@ from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
-from typing import Awaitable, Callable, Annotated, Literal
+from typing import Awaitable, Callable, Annotated, Literal, TypedDict
 import asyncio
 
 
 _logger = build_logger(__name__)
 _search = CONFIG.ai_search.instance()
+
+
+class UpdateClaimDict(TypedDict):
+    field: str
+    value: str
 
 
 class LlmPlugins:
@@ -61,7 +66,15 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if the customer wants to create a new claim for a totally different subject. This will reset the claim and reminder data. Old is stored but not accessible anymore. Approval from the customer must be explicitely given. Example: 'I want to create a new claim'.
+        Use this if the customer wants to create a new claim.
+
+        # Behavior
+        1. Old claim is stored but not accessible anymore
+        2. Reset the Assistant claim
+
+        # Rules
+        - Approval from the customer must be explicitely given (e.g. 'I want to create a new claim')
+        - This should be used only when the subject is totally different
         """
         await self.user_callback(customer_response, self.style)
         # Launch post-call intelligence for the current call
@@ -96,7 +109,16 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if you think there is something important to do in the future, and you want to be reminded about it. If it already exists, it will be updated with the new values.
+        Use this if you think there is something important to do.
+
+        # Behavior
+        1. Create a reminder with the given values
+        2. Return a confirmation message
+
+        # Rules
+        - A reminder should be as specific as possible
+        - If a reminder already exists, it will be updated with the new values
+        - The due date should be in the future
         """
         await self.user_callback(customer_response, self.style)
 
@@ -128,26 +150,52 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the involved parties to Marie-Jeanne and Jean-Pierre and the contact contact info for your home address is now, 123 rue De La Paix.'.",
+            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'.",
         ],
-        values: Annotated[
-            dict[str, str],
-            f"The claim fields to update. Available fields are {list(ClaimModel.editable_fields())}. For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58). For phone numbers, use E164 format (e.g. +33612345678). Example: {{'involved_parties': 'Marie-Jeanne and Jean-Pierre', 'contact_info': '123 rue De La Paix'}}",
+        updates: Annotated[
+            list[UpdateClaimDict],
+            """
+            The field to update.
+
+            # Available fields
+            {{ call.claim.editable_fields() | join(', ') }}
+
+            # Data format
+            - For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58)
+            - For phone numbers, use E164 format (e.g. +33612345678)
+
+            # Response format
+            [{'field': '[field]', 'value': '[value]'}]
+
+            # Examples
+            - [{'field': 'policyholder_email', 'value': 'mariejeanne@gmail.com'}]
+            - [{'field': 'policyholder_name', 'value': 'Marie-Jeanne Duchemin'}, {'field': 'policyholder_phone', 'value': '+33612345678'}]
+            """,
         ],
     ) -> str:
         """
-        Use this if the customer wants to update multiple claim fields with new values. It is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now).
+        Use this if the customer wants to update one or more fields in the claim.
+
+        # Behavior
+        1. Update the claim with the new values
+        2. Return a confirmation message
+
+        # Rules
+        - For values, it is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now)
+        - It is best to update multiple fields at once
         """
         await self.user_callback(customer_response, self.style)
         # Update all claim fields
         res = "# Updated fields"
-        for field, value in values.items():
-            res += f"\n- {self._update_claim_field(field, value)}"
+        for field in updates:
+            res += f"\n- {self._update_claim_field(field)}"
         return res
 
-    def _update_claim_field(self, field: str, value: str) -> str:
+    def _update_claim_field(self, update: UpdateClaimDict) -> str:
+        field = update["field"]
+        value = update["value"]
         # Check if field is editable
-        if not field in ClaimModel.editable_fields():
+        if not field in self.call.claim.editable_fields():
             return f'Failed to update a non-editable field "{field}".'
         try:
             # Define the field and force to trigger validation
@@ -160,7 +208,19 @@ class LlmPlugins:
 
     async def talk_to_human(self) -> str:
         """
-        Use this if the customer wants to talk to a human and Assistant is unable to help. Requires an explicit verbal validation from the customer. This will transfer the customer to an human agent. Never use this action directly after a recall. Example: 'I want to talk to a human', 'I want to talk to a real person'.
+        Use this if the customer wants to talk to a human and Assistant is unable to help.
+
+        # Behavior
+        1. Transfer the customer to an human agent
+        2. The call with Assistant is ended
+
+        # Rules
+        - Requires an explicit verbal validation from the customer
+        - Never use this action directly after a recall
+
+        # Examples
+        - 'I want to talk to a human'
+        - 'I want to talk to a real person'
         """
         await self.cancellation_callback()
         await handle_play(
@@ -179,11 +239,18 @@ class LlmPlugins:
         ],
         queries: Annotated[
             list[str],
-            "The text queries to perform the search. Example: ['How much does it cost to repair a broken window', 'What are the requirements to ask for a cyber attack insurance']",
+            "The text queries to perform the search. Example: ['How much does it cost to repair a broken window?', 'What are the requirements to ask for a cyber attack insurance?']",
         ],
     ) -> str:
         """
-        Use this if the customer wants to search for a public specific information you don't have. Examples: contract, law, regulation, article.
+        Use this if the customer wants to search for a public specific information you don't have.
+
+        # Rules
+        - Multiple queries should be used with different viewpoints and vocabulary
+        - The search should be as specific as possible
+
+        # Searchable topics
+        contract, law, regulation, article, procedure, guide
         """
         await self.user_callback(customer_response, self.style)
         # Execute in parallel
@@ -222,7 +289,19 @@ class LlmPlugins:
         ],
     ) -> str:
         """
-        Use this if the customer wants to notify the emergency services for a specific reason. This will notify the emergency services. Use it only if the situation is critical and requires immediate intervention. Examples: 'My neighbor is having a heart attack', 'A child is lying on the ground and is not moving', 'I am stuck in a car in fire'.
+        Use this if the customer wants to notify the emergency services for a specific reason.
+
+        # Behavior
+        1. A record is stored in the system
+        2. A notification is sent to the emergency services
+
+        # Rules
+        - Use it only if the situation is critical and requires immediate intervention
+
+        # Examples
+        - 'A child is lying on the ground and is not moving'
+        - 'I am stuck in a car in fire'
+        - 'My neighbor is having a heart attack'
         """
         await self.user_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
