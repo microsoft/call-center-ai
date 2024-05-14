@@ -189,6 +189,10 @@ async def _completion_stream_worker(
             )
             async for chunck in stream:
                 choices = chunck.choices
+                if (
+                    not choices
+                ):  # Skip empty choices, happens sometimes with GPT-4 Turbo
+                    continue
                 delta = choices[0].delta
                 yield delta
                 to_cache.append(delta)
