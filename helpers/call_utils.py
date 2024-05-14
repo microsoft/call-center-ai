@@ -24,7 +24,7 @@ import re
 _logger = build_logger(__name__)
 _SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"  # Split by sentence by punctuation
 _TTS_SANITIZER_R = re.compile(
-    r"[^\w\s'«»“”\"\"‘’''(),.!?;\-\+_@/]"
+    r"[^\w\s'«»“”\"\"‘’''(),.!?;:\-\+_@/]"
 )  # Sanitize text for TTS
 
 
