@@ -91,9 +91,6 @@ api = FastAPI(
     version=CONFIG.version,
 )
 
-# OpenTelemetry
-FastAPIInstrumentor.instrument_app(api)
-
 
 assert CONFIG.api.events_domain, "api.events_domain config is not set"
 _CALL_EVENT_URL = urljoin(
