@@ -30,6 +30,7 @@ from urllib.parse import quote_plus, urljoin
 import asyncio
 from uuid import UUID
 import mistune
+from helpers.pydantic_types.phone_numbers import PhoneNumber
 from helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
@@ -150,7 +151,7 @@ api.mount("/static", StaticFiles(directory="public_website/static"))
     "/report/{phone_number}",
     description="Display the history of calls in a web page.",
 )
-async def report_history_get(phone_number: str) -> HTMLResponse:
+async def report_history_get(phone_number: PhoneNumber) -> HTMLResponse:
     calls = await _db.call_asearch_all(phone_number) or []
 
     template = _jinja.get_template("history.html.jinja")
@@ -168,7 +169,7 @@ async def report_history_get(phone_number: str) -> HTMLResponse:
     "/report/{phone_number}/{call_id}",
     description="Display the call report in a web page.",
 )
-async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
+async def report_call_get(phone_number: PhoneNumber, call_id: UUID) -> HTMLResponse:
     call = await _db.call_aget(call_id)
     if not call or call.phone_number != phone_number:
         raise HTTPException(
@@ -191,7 +192,7 @@ async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
     "/call",
     description="Get all calls by phone number.",
 )
-async def call_get(phone_number: str) -> list[CallModel]:
+async def call_search_get(phone_number: PhoneNumber) -> list[CallModel]:
     return await _db.call_asearch_all(phone_number) or []
 
 
@@ -200,7 +201,7 @@ async def call_get(phone_number: str) -> list[CallModel]:
     status_code=status.HTTP_204_NO_CONTENT,
     description="Initiate an outbound call to a phone number.",
 )
-async def call_initiate_get(phone_number: str) -> None:
+async def call_initiate_get(phone_number: PhoneNumber) -> None:
     _logger.info(f"Initiating outbound call to {phone_number}")
     call_connection_properties = _call_client.create_call(
         callback_url=await _callback_url(phone_number),
@@ -403,7 +404,7 @@ async def _communication_event_worker(
     )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
-async def _callback_url(phone_number: str) -> str:
+async def _callback_url(phone_number: PhoneNumber) -> str:
     """
     Generate the callback URL for a call.
 
