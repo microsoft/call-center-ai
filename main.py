@@ -103,6 +103,7 @@ _logger.info(f"Using call event URL {_CALL_EVENT_URL}")
     "/health/liveness",
     status_code=status.HTTP_204_NO_CONTENT,
     description="Liveness healthckeck, always returns 204, used to check if the API is up.",
+    name="Get liveness",
 )
 async def health_liveness_get() -> None:
     pass
@@ -147,6 +148,7 @@ api.mount("/static", StaticFiles(directory="public_website/static"))
 @api.get(
     "/report/{phone_number}",
     description="Display the history of calls in a web page.",
+    name="Get call history in the browser",
 )
 async def report_history_get(phone_number: PhoneNumber) -> HTMLResponse:
     calls = await _db.call_asearch_all(phone_number) or []
@@ -165,6 +167,7 @@ async def report_history_get(phone_number: PhoneNumber) -> HTMLResponse:
 @api.get(
     "/report/{phone_number}/{call_id}",
     description="Display the call report in a web page.",
+    name="Get call report in the browser",
 )
 async def report_call_get(phone_number: PhoneNumber, call_id: UUID) -> HTMLResponse:
     call = await _db.call_aget(call_id)
@@ -187,7 +190,8 @@ async def report_call_get(phone_number: PhoneNumber, call_id: UUID) -> HTMLRespo
 
 @api.get(
     "/call",
-    description="Get all calls by phone number.",
+    description="Search all calls by phone number.",
+    name="Search calls",
 )
 async def call_search_get(phone_number: PhoneNumber) -> list[CallModel]:
     return await _db.call_asearch_all(phone_number) or []
@@ -265,6 +269,7 @@ async def _call_inbound_worker(
 @api.post(
     "/call/event/{call_id}/{secret}",
     description="Handle callbacks from Azure Communication Services.",
+    name="Create Communication Services event",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def call_event_post(
