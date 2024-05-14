@@ -155,8 +155,6 @@ async def report_history_get(phone_number: PhoneNumber) -> HTMLResponse:
 
     template = _jinja.get_template("history.html.jinja")
     render = await template.render_async(
-        bot_company=CONFIG.workflow.bot_company,
-        bot_name=CONFIG.workflow.bot_name,
         calls=calls,
         phone_number=phone_number,
         version=CONFIG.version,
@@ -331,15 +329,12 @@ async def _communication_event_worker(
 
         if recognition_result == "speech":  # Handle voice
             speech_text = event.data["speechResult"]["speech"]
-            if (
-                speech_text != None and len(speech_text) > 0
-            ):  # TODO: Is this check necessary?
-                await on_speech_recognized(
-                    background_tasks=background_tasks,
-                    call=call,
-                    client=client,
-                    text=speech_text,
-                )
+            await on_speech_recognized(
+                background_tasks=background_tasks,
+                call=call,
+                client=client,
+                text=speech_text,
+            )
 
         elif recognition_result == "choices":  # Handle IVR
             label_detected = event.data["choiceResult"]["label"]

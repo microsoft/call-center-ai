@@ -95,9 +95,7 @@ class AiSearchSearch(ISearch):
                     # Vector search
                     vector_queries=[
                         VectorizableTextQuery(
-                            exhaustive=True,  # Use exhaustive k-nearest neighbors (KNN)
                             fields="vectors",
-                            k_nearest_neighbors=50,  # TODO: Fine-tune this?
                             text=text,
                         )
                     ],
@@ -111,8 +109,6 @@ class AiSearchSearch(ISearch):
                     top=self._config.top_k,
                 )
                 async for result in results:
-                    if not result:
-                        continue
                     try:
                         trainings.append(
                             TrainingModel.model_validate(
