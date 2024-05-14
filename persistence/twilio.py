@@ -46,7 +46,7 @@ class TwilioSms(ISms):
             res = self._client.messages.create(
                 body=content,
                 from_=str(self._config.phone_number),
-                to=str(phone_number),
+                to=phone_number,
             )
             # TODO: How to check the delivery status? Seems present in "res.status" but not documented
             if res.error_message:

@@ -146,7 +146,6 @@ post-deploy:
 
 	$(MAKE) eventgrid-register \
 		endpoint=$(app_url) \
-		name=$(name) \
 		source=$(communication_id)
 
 	@echo "🚀 Claim AI is running on $(app_url)"
@@ -178,14 +177,14 @@ logs-history:
 		--workspace $(log_analytics_workspace_customer_id)
 
 eventgrid-register:
-	@echo "⚙️ Deleting previous event grid subscription..."
+	@echo "⚙️ Deleting previous Event Grid webhook..."
 	az eventgrid event-subscription delete --name $(event_subscription_name) || true
 
-	@echo "⚙️ Creating event grid subscription..."
+	@echo "⚙️ Registering Event Grid webhook..."
 	az eventgrid event-subscription create \
 		--advanced-filter data.to.PhoneNumber.Value StringBeginsWith $(bot_phone_number) \
 		--enable-advanced-filtering-on-arrays true \
-		--endpoint $(endpoint)/call/inbound \
+		--endpoint $(endpoint)/eventgrid/event \
 		--event-delivery-schema eventgridschema \
 		--event-ttl 3 \
 		--included-event-types Microsoft.Communication.IncomingCall \
