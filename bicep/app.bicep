@@ -3,6 +3,7 @@ param adaVersion string
 param agentPhoneNumber string
 param botCompany string
 param botName string
+param cognitiveCommunicationLocation string
 param gptBackupContext int
 param gptBackupModel string
 param gptBackupVersion string
@@ -285,15 +286,15 @@ resource appUserCommunication 'Microsoft.Authorization/roleAssignments@2022-04-0
 }
 
 resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
-  name: '${prefix}-${location}-communication'
-  location: location
+  name: '${prefix}-${cognitiveCommunicationLocation}-communication'
+  location: cognitiveCommunicationLocation
   tags: tags
   sku: {
     name: 'S0'  // Only one available
   }
   kind: 'CognitiveServices'
   properties: {
-    customSubDomainName: '${prefix}-${location}-communication'
+    customSubDomainName: '${prefix}-${cognitiveCommunicationLocation}-communication'
   }
 }
 

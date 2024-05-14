@@ -9,6 +9,7 @@ tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
 app_location := westeurope
+cognitive_communication_location := westeurope
 openai_location := southcentralus
 search_location := northeurope
 # App configuration
@@ -133,6 +134,7 @@ deploy:
 			'agentPhoneNumber=$(agent_phone_number)' \
 			'botCompany=$(bot_company)' \
 			'botName=$(bot_name)' \
+			'cognitiveCommunicationLocation=$(cognitive_communication_location)' \
 			'openaiLocation=$(openai_location)' \
 			'searchLocation=$(search_location)' \
 		--template-file bicep/main.bicep \
