@@ -3,6 +3,7 @@ param adaVersion string = '2'
 param agentPhoneNumber string
 param botCompany string
 param botName string
+param cognitiveCommunicationLocation string
 param gptBackupContext int = 16385
 param gptBackupModel string = 'gpt-35-turbo'
 param gptBackupVersion string = '0125'
@@ -45,6 +46,7 @@ module app 'app.bicep' = {
     agentPhoneNumber: agentPhoneNumber
     botCompany: botCompany
     botName: botName
+    cognitiveCommunicationLocation: cognitiveCommunicationLocation
     gptBackupContext: gptBackupContext
     gptBackupModel: gptBackupModel
     gptBackupVersion: gptBackupVersion
