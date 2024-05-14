@@ -52,8 +52,8 @@ class CallModel(BaseModel):
         return CONFIG.workflow.lang.default_lang
 
     @lang.setter
-    def lang(self, value: LanguageEntryModel) -> None:
-        self.lang_short_code = value.short_code
+    def lang(self, short_code: str) -> None:
+        self.lang_short_code = short_code
 
     def tz(self) -> tzinfo:
         return PhoneNumber.tz(self.phone_number)

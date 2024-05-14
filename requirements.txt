@@ -14,7 +14,7 @@ gunicorn==22.0.0
 jinja2==3.1.3
 json-repair==0.13.0
 mistune==3.0.2
-openai==1.16.2
+openai==1.25.2
 opentelemetry-instrumentation-aiohttp-client==0.45b0
 opentelemetry-instrumentation-fastapi==0.45b0
 opentelemetry-instrumentation-httpx==0.45b0

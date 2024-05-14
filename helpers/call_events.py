@@ -223,7 +223,7 @@ async def on_ivr_recognized(
         return
 
     _logger.info(f"Setting call language to {lang}")
-    call.lang = lang
+    call.lang = lang.short_code
     await _db.call_aset(
         call
     )  # Persist language change, if the user calls back before the first message, the language will be set
