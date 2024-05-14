@@ -212,15 +212,15 @@ async def call_get(call_id: UUID) -> CallGetModel:
     return CallGetModel.model_validate(call)
 
 
-@api.get(
-    "/call/initiate",
-    status_code=status.HTTP_204_NO_CONTENT,
-    description="Initiate an outbound call to a phone number.",
+@api.post(
+    "/call",
+    description="Initiate a call to a phone number.",
+    name="Create call",
 )
-async def call_initiate_get(phone_number: PhoneNumber) -> None:
-    _logger.info(f"Initiating outbound call to {phone_number}")
+async def call_post(phone_number: PhoneNumber) -> CallGetModel:
+    url, call = await _communication_event_url(phone_number)
     call_connection_properties = _call_client.create_call(
-        callback_url=await _callback_url(phone_number),
+        callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
         target_participant=PhoneNumberIdentifier(phone_number),  # type: ignore
@@ -228,6 +228,7 @@ async def call_initiate_get(phone_number: PhoneNumber) -> None:
     _logger.info(
         f"Created call with connection id: {call_connection_properties.call_connection_id}"
     )
+    return CallGetModel.model_validate(call)
 
 
 @api.post(
@@ -266,9 +267,9 @@ async def _call_inbound_worker(
         else:
             phone_number = event.data["from"]["rawId"]
         call_context = event.data["incomingCallContext"]
-
+        url, _ = await _communication_event_url(phone_number)
         event_status = await on_new_call(
-            callback_url=await _callback_url(phone_number),
+            callback_url=url,
             client=_call_client,
             context=call_context,
             phone_number=phone_number,
@@ -418,7 +419,9 @@ async def _communication_event_worker(
     )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
-async def _callback_url(phone_number: PhoneNumber) -> str:
+async def _communication_event_url(
+    phone_number: PhoneNumber,
+) -> tuple[str, CallStateModel]:
     """
     Generate the callback URL for a call.
 
@@ -428,7 +431,8 @@ async def _callback_url(phone_number: PhoneNumber) -> str:
     if not call:
         call = CallStateModel(phone_number=phone_number)
         await _db.call_aset(call)  # Create for the first time
-    return _CALL_EVENT_URL.format(
+    url = _COMMUNICATION_EVENT_TPL.format(
         callback_secret=call.callback_secret,
         call_id=str(call.call_id),
     )
+    return url, call
