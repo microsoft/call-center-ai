@@ -85,7 +85,7 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    call = CallModel(**raw)
+                    call = CallModel.model_validate(raw)
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
@@ -123,7 +123,7 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    call = CallModel(**raw)
+                    call = CallModel.model_validate(raw)
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
@@ -150,7 +150,7 @@ class CosmosDbStore(IStore):
                     if not raw:
                         continue
                     try:
-                        calls.append(CallModel(**raw))
+                        calls.append(CallModel.model_validate(raw))
                     except ValidationError as e:
                         _logger.debug(f"Parsing error: {e.errors()}")
         except CosmosHttpResponseError as e:
