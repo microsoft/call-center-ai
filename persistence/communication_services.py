@@ -36,7 +36,7 @@ class CommunicationServicesSms(ISms):
                 responses: list[SmsSendResult] = await client.send(
                     from_=str(self._config.phone_number),
                     message=content,
-                    to=str(phone_number),
+                    to=phone_number,
                 )
                 response = responses[0]
                 if response.successful:
@@ -62,7 +62,6 @@ class CommunicationServicesSms(ISms):
             credential=self._config.access_key.get_secret_value(),
             endpoint=self._config.endpoint,
         )
-
         try:
             yield client
         finally:

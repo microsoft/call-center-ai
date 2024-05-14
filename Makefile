@@ -146,7 +146,6 @@ post-deploy:
 
 	$(MAKE) eventgrid-register \
 		endpoint=$(app_url) \
-		name=$(name) \
 		source=$(communication_id)
 
 	@echo "🚀 Claim AI is running on $(app_url)"
