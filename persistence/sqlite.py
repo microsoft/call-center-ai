@@ -10,7 +10,6 @@ from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
 from uuid import UUID
-import json
 import os
 
 
@@ -61,14 +60,14 @@ class SqliteStore(IStore):
 
     async def call_aset(self, call: CallModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
-        data = call.model_dump(mode="json", exclude_none=True)
+        data = call.model_dump_json(exclude_none=True)
         _logger.debug(f"Saving call {call.call_id}: {data}")
         async with self._use_db() as db:
             await db.execute(
                 f"INSERT OR REPLACE INTO {self._config.table} VALUES (?, ?)",
                 (
                     str(call.call_id),  # id
-                    json.dumps(data),  # data
+                    data,  # data
                 ),
             )
             await db.commit()
