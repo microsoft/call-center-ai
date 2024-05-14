@@ -1,7 +1,7 @@
 from enum import Enum
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from models.call import CallModel
+from models.call import CallStateModel
 from models.message import StyleEnum as MessageStyleEnum
 from typing import Generator, Optional
 from azure.communication.callautomation import (
@@ -26,6 +26,7 @@ _SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"  # Split by sentence by punctuation
 _TTS_SANITIZER_R = re.compile(
     r"[^\w\s'«»“”\"\"‘’''(),.!?;\-\+_@/]"
 )  # Sanitize text for TTS
+
 
 class ContextEnum(str, Enum):
     """
@@ -60,7 +61,7 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
 async def _handle_recognize_media(
     client: CallConnectionClient,
-    call: CallModel,
+    call: CallStateModel,
     sound_url: str,
 ) -> None:
     """
@@ -86,7 +87,7 @@ async def _handle_recognize_media(
 
 async def handle_media(
     client: CallConnectionClient,
-    call: CallModel,
+    call: CallStateModel,
     sound_url: str,
     context: Optional[str] = None,
 ) -> None:
@@ -111,7 +112,7 @@ async def handle_media(
 
 async def handle_recognize_text(
     client: CallConnectionClient,
-    call: CallModel,
+    call: CallStateModel,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
     text: Optional[str] = None,
     store: bool = True,
@@ -139,7 +140,7 @@ async def handle_recognize_text(
 
 async def handle_play(
     client: CallConnectionClient,
-    call: CallModel,
+    call: CallStateModel,
     text: str,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
     context: Optional[str] = None,
@@ -198,7 +199,9 @@ async def handle_play(
             raise e
 
 
-def _audio_from_text(text: str, style: MessageStyleEnum, call: CallModel) -> SsmlSource:
+def _audio_from_text(
+    text: str, style: MessageStyleEnum, call: CallStateModel
+) -> SsmlSource:
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
@@ -225,7 +228,7 @@ def _audio_from_text(text: str, style: MessageStyleEnum, call: CallModel) -> Ssm
 
 async def handle_recognize_ivr(
     client: CallConnectionClient,
-    call: CallModel,
+    call: CallStateModel,
     text: str,
     choices: list[RecognitionChoice],
 ) -> None:

@@ -2,7 +2,7 @@ from azure.core.exceptions import HttpResponseError
 from datetime import datetime, UTC
 from functools import cached_property
 from logging import Logger
-from models.call import CallModel
+from models.call import CallStateModel
 from models.message import MessageModel
 from models.next import ActionEnum as NextActionEnum
 from models.reminder import ReminderModel
@@ -336,7 +336,7 @@ class LlmModel(BaseModel):
             )
         )
 
-    def chat_system(self, call: CallModel, trainings: list[TrainingModel]) -> str:
+    def chat_system(self, call: CallStateModel, trainings: list[TrainingModel]) -> str:
         from helpers.config import CONFIG
         from models.message import (
             ActionEnum as MessageActionEnum,
@@ -356,7 +356,7 @@ class LlmModel(BaseModel):
             trainings=trainings,
         )
 
-    def sms_summary_system(self, call: CallModel) -> str:
+    def sms_summary_system(self, call: CallStateModel) -> str:
         from helpers.config import CONFIG
 
         return self._return(
@@ -371,7 +371,7 @@ class LlmModel(BaseModel):
             .decode(),
         )
 
-    def synthesis_short_system(self, call: CallModel) -> str:
+    def synthesis_short_system(self, call: CallStateModel) -> str:
         return self._return(
             self.synthesis_short_system_tpl,
             claim=call.claim.model_dump_json(),
@@ -382,7 +382,7 @@ class LlmModel(BaseModel):
             .decode(),
         )
 
-    def synthesis_long_system(self, call: CallModel) -> str:
+    def synthesis_long_system(self, call: CallStateModel) -> str:
         return self._return(
             self.synthesis_long_system_tpl,
             claim=call.claim.model_dump_json(),
@@ -393,7 +393,9 @@ class LlmModel(BaseModel):
             .decode(),
         )
 
-    def citations_system(self, call: CallModel, text: Optional[str]) -> Optional[str]:
+    def citations_system(
+        self, call: CallStateModel, text: Optional[str]
+    ) -> Optional[str]:
         """
         Return the formatted prompt. Prompt is used to add citations to the text, without cluttering the content itself.
 
@@ -423,7 +425,7 @@ class LlmModel(BaseModel):
             text=text,
         )
 
-    def next_system(self, call: CallModel) -> str:
+    def next_system(self, call: CallStateModel) -> str:
         return self._return(
             self.next_system_tpl,
             actions=", ".join([action.value for action in NextActionEnum]),
@@ -501,19 +503,19 @@ class TtsModel(BaseModel):
     )
     ivr_language_tpl: str = "To continue in {label}, press {index}."
 
-    async def calltransfer_failure(self, call: CallModel) -> str:
+    async def calltransfer_failure(self, call: CallStateModel) -> str:
         return await self._translate(self.calltransfer_failure_tpl, call)
 
-    async def connect_agent(self, call: CallModel) -> str:
+    async def connect_agent(self, call: CallStateModel) -> str:
         return await self._translate(self.connect_agent_tpl, call)
 
-    async def end_call_to_connect_agent(self, call: CallModel) -> str:
+    async def end_call_to_connect_agent(self, call: CallStateModel) -> str:
         return await self._translate(self.end_call_to_connect_agent_tpl, call)
 
-    async def error(self, call: CallModel) -> str:
+    async def error(self, call: CallStateModel) -> str:
         return await self._translate(self.error_tpl, call)
 
-    async def goodbye(self, call: CallModel) -> str:
+    async def goodbye(self, call: CallStateModel) -> str:
         from helpers.config import CONFIG
 
         return await self._translate(
@@ -522,7 +524,7 @@ class TtsModel(BaseModel):
             bot_company=CONFIG.workflow.bot_company,
         )
 
-    async def hello(self, call: CallModel) -> str:
+    async def hello(self, call: CallStateModel) -> str:
         from helpers.config import CONFIG
 
         return await self._translate(
@@ -532,10 +534,10 @@ class TtsModel(BaseModel):
             bot_name=CONFIG.workflow.bot_name,
         )
 
-    async def timeout_silence(self, call: CallModel) -> str:
+    async def timeout_silence(self, call: CallStateModel) -> str:
         return await self._translate(self.timeout_silence_tpl, call)
 
-    async def welcome_back(self, call: CallModel) -> str:
+    async def welcome_back(self, call: CallStateModel) -> str:
         from helpers.config import CONFIG
 
         return await self._translate(
@@ -546,10 +548,10 @@ class TtsModel(BaseModel):
             conversation_timeout_hour=CONFIG.workflow.conversation_timeout_hour,
         )
 
-    async def timeout_loading(self, call: CallModel) -> str:
+    async def timeout_loading(self, call: CallStateModel) -> str:
         return await self._translate(self.timeout_loading_tpl, call)
 
-    async def ivr_language(self, call: CallModel) -> str:
+    async def ivr_language(self, call: CallStateModel) -> str:
         from helpers.config import CONFIG
 
         res = ""
@@ -567,7 +569,7 @@ class TtsModel(BaseModel):
     def _return(self, prompt_tpl: str, **kwargs) -> str:
         return dedent(prompt_tpl.format(**kwargs)).strip()
 
-    async def _translate(self, prompt_tpl: str, call: CallModel, **kwargs) -> str:
+    async def _translate(self, prompt_tpl: str, call: CallStateModel, **kwargs) -> str:
         """
         Format the prompt and translate it to the TTS language.
 

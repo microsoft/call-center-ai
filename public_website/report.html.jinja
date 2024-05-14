@@ -25,7 +25,7 @@ Déclaration de sinistre {{ call.claim.claim_id }}
     <p class="text-neutral-600 dark:text-neutral-400">Aucune synthèse pour l'instant.</p>
     {% else %}
     <div class="space-y-2">
-      {{ call.synthesis.long | markdown }}
+      {{ call.synthesis.long | markdown | safe }}
     </div>
     {% endif %}
   </div>

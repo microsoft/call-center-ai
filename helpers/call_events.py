@@ -13,7 +13,7 @@ from azure.core.exceptions import (
     ResourceNotFoundError,
 )
 from models.synthesis import SynthesisModel
-from models.call import CallModel
+from models.call import CallStateModel
 from models.message import (
     ActionEnum as MessageActionEnum,
     extract_message_style,
@@ -74,7 +74,7 @@ async def on_new_call(
 
 @TRACER.start_as_current_span("on_call_connected")
 async def on_call_connected(
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
 ) -> None:
     _logger.info("Call connected")
@@ -96,7 +96,7 @@ async def on_call_connected(
 @TRACER.start_as_current_span("on_call_disconnected")
 async def on_call_disconnected(
     background_tasks: BackgroundTasks,
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
 ) -> None:
     _logger.info("Call disconnected")
@@ -106,7 +106,7 @@ async def on_call_disconnected(
 @TRACER.start_as_current_span("on_speech_recognized")
 async def on_speech_recognized(
     background_tasks: BackgroundTasks,
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
     text: str,
 ) -> None:
@@ -122,7 +122,7 @@ async def on_speech_recognized(
 
 @TRACER.start_as_current_span("on_speech_timeout_error")
 async def on_speech_timeout_error(
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
 ) -> None:
     if call.recognition_retry < 10:
@@ -145,7 +145,7 @@ async def on_speech_timeout_error(
 
 @TRACER.start_as_current_span("on_speech_unknown_error")
 async def on_speech_unknown_error(
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
     error_code: int,
 ) -> None:
@@ -166,7 +166,7 @@ async def on_speech_unknown_error(
 @TRACER.start_as_current_span("on_play_completed")
 async def on_play_completed(
     background_tasks: BackgroundTasks,
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
     context: str,
 ) -> None:
@@ -209,7 +209,7 @@ async def on_play_error(
 @TRACER.start_as_current_span("on_ivr_recognized")
 async def on_ivr_recognized(
     client: CallConnectionClient,
-    call: CallModel,
+    call: CallStateModel,
     label: str,
     background_tasks: BackgroundTasks,
 ) -> None:
@@ -223,7 +223,7 @@ async def on_ivr_recognized(
         return
 
     _logger.info(f"Setting call language to {lang}")
-    call.lang = lang
+    call.lang = lang.short_code
     await _db.call_aset(
         call
     )  # Persist language change, if the user calls back before the first message, the language will be set
@@ -257,7 +257,7 @@ async def on_transfer_completed() -> None:
 
 @TRACER.start_as_current_span("on_transfer_error")
 async def on_transfer_error(
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
     error_code: int,
 ) -> None:
@@ -271,7 +271,9 @@ async def on_transfer_error(
 
 
 async def _handle_hangup(
-    background_tasks: BackgroundTasks, client: CallConnectionClient, call: CallModel
+    background_tasks: BackgroundTasks,
+    client: CallConnectionClient,
+    call: CallStateModel,
 ) -> None:
     _logger.debug("Hanging up call")
     try:
@@ -295,7 +297,9 @@ async def _handle_hangup(
     _post_call_intelligence(call, background_tasks)
 
 
-def _post_call_intelligence(call: CallModel, background_tasks: BackgroundTasks) -> None:
+def _post_call_intelligence(
+    call: CallStateModel, background_tasks: BackgroundTasks
+) -> None:
     """
     Shortcut to run all post-call intelligence tasks in background.
     """
@@ -304,7 +308,7 @@ def _post_call_intelligence(call: CallModel, background_tasks: BackgroundTasks) 
     background_tasks.add_task(_post_call_synthesis, call)
 
 
-async def _post_call_sms(call: CallModel) -> None:
+async def _post_call_sms(call: CallStateModel) -> None:
     """
     Send an SMS report to the customer.
     """
@@ -344,7 +348,7 @@ async def _post_call_sms(call: CallModel) -> None:
         await _db.call_aset(call)
 
 
-async def _post_call_synthesis(call: CallModel) -> None:
+async def _post_call_synthesis(call: CallStateModel) -> None:
     """
     Synthesize the call and store it to the model.
     """
@@ -381,7 +385,7 @@ async def _post_call_synthesis(call: CallModel) -> None:
     await _db.call_aset(call)
 
 
-async def _post_call_next(call: CallModel) -> None:
+async def _post_call_next(call: CallStateModel) -> None:
     """
     Generate next action for the call.
     """
@@ -402,7 +406,7 @@ async def _post_call_next(call: CallModel) -> None:
 
 async def _handle_ivr_language(
     client: CallConnectionClient,
-    call: CallModel,
+    call: CallStateModel,
 ) -> None:
     tones = [
         DtmfTone.ONE,

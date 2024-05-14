@@ -1,10 +1,8 @@
 from helpers.config import CONFIG
 from helpers.config_models.database import ModeEnum as DatabaseModeEnum
-from models.call import CallModel
+from models.call import CallStateModel
+from pytest import assume
 import pytest
-
-
-_db = CONFIG.database.instance()
 
 
 @pytest.mark.parametrize(
@@ -22,7 +20,7 @@ _db = CONFIG.database.instance()
 )
 @pytest.mark.asyncio  # Allow async functions
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
-async def test_acid(call_mock: CallModel, database_mode: DatabaseModeEnum) -> None:
+async def test_acid(call: CallStateModel, database_mode: DatabaseModeEnum) -> None:
     """
     Test ACID properties of the database backend.
 
@@ -36,18 +34,19 @@ async def test_acid(call_mock: CallModel, database_mode: DatabaseModeEnum) -> No
     """
     # Set database mode
     CONFIG.database.mode = database_mode
+    db = CONFIG.database.instance()
 
     # Check not exists
-    assert not await _db.call_aget(call_mock.call_id)
-    assert await _db.call_asearch_one(call_mock.phone_number) != call_mock
-    assert call_mock not in (await _db.call_asearch_all(call_mock.phone_number) or [])
+    assume(not await db.call_aget(call.call_id))
+    assume(await db.call_asearch_one(call.phone_number) != call)
+    assume(call not in (await db.call_asearch_all(call.phone_number) or []))
 
     # Insert test call
-    await _db.call_aset(call_mock)
+    await db.call_aset(call)
 
     # Check point read
-    assert await _db.call_aget(call_mock.call_id) == call_mock
+    assume(await db.call_aget(call.call_id) == call)
     # Check search one
-    assert await _db.call_asearch_one(call_mock.phone_number) == call_mock
+    assume(await db.call_asearch_one(call.phone_number) == call)
     # Check search all
-    assert call_mock in (await _db.call_asearch_all(call_mock.phone_number) or [])
+    assume(call in (await db.call_asearch_all(call.phone_number) or []))

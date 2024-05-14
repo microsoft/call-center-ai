@@ -21,16 +21,16 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from models.call import CallModel
+from jinja2 import Environment, FileSystemLoader
+from models.call import CallStateModel, CallGetModel
 from models.next import ActionEnum as NextActionEnum
 from urllib.parse import quote_plus, urljoin
 import asyncio
 from uuid import UUID
 import mistune
+from helpers.pydantic_types.phone_numbers import PhoneNumber
 from helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
@@ -50,7 +50,7 @@ from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatu
 
 # Jinja configuration
 _jinja = Environment(
-    autoescape=select_autoescape(),
+    autoescape=True,
     enable_async=True,
     loader=FileSystemLoader("public_website"),
 )
@@ -91,9 +91,6 @@ api = FastAPI(
     version=CONFIG.version,
 )
 
-# OpenTelemetry
-FastAPIInstrumentor.instrument_app(api)
-
 
 assert CONFIG.api.events_domain, "api.events_domain config is not set"
 _CALL_EVENT_URL = urljoin(
@@ -106,6 +103,7 @@ _logger.info(f"Using call event URL {_CALL_EVENT_URL}")
     "/health/liveness",
     status_code=status.HTTP_204_NO_CONTENT,
     description="Liveness healthckeck, always returns 204, used to check if the API is up.",
+    name="Get liveness",
 )
 async def health_liveness_get() -> None:
     pass
@@ -138,7 +136,7 @@ async def health_readiness_get() -> JSONResponse:
             status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             break
     return JSONResponse(
-        content=jsonable_encoder(readiness),
+        content=readiness.model_dump(mode="json"),
         status_code=status_code,
     )
 
@@ -150,14 +148,13 @@ api.mount("/static", StaticFiles(directory="public_website/static"))
 @api.get(
     "/report/{phone_number}",
     description="Display the history of calls in a web page.",
+    name="Get call history in the browser",
 )
-async def report_history_get(phone_number: str) -> HTMLResponse:
+async def report_history_get(phone_number: PhoneNumber) -> HTMLResponse:
     calls = await _db.call_asearch_all(phone_number) or []
 
     template = _jinja.get_template("history.html.jinja")
     render = await template.render_async(
-        bot_company=CONFIG.workflow.bot_company,
-        bot_name=CONFIG.workflow.bot_name,
         calls=calls,
         phone_number=phone_number,
         version=CONFIG.version,
@@ -168,8 +165,9 @@ async def report_history_get(phone_number: str) -> HTMLResponse:
 @api.get(
     "/report/{phone_number}/{call_id}",
     description="Display the call report in a web page.",
+    name="Get call report in the browser",
 )
-async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
+async def report_call_get(phone_number: PhoneNumber, call_id: UUID) -> HTMLResponse:
     call = await _db.call_aget(call_id)
     if not call or call.phone_number != phone_number:
         raise HTTPException(
@@ -190,10 +188,28 @@ async def report_call_get(phone_number: str, call_id: UUID) -> HTMLResponse:
 
 @api.get(
     "/call",
-    description="Get all calls by phone number.",
+    description="Search all calls by phone number.",
+    name="Search calls",
 )
-async def call_get(phone_number: str) -> list[CallModel]:
-    return await _db.call_asearch_all(phone_number) or []
+async def call_search_get(phone_number: PhoneNumber) -> list[CallGetModel]:
+    calls = await _db.call_asearch_all(phone_number) or []
+    output = [CallGetModel.model_validate(call) for call in calls]
+    return output
+
+
+@api.get(
+    "/call/{call_id}",
+    description="Get a call by its ID.",
+    name="Get call",
+)
+async def call_get(call_id: UUID) -> CallGetModel:
+    call = await _db.call_aget(call_id)
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call {call_id} not found",
+        )
+    return CallGetModel.model_validate(call)
 
 
 @api.get(
@@ -201,7 +217,7 @@ async def call_get(phone_number: str) -> list[CallModel]:
     status_code=status.HTTP_204_NO_CONTENT,
     description="Initiate an outbound call to a phone number.",
 )
-async def call_initiate_get(phone_number: str) -> None:
+async def call_initiate_get(phone_number: PhoneNumber) -> None:
     _logger.info(f"Initiating outbound call to {phone_number}")
     call_connection_properties = _call_client.create_call(
         callback_url=await _callback_url(phone_number),
@@ -268,6 +284,7 @@ async def _call_inbound_worker(
 @api.post(
     "/call/event/{call_id}/{secret}",
     description="Handle callbacks from Azure Communication Services.",
+    name="Create Communication Services event",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def call_event_post(
@@ -325,22 +342,19 @@ async def _communication_event_worker(
     elif (
         event_type == "Microsoft.Communication.RecognizeCompleted"
     ):  # Speech recognized
-        recognition_result = event.data["recognitionType"]
+        recognition_result: str = event.data["recognitionType"]
 
         if recognition_result == "speech":  # Handle voice
-            speech_text = event.data["speechResult"]["speech"]
-            if (
-                speech_text != None and len(speech_text) > 0
-            ):  # TODO: Is this check necessary?
-                await on_speech_recognized(
-                    background_tasks=background_tasks,
-                    call=call,
-                    client=client,
-                    text=speech_text,
-                )
+            speech_text: str = event.data["speechResult"]["speech"]
+            await on_speech_recognized(
+                background_tasks=background_tasks,
+                call=call,
+                client=client,
+                text=speech_text,
+            )
 
         elif recognition_result == "choices":  # Handle IVR
-            label_detected = event.data["choiceResult"]["label"]
+            label_detected: str = event.data["choiceResult"]["label"]
             await on_ivr_recognized(
                 background_tasks=background_tasks,
                 call=call,
@@ -352,7 +366,7 @@ async def _communication_event_worker(
         event_type == "Microsoft.Communication.RecognizeFailed"
     ):  # Speech recognition failed
         result_information = event.data["resultInformation"]
-        error_code = result_information["subCode"]
+        error_code: int = result_information["subCode"]
 
         # Error codes:
         # 8510 = Action failed, initial silence timeout reached
@@ -380,7 +394,7 @@ async def _communication_event_worker(
 
     elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
         result_information = event.data["resultInformation"]
-        error_code = result_information["subCode"]
+        error_code: int = result_information["subCode"]
         await on_play_error(error_code)
 
     elif (
@@ -392,7 +406,7 @@ async def _communication_event_worker(
         event_type == "Microsoft.Communication.CallTransferFailed"
     ):  # Call transfer failed
         result_information = event.data["resultInformation"]
-        sub_code = result_information["subCode"]
+        sub_code: int = result_information["subCode"]
         await on_transfer_error(
             call=call,
             client=client,
@@ -404,7 +418,7 @@ async def _communication_event_worker(
     )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
-async def _callback_url(phone_number: str) -> str:
+async def _callback_url(phone_number: PhoneNumber) -> str:
     """
     Generate the callback URL for a call.
 
@@ -412,7 +426,7 @@ async def _callback_url(phone_number: str) -> str:
     """
     call = await _db.call_asearch_one(phone_number)
     if not call:
-        call = CallModel(phone_number=phone_number)
+        call = CallStateModel(phone_number=phone_number)
         await _db.call_aset(call)  # Create for the first time
     return _CALL_EVENT_URL.format(
         callback_secret=call.callback_secret,
