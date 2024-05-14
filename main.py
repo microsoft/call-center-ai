@@ -93,10 +93,11 @@ api = FastAPI(
 
 
 assert CONFIG.api.events_domain, "api.events_domain config is not set"
-_CALL_EVENT_URL = urljoin(
-    str(CONFIG.api.events_domain), "/call/event/{call_id}/{callback_secret}"
+_COMMUNICATIONSERVICES_EVENT_TPL = urljoin(
+    str(CONFIG.api.events_domain),
+    "/communicationservices/event/{call_id}/{callback_secret}",
 )
-_logger.info(f"Using call event URL {_CALL_EVENT_URL}")
+_logger.info(f"Using call event URL {_COMMUNICATIONSERVICES_EVENT_TPL}")
 
 
 @api.get(
@@ -218,7 +219,7 @@ async def call_get(call_id: UUID) -> CallGetModel:
     name="Create call",
 )
 async def call_post(phone_number: PhoneNumber) -> CallGetModel:
-    url, call = await _communication_event_url(phone_number)
+    url, call = await _communicationservices_event_url(phone_number)
     call_connection_properties = _call_client.create_call(
         callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
@@ -231,13 +232,15 @@ async def call_post(phone_number: PhoneNumber) -> CallGetModel:
     return CallGetModel.model_validate(call)
 
 
+# TODO: Secure this endpoint with a secret, either in the Authorization header or in the URL
 @api.post(
-    "/call/inbound",
+    "/eventgrid/event",
     description="Handle incoming call from a Azure Event Grid event originating from Azure Communication Services.",
+    name="Receive Event Grid event",
 )
-async def call_inbound_post(request: Request) -> Response:
+async def eventgrid_event_post(request: Request) -> Response:
     responses = await asyncio.gather(
-        *[_call_inbound_worker(event_dict) for event_dict in await request.json()]
+        *[_eventgrid_event_worker(event_dict) for event_dict in await request.json()]
     )
     for response in responses:
         if response:
@@ -245,7 +248,7 @@ async def call_inbound_post(request: Request) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-async def _call_inbound_worker(
+async def _eventgrid_event_worker(
     event_dict: dict[str, Any]
 ) -> Optional[Union[JSONResponse, Response]]:
     event = EventGridEvent.from_dict(event_dict)
@@ -254,7 +257,7 @@ async def _call_inbound_worker(
     _logger.debug(f"Call inbound event {event_type} with data {event.data}")
 
     if event_type == SystemEventNames.EventGridSubscriptionValidationEventName:
-        validation_code = event.data["validationCode"]
+        validation_code: str = event.data["validationCode"]
         _logger.info(f"Validating Event Grid subscription ({validation_code})")
         return JSONResponse(
             content={"validationResponse": event.data["validationCode"]},
@@ -262,12 +265,13 @@ async def _call_inbound_worker(
         )
 
     elif event_type == SystemEventNames.AcsIncomingCallEventName:
+        call_context: str = event.data["incomingCallContext"]
         if event.data["from"]["kind"] == "phoneNumber":
             phone_number = event.data["from"]["phoneNumber"]["value"]
         else:
             phone_number = event.data["from"]["rawId"]
-        call_context = event.data["incomingCallContext"]
-        url, _ = await _communication_event_url(phone_number)
+        phone_number = PhoneNumber(phone_number)
+        url, _ = await _communicationservices_event_url(phone_number)
         event_status = await on_new_call(
             callback_url=url,
             client=_call_client,
@@ -283,12 +287,12 @@ async def _call_inbound_worker(
 
 
 @api.post(
-    "/call/event/{call_id}/{secret}",
+    "/communicationservices/event/{call_id}/{secret}",
     description="Handle callbacks from Azure Communication Services.",
-    name="Create Communication Services event",
+    name="Receive Communication Services event",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def call_event_post(
+async def communicationservices_event_post(
     request: Request,
     background_tasks: BackgroundTasks,
     call_id: UUID,
@@ -296,13 +300,15 @@ async def call_event_post(
 ) -> None:
     await asyncio.gather(
         *[
-            _communication_event_worker(background_tasks, event_dict, call_id, secret)
+            _communicationservices_event_worker(
+                background_tasks, event_dict, call_id, secret
+            )
             for event_dict in await request.json()
         ]
     )
 
 
-async def _communication_event_worker(
+async def _communicationservices_event_worker(
     background_tasks: BackgroundTasks,
     event_dict: dict,
     call_id: UUID,
@@ -419,7 +425,7 @@ async def _communication_event_worker(
     )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
-async def _communication_event_url(
+async def _communicationservices_event_url(
     phone_number: PhoneNumber,
 ) -> tuple[str, CallStateModel]:
     """
@@ -431,7 +437,7 @@ async def _communication_event_url(
     if not call:
         call = CallStateModel(phone_number=phone_number)
         await _db.call_aset(call)  # Create for the first time
-    url = _COMMUNICATION_EVENT_TPL.format(
+    url = _COMMUNICATIONSERVICES_EVENT_TPL.format(
         callback_secret=call.callback_secret,
         call_id=str(call.call_id),
     )
