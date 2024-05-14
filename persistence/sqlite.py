@@ -1,6 +1,5 @@
 from aiosqlite import connect as sqlite_connect, Connection as SQLiteConnection
 from contextlib import asynccontextmanager
-from fastapi.encoders import jsonable_encoder
 from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
 from helpers.logging import build_logger
@@ -62,7 +61,7 @@ class SqliteStore(IStore):
 
     async def call_aset(self, call: CallModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
-        data = jsonable_encoder(call.model_dump(), exclude_none=True)
+        data = call.model_dump(mode="json", exclude_none=True)
         _logger.debug(f"Saving call {call.call_id}: {data}")
         async with self._use_db() as db:
             await db.execute(

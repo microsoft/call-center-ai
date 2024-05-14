@@ -21,7 +21,6 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -138,7 +137,7 @@ async def health_readiness_get() -> JSONResponse:
             status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             break
     return JSONResponse(
-        content=jsonable_encoder(readiness),
+        content=readiness.model_dump(mode="json"),
         status_code=status_code,
     )
 

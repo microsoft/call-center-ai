@@ -2,7 +2,6 @@ from azure.core.exceptions import ServiceResponseError
 from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from contextlib import asynccontextmanager
-from fastapi.encoders import jsonable_encoder
 from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
 from helpers.logging import build_logger
@@ -114,7 +113,7 @@ class CosmosDbStore(IStore):
         wait=wait_random_exponential(multiplier=0.5, max=30),
     )
     async def call_aset(self, call: CallModel) -> bool:
-        data = jsonable_encoder(call.model_dump(), exclude_none=True)
+        data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
         _logger.debug(f"Saving call {call.call_id}: {data}")
         try:
