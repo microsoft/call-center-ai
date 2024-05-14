@@ -27,6 +27,7 @@ _TTS_SANITIZER_R = re.compile(
     r"[^\w\s'«»“”\"\"‘’''(),.!?;\-\+_@/]"
 )  # Sanitize text for TTS
 
+
 class ContextEnum(str, Enum):
     """
     Enum for call context.
