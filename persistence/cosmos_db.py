@@ -11,12 +11,6 @@ from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
 from uuid import UUID, uuid4
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_random_exponential,
-    retry_if_exception_type,
-)
 
 
 _logger = build_logger(__name__)
@@ -80,12 +74,6 @@ class CosmosDbStore(IStore):
                     exist = True
         return exist
 
-    @retry(
-        reraise=True,
-        retry=retry_if_exception_type(ServiceResponseError),
-        stop=stop_after_attempt(3),
-        wait=wait_random_exponential(multiplier=0.5, max=30),
-    )
     async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
         _logger.debug(f"Loading call {call_id}")
         call = None
@@ -106,12 +94,6 @@ class CosmosDbStore(IStore):
             _logger.error(f"Error accessing CosmosDB, {e}")
         return call
 
-    @retry(
-        reraise=True,
-        retry=retry_if_exception_type(ServiceResponseError),
-        stop=stop_after_attempt(3),
-        wait=wait_random_exponential(multiplier=0.5, max=30),
-    )
     async def call_aset(self, call: CallModel) -> bool:
         data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
@@ -124,12 +106,6 @@ class CosmosDbStore(IStore):
             _logger.error(f"Error accessing CosmosDB: {e}")
             return False
 
-    @retry(
-        reraise=True,
-        retry=retry_if_exception_type(ServiceResponseError),
-        stop=stop_after_attempt(3),
-        wait=wait_random_exponential(multiplier=0.5, max=30),
-    )
     async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
         _logger.debug(f"Loading last call for {phone_number}")
         call = None
@@ -156,12 +132,6 @@ class CosmosDbStore(IStore):
             _logger.error(f"Error accessing CosmosDB: {e}")
         return call
 
-    @retry(
-        reraise=True,
-        retry=retry_if_exception_type(ServiceResponseError),
-        stop=stop_after_attempt(3),
-        wait=wait_random_exponential(multiplier=0.5, max=30),
-    )
     async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
         calls = []
@@ -195,6 +165,9 @@ class CosmosDbStore(IStore):
         client = CosmosClient(
             # Reliability
             connection_timeout=10,
+            retry_backoff_factor=0.5,
+            retry_backoff_max=30,
+            retry_total=3,
             # Azure deployment
             url=self._config.endpoint,
             # Authentication with API key
