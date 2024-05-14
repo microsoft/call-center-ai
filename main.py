@@ -325,10 +325,10 @@ async def _communication_event_worker(
     elif (
         event_type == "Microsoft.Communication.RecognizeCompleted"
     ):  # Speech recognized
-        recognition_result = event.data["recognitionType"]
+        recognition_result: str = event.data["recognitionType"]
 
         if recognition_result == "speech":  # Handle voice
-            speech_text = event.data["speechResult"]["speech"]
+            speech_text: str = event.data["speechResult"]["speech"]
             await on_speech_recognized(
                 background_tasks=background_tasks,
                 call=call,
@@ -337,7 +337,7 @@ async def _communication_event_worker(
             )
 
         elif recognition_result == "choices":  # Handle IVR
-            label_detected = event.data["choiceResult"]["label"]
+            label_detected: str = event.data["choiceResult"]["label"]
             await on_ivr_recognized(
                 background_tasks=background_tasks,
                 call=call,
@@ -349,7 +349,7 @@ async def _communication_event_worker(
         event_type == "Microsoft.Communication.RecognizeFailed"
     ):  # Speech recognition failed
         result_information = event.data["resultInformation"]
-        error_code = result_information["subCode"]
+        error_code: int = result_information["subCode"]
 
         # Error codes:
         # 8510 = Action failed, initial silence timeout reached
@@ -377,7 +377,7 @@ async def _communication_event_worker(
 
     elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
         result_information = event.data["resultInformation"]
-        error_code = result_information["subCode"]
+        error_code: int = result_information["subCode"]
         await on_play_error(error_code)
 
     elif (
@@ -389,7 +389,7 @@ async def _communication_event_worker(
         event_type == "Microsoft.Communication.CallTransferFailed"
     ):  # Call transfer failed
         result_information = event.data["resultInformation"]
-        sub_code = result_information["subCode"]
+        sub_code: int = result_information["subCode"]
         await on_transfer_error(
             call=call,
             client=client,
