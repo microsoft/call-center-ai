@@ -99,7 +99,7 @@ class CosmosDbStore(IStore):
                 try:
                     call = CallModel(**raw)
                 except ValidationError as e:
-                    _logger.warning(f"Error parsing call: {e.errors()}")
+                    _logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
@@ -149,7 +149,7 @@ class CosmosDbStore(IStore):
                 try:
                     call = CallModel(**raw)
                 except ValidationError as e:
-                    _logger.warning(f"Error parsing call: {e.errors()}")
+                    _logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
@@ -182,7 +182,7 @@ class CosmosDbStore(IStore):
                     try:
                         calls.append(CallModel(**raw))
                     except ValidationError as e:
-                        _logger.warning(f"Error parsing call: {e.errors()}")
+                        _logger.debug(f"Parsing error: {e.errors()}")
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e}")
         return calls or None

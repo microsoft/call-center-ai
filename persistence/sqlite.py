@@ -56,7 +56,7 @@ class SqliteStore(IStore):
                 try:
                     call = CallModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.warning(f"Error parsing call: {e.errors()}")
+                    _logger.debug(f"Parsing error: {e.errors()}")
         return call
 
     async def call_aset(self, call: CallModel) -> bool:
@@ -90,7 +90,7 @@ class SqliteStore(IStore):
                 try:
                     call = CallModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.warning(f"Error parsing call: {e.errors()}")
+                    _logger.debug(f"Parsing error: {e.errors()}")
         return call
 
     async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
@@ -111,7 +111,7 @@ class SqliteStore(IStore):
                 try:
                     calls.append(CallModel.model_validate_json(row[0]))
                 except ValidationError as e:
-                    _logger.warning(f"Error parsing call: {e.errors()}")
+                    _logger.debug(f"Parsing error: {e.errors()}")
         return calls or None
 
     async def _init_db(self, db: SQLiteConnection):
