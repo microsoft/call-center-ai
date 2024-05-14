@@ -23,7 +23,7 @@ from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 from models.call import CallModel
 from models.next import ActionEnum as NextActionEnum
 from urllib.parse import quote_plus, urljoin
@@ -49,7 +49,7 @@ from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatu
 
 # Jinja configuration
 _jinja = Environment(
-    autoescape=select_autoescape(),
+    autoescape=True,
     enable_async=True,
     loader=FileSystemLoader("public_website"),
 )
