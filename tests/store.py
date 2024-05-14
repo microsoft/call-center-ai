@@ -1,6 +1,6 @@
 from helpers.config import CONFIG
 from helpers.config_models.database import ModeEnum as DatabaseModeEnum
-from models.call import CallModel
+from models.call import CallStateModel
 from pytest import assume
 import pytest
 
@@ -20,7 +20,7 @@ import pytest
 )
 @pytest.mark.asyncio  # Allow async functions
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
-async def test_acid(call: CallModel, database_mode: DatabaseModeEnum) -> None:
+async def test_acid(call: CallStateModel, database_mode: DatabaseModeEnum) -> None:
     """
     Test ACID properties of the database backend.
 

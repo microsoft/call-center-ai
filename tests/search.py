@@ -5,7 +5,7 @@ from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from models.call import CallModel
+from models.call import CallStateModel
 from typing import Optional
 import asyncio
 import pytest
@@ -130,7 +130,7 @@ class RagRelevancyMetric(BaseMetric):
 @pytest.mark.asyncio  # Allow async functions
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_relevancy(
-    call: CallModel,
+    call: CallStateModel,
     deepeval_model: GPTModel,
     user_lang: str,
     user_message: str,

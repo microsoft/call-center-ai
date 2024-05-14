@@ -9,7 +9,7 @@ from azure.search.documents.models import VectorizableTextQuery
 from contextlib import asynccontextmanager
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.logging import build_logger
-from models.call import CallModel
+from models.call import CallStateModel
 from models.readiness import ReadinessStatus
 from models.training import TrainingModel
 from persistence.icache import ICache
@@ -60,7 +60,7 @@ class AiSearchSearch(ISearch):
         wait=wait_random_exponential(multiplier=0.5, max=30),
     )
     async def training_asearch_all(
-        self, text: str, call: CallModel
+        self, text: str, call: CallStateModel
     ) -> Optional[list[TrainingModel]]:
         _logger.debug(f'Searching training data for "{text}"')
         if not text:

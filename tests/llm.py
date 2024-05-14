@@ -14,7 +14,7 @@ from helpers.call_events import (
 )
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from models.call import CallModel
+from models.call import CallStateModel
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import TypeAdapter
@@ -149,7 +149,7 @@ _logger = build_logger(__name__)
 @pytest.mark.repeat(3)  # Catch non deterministic issues
 async def test_llm(
     background_tasks: BackgroundTasks,
-    call: CallModel,
+    call: CallStateModel,
     claim_tests_excl: list[str],
     claim_tests_incl: list[str],
     deepeval_model: GPTModel,

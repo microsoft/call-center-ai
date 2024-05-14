@@ -15,18 +15,10 @@ import random
 import string
 
 
-class CallModel(BaseModel):
+class CallGetModel(BaseModel):
     # Immutable fields
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
-    callback_secret: str = Field(
-        default="".join(
-            random.choice(string.ascii_letters + string.digits) for _ in range(16)
-        ),
-        frozen=True,
-    )
-    # Private fields
-    lang_short_code: Optional[str] = None
     # Editable fields
     claim: ClaimModel = Field(default_factory=ClaimModel)
     messages: list[MessageModel] = []
@@ -35,6 +27,25 @@ class CallModel(BaseModel):
     recognition_retry: int = Field(default=0)
     reminders: list[ReminderModel] = []
     synthesis: Optional[SynthesisModel] = None
+
+    def tz(self) -> tzinfo:
+        return PhoneNumber.tz(self.phone_number)
+
+
+class CallStateModel(CallGetModel):
+    # Immutable fields
+    callback_secret: str = Field(
+        default="".join(
+            random.choice(string.ascii_letters + string.digits) for _ in range(16)
+        ),
+        frozen=True,
+    )
+    # Editable fields
+    lang_short_code: Optional[str] = Field(default=None)
+    voice_recognition_retry: int = Field(
+        default=0,
+        validation_alias="recognition_retry",  # Compatibility with v1
+    )
 
     @computed_field
     def lang(self) -> LanguageEntryModel:  # type: ignore
@@ -54,9 +65,6 @@ class CallModel(BaseModel):
     @lang.setter
     def lang(self, short_code: str) -> None:
         self.lang_short_code = short_code
-
-    def tz(self) -> tzinfo:
-        return PhoneNumber.tz(self.phone_number)
 
     async def trainings(self) -> list[TrainingModel]:
         """

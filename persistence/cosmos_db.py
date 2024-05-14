@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
 from helpers.logging import build_logger
-from models.call import CallModel
+from models.call import CallStateModel
 from models.readiness import ReadinessStatus
 from persistence.istore import IStore
 from pydantic import ValidationError
@@ -74,7 +74,7 @@ class CosmosDbStore(IStore):
                     exist = True
         return exist
 
-    async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
+    async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
         _logger.debug(f"Loading call {call_id}")
         call = None
         try:
@@ -85,7 +85,7 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    call = CallModel.model_validate(raw)
+                    call = CallStateModel.model_validate(raw)
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
@@ -94,7 +94,7 @@ class CosmosDbStore(IStore):
             _logger.error(f"Error accessing CosmosDB, {e}")
         return call
 
-    async def call_aset(self, call: CallModel) -> bool:
+    async def call_aset(self, call: CallStateModel) -> bool:
         data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
         _logger.debug(f"Saving call {call.call_id}: {data}")
@@ -106,7 +106,7 @@ class CosmosDbStore(IStore):
             _logger.error(f"Error accessing CosmosDB: {e}")
             return False
 
-    async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
+    async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
         _logger.debug(f"Loading last call for {phone_number}")
         call = None
         try:
@@ -123,7 +123,7 @@ class CosmosDbStore(IStore):
                 )
                 raw = await anext(items)
                 try:
-                    call = CallModel.model_validate(raw)
+                    call = CallStateModel.model_validate(raw)
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
@@ -132,7 +132,9 @@ class CosmosDbStore(IStore):
             _logger.error(f"Error accessing CosmosDB: {e}")
         return call
 
-    async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
+    async def call_asearch_all(
+        self, phone_number: str
+    ) -> Optional[list[CallStateModel]]:
         _logger.debug(f"Loading all calls for {phone_number}")
         calls = []
         try:
@@ -150,7 +152,7 @@ class CosmosDbStore(IStore):
                     if not raw:
                         continue
                     try:
-                        calls.append(CallModel.model_validate(raw))
+                        calls.append(CallStateModel.model_validate(raw))
                     except ValidationError as e:
                         _logger.debug(f"Parsing error: {e.errors()}")
         except CosmosHttpResponseError as e:

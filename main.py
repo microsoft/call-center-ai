@@ -24,7 +24,7 @@ from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Re
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
-from models.call import CallModel
+from models.call import CallStateModel, CallGetModel
 from models.next import ActionEnum as NextActionEnum
 from urllib.parse import quote_plus, urljoin
 import asyncio
@@ -191,8 +191,25 @@ async def report_call_get(phone_number: PhoneNumber, call_id: UUID) -> HTMLRespo
     description="Search all calls by phone number.",
     name="Search calls",
 )
-async def call_search_get(phone_number: PhoneNumber) -> list[CallModel]:
-    return await _db.call_asearch_all(phone_number) or []
+async def call_search_get(phone_number: PhoneNumber) -> list[CallGetModel]:
+    calls = await _db.call_asearch_all(phone_number) or []
+    output = [CallGetModel.model_validate(call) for call in calls]
+    return output
+
+
+@api.get(
+    "/call/{call_id}",
+    description="Get a call by its ID.",
+    name="Get call",
+)
+async def call_get(call_id: UUID) -> CallGetModel:
+    call = await _db.call_aget(call_id)
+    if not call:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Call {call_id} not found",
+        )
+    return CallGetModel.model_validate(call)
 
 
 @api.get(
@@ -409,7 +426,7 @@ async def _callback_url(phone_number: PhoneNumber) -> str:
     """
     call = await _db.call_asearch_one(phone_number)
     if not call:
-        call = CallModel(phone_number=phone_number)
+        call = CallStateModel(phone_number=phone_number)
         await _db.call_aset(call)  # Create for the first time
     return _CALL_EVENT_URL.format(
         callback_secret=call.callback_secret,

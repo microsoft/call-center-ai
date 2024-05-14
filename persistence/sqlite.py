@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
 from helpers.logging import build_logger
-from models.call import CallModel
+from models.call import CallStateModel
 from models.readiness import ReadinessStatus
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from persistence.istore import IStore
@@ -42,7 +42,7 @@ class SqliteStore(IStore):
             _logger.error(f"Error requesting SQLite, {e}")
         return ReadinessStatus.FAIL
 
-    async def call_aget(self, call_id: UUID) -> Optional[CallModel]:
+    async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
         _logger.debug(f"Loading call {call_id}")
         call = None
         async with self._use_db() as db:
@@ -53,12 +53,12 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
             if row:
                 try:
-                    call = CallModel.model_validate_json(row[0])
+                    call = CallStateModel.model_validate_json(row[0])
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         return call
 
-    async def call_aset(self, call: CallModel) -> bool:
+    async def call_aset(self, call: CallStateModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
         data = call.model_dump_json(exclude_none=True)
         _logger.debug(f"Saving call {call.call_id}: {data}")
@@ -73,7 +73,7 @@ class SqliteStore(IStore):
             await db.commit()
         return True
 
-    async def call_asearch_one(self, phone_number: str) -> Optional[CallModel]:
+    async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
         _logger.debug(f"Loading last call for {phone_number}")
         call = None
         async with self._use_db() as db:
@@ -87,12 +87,14 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
             if row:
                 try:
-                    call = CallModel.model_validate_json(row[0])
+                    call = CallStateModel.model_validate_json(row[0])
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         return call
 
-    async def call_asearch_all(self, phone_number: str) -> Optional[list[CallModel]]:
+    async def call_asearch_all(
+        self, phone_number: str
+    ) -> Optional[list[CallStateModel]]:
         _logger.debug(f"Loading all {self._config.table} for {phone_number}")
         calls = []
         async with self._use_db() as db:
@@ -108,7 +110,7 @@ class SqliteStore(IStore):
                 if not row:
                     continue
                 try:
-                    calls.append(CallModel.model_validate_json(row[0]))
+                    calls.append(CallStateModel.model_validate_json(row[0]))
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         return calls or None

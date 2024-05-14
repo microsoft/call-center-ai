@@ -4,7 +4,7 @@ from azure.communication.callautomation import (
 )
 from helpers.config import CONFIG
 from helpers.logging import build_logger
-from models.call import CallModel
+from models.call import CallStateModel
 from models.message import (
     extract_message_style,
     MessageModel,
@@ -38,7 +38,7 @@ _logger = build_logger(__name__)
 _db = CONFIG.database.instance()
 
 
-async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
+async def llm_completion(text: Optional[str], call: CallStateModel) -> Optional[str]:
     """
     Run LLM completion from a system prompt and a Call model.
 
@@ -67,7 +67,7 @@ async def llm_completion(text: Optional[str], call: CallModel) -> Optional[str]:
 
 
 async def llm_model(
-    text: Optional[str], call: CallModel, model: Type[ModelType]
+    text: Optional[str], call: CallStateModel, model: Type[ModelType]
 ) -> Optional[ModelType]:
     """
     Run LLM completion from a system prompt, a Call model, and an expected model type as a return.
@@ -96,7 +96,7 @@ async def llm_model(
 
 
 def _llm_completion_system(
-    system: str, call: CallModel
+    system: str, call: CallStateModel
 ) -> list[ChatCompletionSystemMessageParam]:
     messages = [
         ChatCompletionSystemMessageParam(
@@ -116,11 +116,11 @@ def _llm_completion_system(
 
 async def load_llm_chat(
     background_tasks: BackgroundTasks,
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
-    post_call_intelligence: Callable[[CallModel, BackgroundTasks], None],
+    post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
     _iterations_remaining: int = 3,
-) -> CallModel:
+) -> CallStateModel:
     """
     Handle the intelligence of the call, including: LLM chat, TTS, and media play.
 
@@ -271,12 +271,12 @@ async def load_llm_chat(
 
 async def _execute_llm_chat(
     background_tasks: BackgroundTasks,
-    call: CallModel,
+    call: CallStateModel,
     client: CallConnectionClient,
-    post_call_intelligence: Callable[[CallModel, BackgroundTasks], None],
+    post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
     use_tools: bool,
     user_callback: Callable[[str, MessageStyleEnum], Awaitable],
-) -> Tuple[bool, bool, bool, CallModel]:
+) -> Tuple[bool, bool, bool, CallStateModel]:
     """
     Perform the chat with the LLM model.
 
@@ -290,7 +290,7 @@ async def _execute_llm_chat(
     1. `bool`, notify error
     2. `bool`, should retry chat
     3. `bool`, if the chat should continue
-    4. `CallModel`, the updated model
+    4. `CallStateModel`, the updated model
     """
     _logger.debug("Running LLM chat")
     content_full = ""

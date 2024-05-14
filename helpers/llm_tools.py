@@ -4,7 +4,7 @@ from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
 from helpers.logging import build_logger
 from inspect import getmembers, isfunction
-from models.call import CallModel
+from models.call import CallStateModel
 from models.claim import ClaimModel
 from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
@@ -24,19 +24,19 @@ class UpdateClaimDict(TypedDict):
 
 
 class LlmPlugins:
-    call: CallModel
+    call: CallStateModel
     cancellation_callback: Callable[[], Awaitable]
     client: CallConnectionClient
-    post_call_intelligence: Callable[[CallModel], None]
+    post_call_intelligence: Callable[[CallStateModel], None]
     style: MessageStyleEnum = MessageStyleEnum.NONE
     user_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
     def __init__(
         self,
-        call: CallModel,
+        call: CallStateModel,
         cancellation_callback: Callable[[], Awaitable],
         client: CallConnectionClient,
-        post_call_intelligence: Callable[[CallModel], None],
+        post_call_intelligence: Callable[[CallStateModel], None],
         user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
         self.call = call
@@ -81,7 +81,7 @@ class LlmPlugins:
         self.post_call_intelligence(self.call)
         # Store the last message and use it at first message of the new claim
         last_message = self.call.messages[-1]
-        call = CallModel(phone_number=self.call.phone_number)
+        call = CallStateModel(phone_number=self.call.phone_number)
         call.messages.append(last_message)
         return "Claim, reminders and messages reset"
 
@@ -311,7 +311,7 @@ class LlmPlugins:
         return f"Notifying {service} for {reason}."
 
     @staticmethod
-    async def to_openai(call: CallModel) -> list[ChatCompletionToolParam]:
+    async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
         return await asyncio.gather(
             *[
                 function_schema(type, call=call)
