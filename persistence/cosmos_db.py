@@ -133,18 +133,24 @@ class CosmosDbStore(IStore):
         return call
 
     async def call_asearch_all(
-        self, phone_number: str
+        self,
+        count: int,
+        phone_number: Optional[str] = None,
     ) -> Optional[list[CallStateModel]]:
-        _logger.debug(f"Loading all calls for {phone_number}")
-        calls = []
+        _logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        calls: list[CallStateModel] = []
         try:
             async with self._use_db() as db:
                 items = db.query_items(
-                    query="SELECT * FROM c WHERE STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true) ORDER BY c.created_at DESC",
+                    query=f"SELECT * FROM c {"WHERE STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""} ORDER BY c.created_at DESC OFFSET 0 LIMIT @count",
                     parameters=[
                         {
                             "name": "@phone_number",
                             "value": phone_number,
+                        },
+                        {
+                            "name": "@count",
+                            "value": count,
                         },
                     ],
                 )
@@ -157,7 +163,7 @@ class CosmosDbStore(IStore):
                         _logger.debug(f"Parsing error: {e.errors()}")
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e}")
-        return calls or None
+        return calls
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:

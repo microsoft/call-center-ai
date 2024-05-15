@@ -93,16 +93,19 @@ class SqliteStore(IStore):
         return call
 
     async def call_asearch_all(
-        self, phone_number: str
+        self,
+        count: int,
+        phone_number: Optional[str] = None,
     ) -> Optional[list[CallStateModel]]:
-        _logger.debug(f"Loading all {self._config.table} for {phone_number}")
-        calls = []
+        _logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        calls: list[CallStateModel] = []
         async with self._use_db() as db:
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} WHERE JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ? ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC",
+                f"SELECT data FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""} ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT ?",
                 (
                     phone_number,  # data.phone_number
                     phone_number,  # data.claim.policyholder_phone
+                    count,  # limit
                 ),
             )
             rows = await cursor.fetchall()
@@ -113,7 +116,7 @@ class SqliteStore(IStore):
                     calls.append(CallStateModel.model_validate_json(row[0]))
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
-        return calls or None
+        return calls
 
     async def _init_db(self, db: SQLiteConnection):
         """

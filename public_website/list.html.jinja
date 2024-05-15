@@ -1,0 +1,33 @@
+{% extends "templates/base.html.jinja" %}
+
+{% block title %}
+Historique des appels pour {{ phone_number }}
+{% endblock %}
+
+{% block content %}
+<!-- Search bar for phone number -->
+<div class="p-4 col-span-full lg:grid lg:grid-cols-6">
+  <div class="lg:col-start-2 lg:col-end-6">
+    <form action="/report" method="GET" class="flex space-x-4">
+      <input type="text" name="phone_number" placeholder="Restrict search to a phone number (E164, e.g. +33612345678)" value="{{ phone_number }}" class="p-4 grow rounded-full bg-neutral-200/60 dark:bg-neutral-700/60">
+      <button type="submit" class="p-4 rounded-full bg-gradient-to-r from-pink-300/30 dark:from-pink-700/30 to-violet-300/30 dark:to-violet-700/30">Search</button>
+    </form>
+  </div>
+</div>
+<!-- History of calls -->
+<div class="col-span-full rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
+  <a class="grid grid-cols-4 border-b border-neutral-200/60 dark:border-neutral-700/60 text-neutral-600 dark:text-neutral-400">
+    <div class="p-4">Téléphone</div>
+    <div class="p-4">Date</div>
+    <div class="col-span-2 p-4">Synthèse</div>
+  </a>
+  {% for call in calls %}
+  <a href="/report/{{ call.call_id }}" class="grid grid-cols-4 border-b border-neutral-200/60 dark:border-neutral-700/60 hover:underline">
+    <div class="p-4 truncate">{{ call.phone_number }}</div>
+    <div class="p-4 truncate">{{ call.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M') }}</div>
+    <div class="col-span-2 p-4 truncate">{{ call.synthesis.short | lower }}</div>
+  </a>
+  {% endfor %}
+</div>
+<div class="px-4 text-neutral-600 dark:text-neutral-400">Top {{ count }} calls are shown.</div>
+{% endblock %}

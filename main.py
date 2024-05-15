@@ -10,6 +10,7 @@ _logger.info(f"call-center-ai v{CONFIG.version}")
 # General imports
 from typing import (
     Any,
+    Literal,
     Optional,
     Union,
 )
@@ -147,16 +148,25 @@ api.mount("/static", StaticFiles(directory="public_website/static"))
 
 
 @api.get(
-    "/report/{phone_number}",
-    description="Display the history of calls in a web page.",
-    name="Get call history in the browser",
+    "/report",
+    description="Display the calls history for all phone numbers in a web page.",
+    name="Search for reports (browser)",
 )
-async def report_history_get(phone_number: PhoneNumber) -> HTMLResponse:
-    calls = await _db.call_asearch_all(phone_number) or []
-
-    template = _jinja.get_template("history.html.jinja")
+async def report_get(
+    phone_number: Optional[Union[PhoneNumber, Literal[""]]] = None,
+) -> HTMLResponse:
+    count = 100
+    calls = (
+        await _db.call_asearch_all(
+            count=count,
+            phone_number=phone_number or None,
+        )
+        or []
+    )
+    template = _jinja.get_template("list.html.jinja")
     render = await template.render_async(
-        calls=calls,
+        calls=calls or [],
+        count=count,
         phone_number=phone_number,
         version=CONFIG.version,
     )
@@ -164,19 +174,18 @@ async def report_history_get(phone_number: PhoneNumber) -> HTMLResponse:
 
 
 @api.get(
-    "/report/{phone_number}/{call_id}",
+    "/report/{call_id}",
     description="Display the call report in a web page.",
-    name="Get call report in the browser",
+    name="Get a report (browser)",
 )
-async def report_call_get(phone_number: PhoneNumber, call_id: UUID) -> HTMLResponse:
+async def report_single_get(call_id: UUID) -> HTMLResponse:
     call = await _db.call_aget(call_id)
-    if not call or call.phone_number != phone_number:
+    if not call:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Call {call_id} for phone number {phone_number} not found",
+            detail=f"Call {call_id} not found",
         )
-
-    template = _jinja.get_template("report.html.jinja")
+    template = _jinja.get_template("single.html.jinja")
     render = await template.render_async(
         bot_company=CONFIG.workflow.bot_company,
         bot_name=CONFIG.workflow.bot_name,
@@ -193,7 +202,7 @@ async def report_call_get(phone_number: PhoneNumber, call_id: UUID) -> HTMLRespo
     name="Search calls",
 )
 async def call_search_get(phone_number: PhoneNumber) -> list[CallGetModel]:
-    calls = await _db.call_asearch_all(phone_number) or []
+    calls = await _db.call_asearch_all(phone_number=phone_number, count=1) or []
     output = [CallGetModel.model_validate(call) for call in calls]
     return output
 

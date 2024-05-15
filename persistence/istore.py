@@ -25,6 +25,8 @@ class IStore(ABC):
 
     @abstractmethod
     async def call_asearch_all(
-        self, phone_number: str
+        self,
+        count: int,
+        phone_number: Optional[str] = None,
     ) -> Optional[list[CallStateModel]]:
         pass

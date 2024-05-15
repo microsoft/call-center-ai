@@ -6,9 +6,9 @@ Déclaration de sinistre {{ call.claim.claim_id }}
 
 {% block content %}
 <!-- Top introduction -->
-<header class="col-span-full my-8 px-4">
+<header class="col-span-full mx-4 mb-4">
   <div class="mb-4 text-neutral-600 dark:text-neutral-400">
-    <a class="hover:underline" href="/report/{{ call.phone_number | quote_plus }}">
+    <a class="hover:underline" href="/report?phone_number={{ call.phone_number | quote_plus }}">
       ⬅ Go back to your call history
     </a>
   </div>
@@ -161,7 +161,7 @@ Déclaration de sinistre {{ call.claim.claim_id }}
             },
             {
               'title': 'Contact',
-              'value': ((call.claim.policyholder_email | lower) or 'N/A') ~ ', ' ~ (call.claim.policyholder_phone or 'N/A')
+              'value': (call.claim.policyholder_email or 'N/A') ~ ', ' ~ (call.claim.policyholder_phone or 'N/A')
             },
             {
               'title': 'Téléphone utilisé',
