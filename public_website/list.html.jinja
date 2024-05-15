@@ -1,7 +1,7 @@
 {% extends "templates/base.html.jinja" %}
 
 {% block title %}
-Historique des appels pour {{ phone_number }}
+Historique pour {{ phone_number or 'tous les numéros' }}
 {% endblock %}
 
 {% block content %}
