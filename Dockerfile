@@ -1,5 +1,5 @@
 # Base container
-FROM docker.io/library/python:3.12-slim-bookworm@sha256:541d45d3d675fb8197f534525a671e2f8d66c882b89491f9dda271f4f94dcd06 AS base
+FROM docker.io/library/python:3.12-slim-bookworm@sha256:afc139a0a640942491ec481ad8dda10f2c5b753f5c969393b12480155fe15a63 AS base
 
 # Build container
 FROM base AS build
