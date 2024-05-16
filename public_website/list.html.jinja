@@ -9,7 +9,7 @@ Historique pour {{ phone_number or 'tous les numéros' }}
 <div class="p-4 col-span-full lg:grid lg:grid-cols-6">
   <div class="lg:col-start-2 lg:col-end-6">
     <form action="/report" method="GET" class="flex space-x-4">
-      <input type="text" name="phone_number" placeholder="Restrict search to a phone number (E164, e.g. +33612345678)" value="{{ phone_number or '' }}" class="p-4 grow rounded-full bg-neutral-200/60 dark:bg-neutral-700/60">
+      <input type="tel" name="phone_number" placeholder="Restrict search to a phone number (E164, e.g. +33612345678)" value="{{ phone_number or '' }}" class="p-4 grow rounded-full bg-neutral-200/60 dark:bg-neutral-700/60">
       <button type="submit" class="p-4 rounded-full bg-gradient-to-r from-pink-300/30 dark:from-pink-700/30 to-violet-300/30 dark:to-violet-700/30">Search</button>
     </form>
   </div>
