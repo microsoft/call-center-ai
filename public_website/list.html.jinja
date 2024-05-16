@@ -6,11 +6,14 @@ Historique pour {{ phone_number or 'tous les numéros' }}
 
 {% block content %}
 <!-- Search bar for phone number -->
-<div class="p-4 col-span-full lg:grid lg:grid-cols-6">
+<div class="p-4 -mb-4 col-span-full sticky top-0 lg:px-0 lg:grid lg:grid-cols-6">
   <div class="lg:col-start-2 lg:col-end-6">
     <form action="/report" method="GET" class="flex space-x-4">
-      <input type="tel" name="phone_number" placeholder="Restrict search to a phone number (E164, e.g. +33612345678)" value="{{ phone_number or '' }}" class="p-4 grow rounded-full bg-neutral-200/60 dark:bg-neutral-700/60">
-      <button type="submit" class="p-4 rounded-full bg-gradient-to-r from-pink-300/30 dark:from-pink-700/30 to-violet-300/30 dark:to-violet-700/30">Search</button>
+      <div class="grow flex space-x-4 rounded-full backdrop-blur shadow-md bg-neutral-200/60 hover:bg-neutral-300/60 dark:bg-neutral-700/60 dark:hover:bg-neutral-600/60">
+        <span class="pl-6 py-4 select-none cursor-default">🔎</span>
+        <input type="tel" name="phone_number" placeholder="Limiter la recherche à un numéro (E164, ex. +33612345678)" value="{{ phone_number or '' }}" class="py-4 grow bg-transparent outline-none">
+      </div>
+      <button type="submit" class="px-6 py-4 rounded-full backdrop-blur shadow-md font-semibold bg-gradient-to-r from-pink-300/30 hover:from-pink-400/30 dark:from-pink-700/30 dark:hover:from-pink-600/30 to-violet-300/30 hover:to-violet-400/30 dark:to-violet-700/30 dark:hover:to-violet-600/30">Rechercher</button>
     </form>
   </div>
 </div>
