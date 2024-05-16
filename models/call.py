@@ -48,6 +48,7 @@ class CallStateModel(CallGetModel):
     )
 
     @computed_field
+    @property
     def lang(self) -> LanguageEntryModel:  # type: ignore
         from helpers.config import CONFIG
 
@@ -79,7 +80,9 @@ class CallStateModel(CallGetModel):
             search = CONFIG.ai_search.instance()
             trainings_tasks = await asyncio.gather(
                 *[
-                    search.training_asearch_all(message.content, self)
+                    search.training_asearch_all(
+                        text=message.content, lang=self.lang.short_code
+                    )
                     for message in self.messages[-CONFIG.ai_search.expansion_k :]
                 ],
             )  # Get trainings from last messages

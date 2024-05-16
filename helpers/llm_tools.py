@@ -89,11 +89,11 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call you back.', 'A todo for next week is planned.'.",
+            "Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call you back.', 'A todo for next week is planned.'.",
         ],
         description: Annotated[
             str,
-            "Description of the reminder. Should be detailed enough to be understood by anyone. Example: 'Call back customer to get more details about the accident', 'Send analysis report to the customer'.",
+            "Description of the reminder, in English. Should be detailed enough to be understood by anyone. Example: 'Call back customer to get more details about the accident', 'Send analysis report to the customer'.",
         ],
         due_date_time: Annotated[
             str,
@@ -101,11 +101,11 @@ class LlmPlugins:
         ],
         owner: Annotated[
             str,
-            "The owner of the reminder. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'contact', 'witness', 'police'.",
+            "The owner of the reminder, in English. Can be 'customer', 'assistant', or a third party from the claim. Try to be as specific as possible, with a name. Example: 'customer', 'assistant', 'contact', 'witness', 'police'.",
         ],
         title: Annotated[
             str,
-            "Short title of the reminder. Should be short and concise, in the format 'Verb + Subject'. Title is unique and allows the reminder to be updated. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
+            "Short title of the reminder, in English. Should be short and concise, in the format 'Verb + Subject'. Title is unique and allows the reminder to be updated. Example: 'Call back customer', 'Send analysis report', 'Study replacement estimates for the stolen watch'.",
         ],
     ) -> str:
         """
@@ -150,12 +150,12 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'.",
+            "Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'.",
         ],
         updates: Annotated[
             list[UpdateClaimDict],
             """
-            The field to update.
+            The field to update, in English.
 
             # Available fields
             {{ call.claim.editable_fields() | join(', ') }}
@@ -235,11 +235,11 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the search. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am searching for the document about the car accident.', 'I am looking for the contract details.'.",
+            "Phrase used to confirm the search, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am searching for the document about the car accident.', 'I am looking for the contract details.'.",
         ],
         queries: Annotated[
             list[str],
-            "The text queries to perform the search. Example: ['How much does it cost to repair a broken window?', 'What are the requirements to ask for a cyber attack insurance?']",
+            "The text queries to perform the search, in English. Example: ['How much does it cost to repair a broken window?', 'What are the requirements to ask for a cyber attack insurance?']",
         ],
     ) -> str:
         """
@@ -255,7 +255,10 @@ class LlmPlugins:
         await self.user_callback(customer_response, self.style)
         # Execute in parallel
         tasks = await asyncio.gather(
-            *[_search.training_asearch_all(query, self.call) for query in queries]
+            *[
+                _search.training_asearch_all(text=query, lang="en-US")
+                for query in queries
+            ]
         )
         # Flatten, remove duplicates, and sort by score
         trainings = sorted(set(training for task in tasks for training in task or []))
