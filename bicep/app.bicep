@@ -364,6 +364,7 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   }
   properties: {
     // raiPolicyName: contentfilter.name
+    versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
       name: gptModel
@@ -381,6 +382,7 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
   }
   properties: {
     // raiPolicyName: contentfilter.name
+    versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
       name: gptBackupModel
@@ -457,6 +459,7 @@ resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   }
   properties: {
     // raiPolicyName: contentfilter.name
+    versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
       name: adaModel
