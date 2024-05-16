@@ -363,6 +363,7 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
+    dynamicThrottlingEnabled: true  // Declared as read-only but can be set
     // raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
@@ -381,6 +382,7 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
+    dynamicThrottlingEnabled: true  // Declared as read-only but can be set
     // raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
@@ -458,6 +460,7 @@ resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
+    dynamicThrottlingEnabled: true  // Declared as read-only but can be set
     // raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
