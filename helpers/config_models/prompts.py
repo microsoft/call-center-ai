@@ -172,10 +172,10 @@ class LlmModel(BaseModel):
         Assistant will summarize the call with the customer in a few words. The customer cannot reply to this message, but will read it in their web portal.
 
         # Rules
-        - Answers in {default_lang}, even if the customer speaks another language
+        - Answers in English, even if the customer speaks another language
+        - Consider all the conversation history, from the beginning
         - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
         - Prefix the answer with a determiner (e.g., "the theft of your car", "your broken window")
-        - Consider all the conversation history, from the beginning
         - Won't make any assumptions
 
         # Answer examples
@@ -199,14 +199,14 @@ class LlmModel(BaseModel):
         Assistant will summarize the call with the customer in a paragraph. The customer cannot reply to this message, but will read it in their web portal.
 
         # Rules
-        - Answers in {default_lang}, even if the customer speaks another language
+        - Answers in English, even if the customer speaks another language
+        - Consider all the conversation history, from the beginning
         - Do not include details of the call process
         - Do not include personal details (e.g., name, phone number, address)
         - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
         - Include details stored in the claim, to make the customer confident that the situation is understood
         - Prefer including details about the incident (e.g., what, when, where, how)
         - Say "you" to refer to the customer, and "I" to refer to the assistant
-        - Consider all the conversation history, from the beginning
         - Use Markdown syntax to format the message with paragraphs, bold text, and URL
         - Won't make any assumptions
 
@@ -228,6 +228,7 @@ class LlmModel(BaseModel):
         - Only use exact words from the text as citations
         - Treats a citation as a word or a group of words
         - Use claim, reminders, and messages extracts as citations
+        - Use the same language as the text
         - Won't make any assumptions
         - Write citations as Markdown abbreviations at the end of the text (e.g., "*[words from the text]: extract from the conversation")
 
@@ -265,6 +266,7 @@ class LlmModel(BaseModel):
         Assistant will choose the next action from the company sales team perspective. The Answer is a JSON object with the action to take and the justification for this action.
 
         # Rules
+        - Answers in English, even if the customer speaks another language
         - Take as priority the customer satisfaction
         - Won't make any assumptions
         - Write no more than a few sentences as justification
@@ -375,7 +377,6 @@ class LlmModel(BaseModel):
         return self._return(
             self.synthesis_short_system_tpl,
             claim=call.claim.model_dump_json(),
-            default_lang=call.lang.human_name,
             messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
             reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)
@@ -386,7 +387,6 @@ class LlmModel(BaseModel):
         return self._return(
             self.synthesis_long_system_tpl,
             claim=call.claim.model_dump_json(),
-            default_lang=call.lang.human_name,
             messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
             reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders)

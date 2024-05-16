@@ -18,6 +18,8 @@ class ISearch(ABC):
 
     @abstractmethod
     async def training_asearch_all(
-        self, text: str, call: CallStateModel
+        self,
+        text: str,
+        lang: str,
     ) -> Optional[list[TrainingModel]]:
         pass

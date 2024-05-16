@@ -130,7 +130,6 @@ class RagRelevancyMetric(BaseMetric):
 @pytest.mark.asyncio  # Allow async functions
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_relevancy(
-    call: CallStateModel,
     deepeval_model: GPTModel,
     user_lang: str,
     user_message: str,
@@ -146,10 +145,9 @@ async def test_relevancy(
     Test is repeated 10 times to catch multi-threading and concurrency issues.
     """
     search = CONFIG.ai_search.instance()
-    call.lang = user_lang
 
     # Init data
-    res_models = await search.training_asearch_all(user_message, call)
+    res_models = await search.training_asearch_all(text=user_message, lang=user_lang)
     res_list = [d.content for d in res_models or []]
 
     _logger.info(f"Message: {user_message}")

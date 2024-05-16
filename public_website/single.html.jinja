@@ -7,22 +7,22 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
 {% block content %}
 <!-- Top introduction -->
 <header class="col-span-full mx-4 mb-4">
-  <div class="mb-4 text-neutral-600 dark:text-neutral-400">
+  <div class="my-4 text-neutral-600 dark:text-neutral-400">
     <a class="hover:underline" href="/report?phone_number={{ call.phone_number | quote_plus }}">
       ⬅ Go back to your call history
     </a>
   </div>
 
-  <h1>Bonjour {{ call.claim.policyholder_name | title }} 👋🏻</h1>
-  <p class="text-2xl">Votre sinistre <span class="font-mono">#{{ call.claim.claim_id }}</span> à propos de {{ call.synthesis.short | lower }} est en cours de traitement.</p>
+  <h1>Hello {{ (call.claim.policyholder_name | title) if call.claim.policyholder_name else '' }} 👋🏻</h1>
+  <p class="text-2xl">Your claim <span class="font-mono">#{{ call.claim.claim_id }}</span> about {{ call.synthesis.short | lower }} is currently being processed.</p>
 </header>
 
 <!-- Long synthesis -->
 <div class="col-span-full mb-8">
   <div class="lg:rounded-md bg-gradient-to-r from-pink-300/30 dark:from-pink-700/30 to-violet-300/30 dark:to-violet-700/30 lg:ring-1 ring-transparent -mx-4 -my-2 px-8 py-6 space-y-4">
-    <h2 class="text-lg">Synthèse</h2>
+    <h2 class="text-lg">Summary</h2>
     {% if not call.synthesis.long %}
-    <p class="text-neutral-600 dark:text-neutral-400">Aucune synthèse pour l'instant.</p>
+    <p class="text-neutral-600 dark:text-neutral-400">No summary yet.</p>
     {% else %}
     <div class="space-y-2">
       {{ call.synthesis.long | markdown | safe }}
@@ -40,7 +40,7 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
     <div class="overflow-hidden space-y-6">
       {% for message in call.messages | sort(attribute='created_at') %}
         {% if not (message.action == 'talk' and not message.content) %}
-        {% set name = bot_name if message.persona == 'assistant' else call.claim.policyholder_name %}
+        {% set name = bot_name if message.persona == 'assistant' else (call.claim.policyholder_name or 'Customer') %}
         <div class="flex flex-row">
           <div class="basis-6 relative self-stretch">
             <div class="absolute top-0 left-0 w-full h-full -z-10">
@@ -64,13 +64,13 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
                 {{ name | title }}
                 <span class="text-neutral-600 dark:text-neutral-400">
                   {% if message.action == 'call' %}
-                  a appelé
+                  called
                   {% elif message.action == 'hangup' %}
-                  a raccroché
+                  hung up
                   {% elif message.action == 'sms' %}
-                  a envoyé un SMS
+                  sent a text
                   {% elif message.action == 'talk' %}
-                  a dit
+                  said
                   {% endif %}
                 </span>
               </div>
@@ -85,7 +85,7 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
         </div>
         {% endif %}
       {% else %}
-      <p class="text-neutral-600 dark:text-neutral-400">Aucun message pour l'instant.</p>
+      <p class="text-neutral-600 dark:text-neutral-400">No message yet.</p>
       {% endfor %}
     </div>
 
@@ -96,10 +96,10 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
 <div class="col-start-5 col-end-7 space-y-4">
   <!-- Reminders -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
-    <h2 class="text-lg">⏰ Rappels</h2>
+    <h2 class="text-lg">⏰ Reminders</h2>
 
     {% if not call.reminders %}
-    <p class="text-neutral-600 dark:text-neutral-400">Aucun rappel pour l'instant.</p>
+    <p class="text-neutral-600 dark:text-neutral-400">No reminder yet.</p>
     {% else %}
     <div class="space-y-6">
       {% for reminder in call.reminders | sort(attribute='due_date_time') %}
@@ -116,10 +116,10 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
 
   <!-- Next actions -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
-    <h2 class="text-lg">📥 Prochaine action</h2>
+    <h2 class="text-lg">📥 Next action</h2>
 
     {% if not call.next %}
-    <p class="text-neutral-600 dark:text-neutral-400">Aucune prochaine action pour l'instant.</p>
+    <p class="text-neutral-600 dark:text-neutral-400">No further action for the moment.</p>
     {% else %}
     <ul>
       {% for action in next_actions | sort %}
@@ -142,7 +142,7 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
 
   <!-- Details -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
-    <h2 class="text-lg px-4 pt-4">📁 Détails</h2>
+    <h2 class="text-lg px-4 pt-4">📁 Details</h2>
     <table class="table-auto w-full">
       <tbody>
         {%
@@ -152,11 +152,11 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
               'value': call.claim.incident_date_time.strftime('%d %b %Y, %H:%M') if call.claim.incident_date_time else 'N/A'
             },
             {
-              'title': 'Localisation',
+              'title': 'Location',
               'value': call.claim.incident_location or 'N/A'
             },
             {
-              'title': 'Police',
+              'title': 'Policy',
               'value': call.claim.policy_number or 'N/A'
             },
             {
@@ -164,7 +164,7 @@ Sinistre {{ call.claim.claim_id }} ({{ call.phone_number }})
               'value': (call.claim.policyholder_email or 'N/A') ~ ', ' ~ (call.claim.policyholder_phone or 'N/A')
             },
             {
-              'title': 'Téléphone utilisé',
+              'title': 'Phone used',
               'value': call.phone_number or 'N/A'
             }
           ]

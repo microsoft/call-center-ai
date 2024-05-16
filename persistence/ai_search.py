@@ -60,7 +60,9 @@ class AiSearchSearch(ISearch):
         wait=wait_random_exponential(multiplier=0.5, max=30),
     )
     async def training_asearch_all(
-        self, text: str, call: CallStateModel
+        self,
+        text: str,
+        lang: str,
     ) -> Optional[list[TrainingModel]]:
         _logger.debug(f'Searching training data for "{text}"')
         if not text:
@@ -90,7 +92,7 @@ class AiSearchSearch(ISearch):
                     ],
                     search_text=text,
                     # Spell correction
-                    query_language=call.lang.short_code,
+                    query_language=lang,
                     query_speller="lexicon",
                     # Vector search
                     vector_queries=[
