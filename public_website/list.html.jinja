@@ -19,11 +19,11 @@ Historique pour {{ phone_number or 'tous les numéros' }}
 </div>
 <!-- History of calls -->
 <div class="col-span-full rounded-md overflow-hidden lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
-  <a class="grid grid-cols-4 border-b border-neutral-200/60 dark:border-neutral-700/60 text-neutral-600 dark:text-neutral-400">
+  <div class="grid grid-cols-4 border-b border-neutral-200/60 dark:border-neutral-700/60 text-neutral-600 dark:text-neutral-400">
     <div class="p-4">Téléphone</div>
     <div class="p-4">Date</div>
     <div class="col-span-2 p-4">Synthèse</div>
-  </a>
+  </div>
   {% for call in calls %}
   <a href="/report/{{ call.call_id }}" title="Appel de {{ call.phone_number }} le {{ call.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M') }}" class="grid grid-cols-4 hover:bg-neutral-100/60 dark:hover:bg-neutral-800/60 {% if not loop.last %}border-b border-neutral-200/60 dark:border-neutral-700/60{% endif %}">
     <div class="p-4 truncate">{{ call.phone_number }}</div>
