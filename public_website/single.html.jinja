@@ -25,7 +25,7 @@ Claim {{ call.claim.claim_id }} ({{ call.phone_number }})
     <p class="text-neutral-600 dark:text-neutral-400">No summary yet.</p>
     {% else %}
     <div class="space-y-2">
-      {{ call.synthesis.long | markdown | safe }}
+      {{ ((call.synthesis.long | markdown) or '<p class="text-neutral-600 dark:text-neutral-400">Error while rendering the summary.</p>') | safe }}
     </div>
     {% endif %}
   </div>
