@@ -152,7 +152,7 @@ async def report_get(
     phone_number: Optional[Union[PhoneNumber, Literal[""]]] = None,
 ) -> HTMLResponse:
     count = 100
-    calls = (
+    calls, total = (
         await _db.call_asearch_all(
             count=count,
             phone_number=phone_number or None,
@@ -165,6 +165,7 @@ async def report_get(
         calls=calls or [],
         count=count,
         phone_number=phone_number,
+        total=total,
         version=CONFIG.version,
     )
     render = html_minify(render)  # Minify HTML
@@ -196,14 +197,15 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
     return HTMLResponse(content=render)
 
 
+# TODO: Add total (int) and calls (list) as a wrapper for the list of calls
 @api.get(
     "/call",
     description="Search all calls by phone number.",
     name="Search calls",
 )
 async def call_search_get(phone_number: PhoneNumber) -> list[CallGetModel]:
-    calls = await _db.call_asearch_all(phone_number=phone_number, count=1) or []
-    output = [CallGetModel.model_validate(call) for call in calls]
+    calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=1)
+    output = [CallGetModel.model_validate(call) for call in calls or []]
     return output
 
 

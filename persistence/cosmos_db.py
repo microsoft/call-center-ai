@@ -1,3 +1,4 @@
+import asyncio
 from azure.core.exceptions import ServiceResponseError
 from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
@@ -136,8 +137,19 @@ class CosmosDbStore(IStore):
         self,
         count: int,
         phone_number: Optional[str] = None,
-    ) -> Optional[list[CallStateModel]]:
+    ) -> tuple[Optional[list[CallStateModel]], int]:
         _logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        calls, total = await asyncio.gather(
+            self._call_asearch_all_calls_worker(count, phone_number),
+            self._call_asearch_all_total_worker(phone_number),
+        )
+        return calls, total
+
+    async def _call_asearch_all_calls_worker(
+        self,
+        count: int,
+        phone_number: Optional[str] = None,
+    ) -> Optional[list[CallStateModel]]:
         calls: list[CallStateModel] = []
         try:
             async with self._use_db() as db:
@@ -164,6 +176,26 @@ class CosmosDbStore(IStore):
         except CosmosHttpResponseError as e:
             _logger.error(f"Error accessing CosmosDB, {e}")
         return calls
+
+    async def _call_asearch_all_total_worker(
+        self,
+        phone_number: Optional[str] = None,
+    ) -> int:
+        try:
+            async with self._use_db() as db:
+                items = db.query_items(
+                    query=f"SELECT VALUE COUNT(1) FROM c {"WHERE STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""}",
+                    parameters=[
+                        {
+                            "name": "@phone_number",
+                            "value": phone_number,
+                        },
+                    ],
+                )
+                total: int = await anext(items)  # type: ignore
+        except CosmosHttpResponseError as e:
+            _logger.error(f"Error accessing CosmosDB, {e}")
+        return total if total else 0
 
     @asynccontextmanager
     async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:

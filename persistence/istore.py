@@ -28,5 +28,5 @@ class IStore(ABC):
         self,
         count: int,
         phone_number: Optional[str] = None,
-    ) -> Optional[list[CallStateModel]]:
+    ) -> tuple[Optional[list[CallStateModel]], int]:
         pass

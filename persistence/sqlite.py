@@ -10,6 +10,7 @@ from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
 from uuid import UUID
+import asyncio
 import os
 
 
@@ -96,8 +97,19 @@ class SqliteStore(IStore):
         self,
         count: int,
         phone_number: Optional[str] = None,
-    ) -> Optional[list[CallStateModel]]:
+    ) -> tuple[Optional[list[CallStateModel]], int]:
         _logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        calls, total = await asyncio.gather(
+            self._call_asearch_all_calls_worker(count, phone_number),
+            self._call_asearch_all_total_worker(phone_number),
+        )
+        return calls, total
+
+    async def _call_asearch_all_calls_worker(
+        self,
+        count: int,
+        phone_number: Optional[str] = None,
+    ) -> Optional[list[CallStateModel]]:
         calls: list[CallStateModel] = []
         async with self._use_db() as db:
             cursor = await db.execute(
@@ -105,6 +117,8 @@ class SqliteStore(IStore):
                 (
                     phone_number,  # data.phone_number
                     phone_number,  # data.claim.policyholder_phone
+                    count,  # limit
+                ) if phone_number else (
                     count,  # limit
                 ),
             )
@@ -117,6 +131,21 @@ class SqliteStore(IStore):
                 except ValidationError as e:
                     _logger.debug(f"Parsing error: {e.errors()}")
         return calls
+
+    async def _call_asearch_all_total_worker(
+        self,
+        phone_number: Optional[str] = None,
+    ) -> int:
+        async with self._use_db() as db:
+            cursor = await db.execute(
+                f"SELECT COUNT(*) FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""}",
+                (
+                    phone_number,  # data.phone_number
+                    phone_number,  # data.claim.policyholder_phone
+                ) if phone_number else (),
+            )
+            row = await cursor.fetchone()
+        return int(row[0]) if row else 0
 
     async def _init_db(self, db: SQLiteConnection):
         """
