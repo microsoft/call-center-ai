@@ -47,7 +47,19 @@ class LlmPlugins:
 
     async def end_call(self) -> str:
         """
-        Use this if the customer said they want to end the call. Requires an explicit verbal validation from the customer. This will hang up the call. Never use this action directly after a recall. Example: 'I want to hang up', 'Goodbye, see you tomorrow'.
+        Use this if the customer said they want to end the call.
+
+        # Behavior
+        1. Hangup the call for everyone
+        2. The call with Assistant is ended
+
+        # Rules
+        - Requires an explicit verbal validation from the customer
+        - Never use this action directly after a recall
+
+        # Examples
+        - 'Goodbye, see you tomorrow'
+        - 'I want to hangup'
         """
         await self.cancellation_callback()
         await handle_play(
