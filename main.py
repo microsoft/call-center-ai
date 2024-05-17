@@ -162,6 +162,7 @@ async def report_get(
     )
     template = _jinja.get_template("list.html.jinja")
     render = await template.render_async(
+        application_insights_connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
         calls=calls or [],
         count=count,
         phone_number=phone_number,
@@ -185,6 +186,7 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
         )
     template = _jinja.get_template("single.html.jinja")
     render = await template.render_async(
+        application_insights_connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
         bot_company=CONFIG.workflow.bot_company,
         bot_name=CONFIG.workflow.bot_name,
         call=call,
