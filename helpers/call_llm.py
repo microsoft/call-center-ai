@@ -1,7 +1,5 @@
 from typing import Awaitable, Callable, Optional, Tuple, Type
-from azure.communication.callautomation import (
-    CallConnectionClient,
-)
+from azure.communication.callautomation import CallAutomationClient
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from models.call import CallStateModel
@@ -117,8 +115,9 @@ def _llm_completion_system(
 async def load_llm_chat(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
+    then_recognize: bool = True,
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
     """
@@ -182,10 +181,12 @@ async def load_llm_chat(
                 # Clean up
                 soft_timeout_task.cancel()
                 hard_timeout_task.cancel()
-                # Store updated chat model
-                is_error, continue_chat, should_user_answer, call = chat_task.result()
-                # Save in DB for new claims and allowing demos to be more "real-time"
-                await _db.call_aset(call)
+                is_error, continue_chat, should_user_answer, call = (
+                    chat_task.result()
+                )  # Store updated chat model
+                await _db.call_aset(
+                    call
+                )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
                 break
 
             if hard_timeout_task.done():  # Break when hard timeout is reached
@@ -260,7 +261,7 @@ async def load_llm_chat(
             _iterations_remaining=_iterations_remaining - 1,
         )
 
-    if should_user_answer:
+    if then_recognize and should_user_answer:
         await handle_recognize_text(
             call=call,
             client=client,
@@ -272,7 +273,7 @@ async def load_llm_chat(
 async def _execute_llm_chat(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
     use_tools: bool,
     user_callback: Callable[[str, MessageStyleEnum], Awaitable],

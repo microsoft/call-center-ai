@@ -1,16 +1,13 @@
 from azure.communication.callautomation import (
     CallAutomationClient,
-    CallConnectionClient,
     DtmfTone,
     RecognitionChoice,
-    PhoneNumberIdentifier,
 )
 from helpers.config import CONFIG
 from helpers.logging import build_logger, TRACER
 from azure.core.exceptions import (
     ClientAuthenticationError,
     HttpResponseError,
-    ResourceNotFoundError,
 )
 from models.synthesis import SynthesisModel
 from models.call import CallStateModel
@@ -23,9 +20,11 @@ from models.message import (
 )
 from helpers.call_utils import (
     ContextEnum as CallContextEnum,
+    handle_hangup,
     handle_play,
     handle_recognize_ivr,
     handle_recognize_text,
+    handle_transfer,
 )
 from fastapi import BackgroundTasks
 import asyncio
@@ -40,7 +39,10 @@ _db = CONFIG.database.instance()
 
 @TRACER.start_as_current_span("on_new_call")
 async def on_new_call(
-    client: CallAutomationClient, context: str, phone_number: str, callback_url: str
+    callback_url: str,
+    client: CallAutomationClient,
+    context: str,
+    phone_number: str,
 ) -> bool:
     _logger.debug(f"Incoming call handler caller ID: {phone_number}")
 
@@ -75,11 +77,10 @@ async def on_new_call(
 @TRACER.start_as_current_span("on_call_connected")
 async def on_call_connected(
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
 ) -> None:
     _logger.info("Call connected")
     call.recognition_retry = 0  # Reset recognition retry counter
-
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.CALL,
@@ -87,7 +88,9 @@ async def on_call_connected(
             persona=MessagePersonaEnum.HUMAN,
         )
     )
-
+    await _db.call_aset(
+        call
+    )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
     await _handle_ivr_language(
         call=call, client=client
     )  # Every time a call is answered, confirm the language
@@ -97,7 +100,7 @@ async def on_call_connected(
 async def on_call_disconnected(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
 ) -> None:
     _logger.info("Call disconnected")
     await _handle_hangup(background_tasks, client, call)
@@ -107,11 +110,14 @@ async def on_call_disconnected(
 async def on_speech_recognized(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     text: str,
 ) -> None:
     _logger.info(f"Voice recognition: {text}")
     call.messages.append(MessageModel(content=text, persona=MessagePersonaEnum.HUMAN))
+    await _db.call_aset(
+        call
+    )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
     call = await load_llm_chat(
         background_tasks=background_tasks,
         call=call,
@@ -123,7 +129,7 @@ async def on_speech_recognized(
 @TRACER.start_as_current_span("on_speech_timeout_error")
 async def on_speech_timeout_error(
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
 ) -> None:
     if call.recognition_retry < 10:
         await handle_recognize_text(
@@ -146,7 +152,7 @@ async def on_speech_timeout_error(
 @TRACER.start_as_current_span("on_speech_unknown_error")
 async def on_speech_unknown_error(
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     error_code: int,
 ) -> None:
     if error_code == 8511:  # Failure while trying to play the prompt
@@ -167,7 +173,7 @@ async def on_speech_unknown_error(
 async def on_play_completed(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     context: str,
 ) -> None:
     _logger.debug("Play completed")
@@ -180,9 +186,10 @@ async def on_play_completed(
 
     elif context == CallContextEnum.CONNECT_AGENT:  # Call transfer
         _logger.info("Initiating transfer call initiated")
-        agent_caller = PhoneNumberIdentifier(str(CONFIG.workflow.agent_phone_number))
-        client.transfer_call_to_participant(
-            target_participant=agent_caller,  # type: ignore
+        await handle_transfer(
+            call=call,
+            client=client,
+            target=CONFIG.workflow.agent_phone_number,
         )
 
 
@@ -208,7 +215,7 @@ async def on_play_error(
 
 @TRACER.start_as_current_span("on_ivr_recognized")
 async def on_ivr_recognized(
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
     label: str,
     background_tasks: BackgroundTasks,
@@ -258,7 +265,7 @@ async def on_transfer_completed() -> None:
 @TRACER.start_as_current_span("on_transfer_error")
 async def on_transfer_error(
     call: CallStateModel,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     error_code: int,
 ) -> None:
     _logger.info(f"Error during call transfer, subCode {error_code}")
@@ -270,22 +277,44 @@ async def on_transfer_error(
     )
 
 
+@TRACER.start_as_current_span("on_sms_received")
+async def on_sms_received(
+    background_tasks: BackgroundTasks,
+    call: CallStateModel,
+    client: CallAutomationClient,
+    message: str,
+) -> bool:
+    _logger.info(f"SMS received from {call.phone_number}: {message}")
+    call.messages.append(
+        MessageModel(
+            action=MessageActionEnum.SMS,
+            content=message,
+            persona=MessagePersonaEnum.HUMAN,
+        )
+    )
+    await _db.call_aset(
+        call
+    )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
+    if not call.in_progress:
+        _logger.info("Call not in progress, answering with SMS")
+    else:
+        _logger.info("Call in progress, answering with voice")
+        await load_llm_chat(
+            background_tasks=background_tasks,
+            call=call,
+            client=client,
+            post_call_intelligence=_post_call_intelligence,
+            then_recognize=False,
+        )
+    return True
+
+
 async def _handle_hangup(
     background_tasks: BackgroundTasks,
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
-    _logger.debug("Hanging up call")
-    try:
-        client.hang_up(is_for_everyone=True)
-    except ResourceNotFoundError:
-        _logger.debug("Call already hung up")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            _logger.debug("Call hung up before playing")
-        else:
-            raise e
-
+    await handle_hangup(client=client, call=call)
     call.messages.append(
         MessageModel(
             content="",
@@ -293,7 +322,6 @@ async def _handle_hangup(
             action=MessageActionEnum.HANGUP,
         )
     )
-
     _post_call_intelligence(call, background_tasks)
 
 
@@ -347,7 +375,6 @@ async def _post_call_sms(call: CallStateModel) -> None:
         success = True
 
     if success:
-        # Store the SMS in the call messages
         call.messages.append(
             MessageModel(
                 action=MessageActionEnum.SMS,
@@ -415,7 +442,7 @@ async def _post_call_next(call: CallStateModel) -> None:
 
 
 async def _handle_ivr_language(
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
     tones = [
