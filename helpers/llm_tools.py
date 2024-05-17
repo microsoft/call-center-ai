@@ -1,4 +1,4 @@
-from azure.communication.callautomation import CallConnectionClient
+from azure.communication.callautomation import CallAutomationClient
 from helpers.call_utils import ContextEnum as CallContextEnum, handle_play
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
@@ -6,7 +6,12 @@ from helpers.logging import build_logger
 from inspect import getmembers, isfunction
 from models.call import CallStateModel
 from models.claim import ClaimModel
-from models.message import StyleEnum as MessageStyleEnum
+from models.message import (
+    ActionEnum as MessageActionEnum,
+    MessageModel,
+    PersonaEnum as MessagePersonaEnum,
+    StyleEnum as MessageStyleEnum,
+)
 from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
@@ -16,6 +21,7 @@ import asyncio
 
 _logger = build_logger(__name__)
 _search = CONFIG.ai_search.instance()
+_sms = CONFIG.sms.instance()
 
 
 class UpdateClaimDict(TypedDict):
@@ -26,7 +32,7 @@ class UpdateClaimDict(TypedDict):
 class LlmPlugins:
     call: CallStateModel
     cancellation_callback: Callable[[], Awaitable]
-    client: CallConnectionClient
+    client: CallAutomationClient
     post_call_intelligence: Callable[[CallStateModel], None]
     style: MessageStyleEnum = MessageStyleEnum.NONE
     user_callback: Callable[[str, MessageStyleEnum], Awaitable]
@@ -35,7 +41,7 @@ class LlmPlugins:
         self,
         call: CallStateModel,
         cancellation_callback: Callable[[], Awaitable],
-        client: CallConnectionClient,
+        client: CallAutomationClient,
         post_call_intelligence: Callable[[CallStateModel], None],
         user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
@@ -324,6 +330,41 @@ class LlmPlugins:
             f"Notifying {service}, location {location}, contact {contact}, reason {reason}."
         )
         return f"Notifying {service} for {reason}."
+
+    async def send_sms(
+        self,
+        customer_response: Annotated[
+            str,
+            "Phrase used to confirm the action. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am sending a SMS to your phone number.', 'SMS with the details is sent.'.",
+        ],
+        message: Annotated[
+            str,
+            "The message to send to the customer.",
+        ],
+    ) -> str:
+        """
+        Use when there is a real need to send a SMS to the customer.
+
+        # Usage examples
+        - Ask a question, if the call quality is bad
+        - Confirm a detail like a reference number, if there is a misunderstanding
+        - Send a confirmation, if the customer wants to have a written proof
+        """
+        await self.user_callback(customer_response, self.style)
+        success = await _sms.asend(
+            content=message,
+            phone_number=self.call.phone_number,
+        )
+        if not success:
+            return "Failed to send SMS"
+        self.call.messages.append(
+            MessageModel(
+                action=MessageActionEnum.SMS,
+                content=message,
+                persona=MessagePersonaEnum.ASSISTANT,
+            )
+        )
+        return "SMS sent"
 
     @staticmethod
     async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:

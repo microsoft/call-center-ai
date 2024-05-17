@@ -21,7 +21,15 @@ from azure.communication.callautomation import (
 from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
-from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import JSONResponse, HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 from models.call import CallStateModel, CallGetModel
@@ -31,6 +39,7 @@ import asyncio
 from uuid import UUID
 import mistune
 from helpers.pydantic_types.phone_numbers import PhoneNumber
+from twilio.twiml.messaging_response import MessagingResponse
 from helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
@@ -38,6 +47,7 @@ from helpers.call_events import (
     on_new_call,
     on_play_completed,
     on_play_error,
+    on_sms_received,
     on_speech_recognized,
     on_speech_timeout_error,
     on_speech_unknown_error,
@@ -63,7 +73,7 @@ _jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", 
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
 _logger.info(f"Using phone number {str(CONFIG.communication_service.phone_number)}")
 # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
-_call_client = CallAutomationClient(
+_automation_client = CallAutomationClient(
     endpoint=CONFIG.communication_service.endpoint,
     credential=AzureKeyCredential(
         CONFIG.communication_service.access_key.get_secret_value()
@@ -231,7 +241,7 @@ async def call_get(call_id: UUID) -> CallGetModel:
 )
 async def call_post(phone_number: PhoneNumber) -> CallGetModel:
     url, call = await _communicationservices_event_url(phone_number)
-    call_connection_properties = _call_client.create_call(
+    call_connection_properties = _automation_client.create_call(
         callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
@@ -249,9 +259,18 @@ async def call_post(phone_number: PhoneNumber) -> CallGetModel:
     description="Handle incoming call from a Azure Event Grid event originating from Azure Communication Services.",
     name="Receive Event Grid event",
 )
-async def eventgrid_event_post(request: Request) -> Response:
+async def eventgrid_event_post(
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> Response:
     responses = await asyncio.gather(
-        *[_eventgrid_event_worker(event_dict) for event_dict in await request.json()]
+        *[
+            _eventgrid_event_worker(
+                background_tasks=background_tasks,
+                event_dict=event_dict,
+            )
+            for event_dict in await request.json()
+        ]
     )
     for response in responses:
         if response:
@@ -260,7 +279,8 @@ async def eventgrid_event_post(request: Request) -> Response:
 
 
 async def _eventgrid_event_worker(
-    event_dict: dict[str, Any]
+    background_tasks: BackgroundTasks,
+    event_dict: dict[str, Any],
 ) -> Optional[Union[JSONResponse, Response]]:
     event = EventGridEvent.from_dict(event_dict)
     event_type = event.event_type
@@ -277,24 +297,39 @@ async def _eventgrid_event_worker(
 
     elif event_type == SystemEventNames.AcsIncomingCallEventName:
         call_context: str = event.data["incomingCallContext"]
-        if event.data["from"]["kind"] == "phoneNumber":
-            phone_number = event.data["from"]["phoneNumber"]["value"]
-        else:
-            phone_number = event.data["from"]["rawId"]
+        phone_number = event.data["from"]["phoneNumber"]["value"]
         phone_number = PhoneNumber(phone_number)
         url, _ = await _communicationservices_event_url(phone_number)
         event_status = await on_new_call(
             callback_url=url,
-            client=_call_client,
+            client=_automation_client,
             context=call_context,
             phone_number=phone_number,
         )
-
         if not event_status:
             return Response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        return None
+
+    elif event_type == SystemEventNames.AcsSmsReceivedEventName:
+        message: str = event.data["message"]
+        phone_number: str = event.data["from"]
+        call = await _db.call_asearch_one(phone_number)
+        if not call:
+            _logger.warning(f"Call for phone number {phone_number} not found")
+            return Response(
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        event_status = await on_sms_received(
+            background_tasks=background_tasks,
+            call=call,
+            client=_automation_client,
+            message=message,
+        )
+        if not event_status:
+            return Response(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 @api.post(
@@ -336,9 +371,12 @@ async def _communicationservices_event_worker(
     event = CloudEvent.from_dict(event_dict)
     assert isinstance(event.data, dict)
 
+    # Store connection ID
     connection_id = event.data["callConnectionId"]
+    call.voice_id = connection_id
+
+    # Extract event context
     operation_context = event.data.get("operationContext", None)
-    client = _call_client.get_call_connection(call_connection_id=connection_id)
     event_type = event.type
 
     _logger.debug(f"Call event received {event_type} for call {call}")
@@ -347,14 +385,14 @@ async def _communicationservices_event_worker(
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
         await on_call_connected(
             call=call,
-            client=client,
+            client=_automation_client,
         )
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         await on_call_disconnected(
             background_tasks=background_tasks,
             call=call,
-            client=client,
+            client=_automation_client,
         )
 
     elif (
@@ -367,7 +405,7 @@ async def _communicationservices_event_worker(
             await on_speech_recognized(
                 background_tasks=background_tasks,
                 call=call,
-                client=client,
+                client=_automation_client,
                 text=speech_text,
             )
 
@@ -376,7 +414,7 @@ async def _communicationservices_event_worker(
             await on_ivr_recognized(
                 background_tasks=background_tasks,
                 call=call,
-                client=client,
+                client=_automation_client,
                 label=label_detected,
             )
 
@@ -393,12 +431,12 @@ async def _communicationservices_event_worker(
         if error_code in (8510, 8532):  # Timeout retry
             await on_speech_timeout_error(
                 call=call,
-                client=client,
+                client=_automation_client,
             )
         else:  # Unknown error
             await on_speech_unknown_error(
                 call=call,
-                client=client,
+                client=_automation_client,
                 error_code=error_code,
             )
 
@@ -406,7 +444,7 @@ async def _communicationservices_event_worker(
         await on_play_completed(
             background_tasks=background_tasks,
             call=call,
-            client=client,
+            client=_automation_client,
             context=operation_context,
         )
 
@@ -427,7 +465,7 @@ async def _communicationservices_event_worker(
         sub_code: int = result_information["subCode"]
         await on_transfer_error(
             call=call,
-            client=client,
+            client=_automation_client,
             error_code=sub_code,
         )
 
@@ -453,3 +491,49 @@ async def _communicationservices_event_url(
         call_id=str(call.call_id),
     )
     return url, call
+
+
+# TODO: Secure this endpoint with a secret, either in the Authorization header or in the URL
+@api.post(
+    "/twilio/sms",
+    description="Handle incoming SMS event from Twilio.",
+    name="Receive Twilio SMS event",
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                "application/xml": {
+                    "example": str(MessagingResponse()),
+                },
+            },
+        },
+    },
+)
+async def twilio_sms(
+    background_tasks: BackgroundTasks,
+    Body: str = Form(alias="Body"),
+    From: str = Form(alias="From"),
+) -> Response:
+    """
+    Handle incoming SMS event from Twilio.
+    """
+    phone_number = PhoneNumber(From)
+    call = await _db.call_asearch_one(phone_number)
+    if not call:
+        _logger.warning(f"Call for phone number {phone_number} not found")
+    else:
+        event_status = await on_sms_received(
+            call=call,
+            message=Body,
+            client=_automation_client,
+            background_tasks=background_tasks,
+        )
+        if not event_status:
+            return Response(
+                background=background_tasks,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    return Response(
+        background=background_tasks,
+        content=str(MessagingResponse()),  # Twilio expects an empty response everytime
+        media_type="application/xml",
+    )

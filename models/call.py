@@ -2,7 +2,7 @@ from datetime import datetime, UTC, tzinfo
 from helpers.config_models.workflow import LanguageEntryModel
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.claim import ClaimModel
-from models.message import MessageModel
+from models.message import MessageModel, ActionEnum as MessageActionEnum
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
@@ -27,6 +27,27 @@ class CallGetModel(BaseModel):
     recognition_retry: int = Field(default=0)
     reminders: list[ReminderModel] = []
     synthesis: Optional[SynthesisModel] = None
+    voice_id: Optional[str] = None
+
+    @computed_field
+    @property
+    def in_progress(self) -> bool:
+        """
+        Check if the call is in progress.
+
+        The call is in progress if the most recent message action status (CALL or HANGUP) is CALL. Otherwise, it is not in progress.
+        """
+        # Reverse
+        inverted_messages = self.messages.copy()
+        inverted_messages.reverse()
+        # Search for the first action we want
+        for message in inverted_messages:
+            if message.action == MessageActionEnum.CALL:
+                return True
+            elif message.action == MessageActionEnum.HANGUP:
+                return False
+        # Otherwise, we assume the call is completed
+        return False
 
     def tz(self) -> tzinfo:
         return PhoneNumber.tz(self.phone_number)
