@@ -419,6 +419,7 @@ async def _execute_llm_chat(
     # Execute tools
     tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
     await asyncio.gather(*tool_tasks)
+    call = plugins.call  # Update call model if object reference changed
 
     # Store message
     call.messages.append(

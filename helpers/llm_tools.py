@@ -99,8 +99,19 @@ class LlmPlugins:
         self.post_call_intelligence(self.call)
         # Store the last message and use it at first message of the new claim
         last_message = self.call.messages[-1]
-        call = CallStateModel(phone_number=self.call.phone_number)
-        call.messages.append(last_message)
+        call = CallStateModel(
+            phone_number=self.call.phone_number,
+            voice_id=self.call.voice_id,
+        )
+        call.messages += [
+            MessageModel(
+                action=MessageActionEnum.CALL,
+                content="",
+                persona=MessagePersonaEnum.HUMAN,
+            ),
+            last_message,
+        ]
+        self.call = call
         return "Claim, reminders and messages reset"
 
     async def new_or_updated_reminder(

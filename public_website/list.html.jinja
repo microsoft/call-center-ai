@@ -25,9 +25,9 @@ History for {{ phone_number or 'all numbers' }}
     <div class="p-4 truncate col-span-2">📝 Short summary</div>
   </div>
   {% for call in calls %}
-  <a href="/report/{{ call.call_id }}" title="Call from {{ call.phone_number }} the {{ call.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M') }}" class="grid grid-cols-4 hover:bg-neutral-100/60 dark:hover:bg-neutral-800/60 {% if not loop.last %}border-b border-neutral-200/60 dark:border-neutral-700/60{% endif %}">
+  <a href="/report/{{ call.call_id }}" title="Call from {{ call.phone_number }} the {{ call.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M (%Z)') }}" class="grid grid-cols-4 hover:bg-neutral-100/60 dark:hover:bg-neutral-800/60 {% if not loop.last %}border-b border-neutral-200/60 dark:border-neutral-700/60{% endif %}">
     <div class="p-4 truncate">{{ call.phone_number }}</div>
-    <div class="p-4 truncate">{{ call.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M') }}</div>
+    <div class="p-4 truncate">{{ call.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M (%Z)') }}</div>
     <div class="col-span-2 p-4 truncate">{{ call.synthesis.short | lower }}</div>
   </a>
   {% endfor %}
