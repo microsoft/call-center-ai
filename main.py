@@ -23,7 +23,6 @@ from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 from models.call import CallStateModel, CallGetModel
 from models.next import ActionEnum as NextActionEnum
@@ -141,10 +140,6 @@ async def health_readiness_get() -> JSONResponse:
         content=readiness.model_dump(mode="json"),
         status_code=status_code,
     )
-
-
-# Serve static files
-api.mount("/static", StaticFiles(directory="public_website/static"))
 
 
 @api.get(
