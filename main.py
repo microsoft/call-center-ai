@@ -46,6 +46,7 @@ from helpers.call_events import (
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
+from htmlmin.minify import html_minify
 
 
 # Jinja configuration
@@ -53,10 +54,11 @@ _jinja = Environment(
     autoescape=True,
     enable_async=True,
     loader=FileSystemLoader("public_website"),
+    optimized=False,  # Outsource optimization to html_minify
 )
 # Jinja custom functions
 _jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
-_jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
+_jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
 
 # Azure Communication Services
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
@@ -165,6 +167,7 @@ async def report_get(
         phone_number=phone_number,
         version=CONFIG.version,
     )
+    render = html_minify(render)  # Minify HTML
     return HTMLResponse(content=render)
 
 
@@ -188,6 +191,7 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
         next_actions=[action for action in NextActionEnum],
         version=CONFIG.version,
     )
+    render = html_minify(render)  # Minify HTML
     return HTMLResponse(content=render)
 
 
