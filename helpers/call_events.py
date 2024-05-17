@@ -303,6 +303,16 @@ def _post_call_intelligence(
     """
     Shortcut to run all post-call intelligence tasks in background.
     """
+    if (
+        len(call.messages) >= 3
+        and call.messages[-3].action == MessageActionEnum.CALL
+        and call.messages[-2].persona == MessagePersonaEnum.ASSISTANT
+        and call.messages[-1].action == MessageActionEnum.HANGUP
+    ):
+        _logger.info(
+            "Call ended before any interaction, skipping post-call intelligence"
+        )
+        return
     background_tasks.add_task(_post_call_next, call)
     background_tasks.add_task(_post_call_sms, call)
     background_tasks.add_task(_post_call_synthesis, call)
