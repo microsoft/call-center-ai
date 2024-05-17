@@ -44,7 +44,6 @@ from helpers.call_events import (
     on_transfer_completed,
     on_transfer_error,
 )
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
 from htmlmin.minify import html_minify
 
