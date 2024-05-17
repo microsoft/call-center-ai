@@ -42,7 +42,8 @@ async def test_acid(call: CallStateModel, database_mode: DatabaseModeEnum) -> No
     assume(
         call
         not in (
-            await db.call_asearch_all(phone_number=call.phone_number, count=1) or []
+            (await db.call_asearch_all(phone_number=call.phone_number, count=1))[0]
+            or []
         )
     )
 
@@ -56,5 +57,8 @@ async def test_acid(call: CallStateModel, database_mode: DatabaseModeEnum) -> No
     # Check search all
     assume(
         call
-        in (await db.call_asearch_all(phone_number=call.phone_number, count=1) or [])
+        in (
+            (await db.call_asearch_all(phone_number=call.phone_number, count=1))[0]
+            or []
+        )
     )

@@ -32,5 +32,11 @@ History for {{ phone_number or 'all numbers' }}
   </a>
   {% endfor %}
 </div>
-<div class="col-span-full px-4 text-neutral-600 dark:text-neutral-400">The {{ count }} first results are displayed.</div>
+<div class="col-span-full px-4 text-neutral-600 dark:text-neutral-400">
+  {% if total < count %}
+  All {{ total }} results are displayed.
+  {% else %}
+  The {{ count }} first results over {{ total }} are displayed.
+  {% endif %}
+</div>
 {% endblock %}

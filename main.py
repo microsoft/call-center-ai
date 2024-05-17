@@ -23,7 +23,6 @@ from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from fastapi import FastAPI, status, Request, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 from models.call import CallStateModel, CallGetModel
 from models.next import ActionEnum as NextActionEnum
@@ -45,8 +44,8 @@ from helpers.call_events import (
     on_transfer_completed,
     on_transfer_error,
 )
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
+from htmlmin.minify import html_minify
 
 
 # Jinja configuration
@@ -54,10 +53,11 @@ _jinja = Environment(
     autoescape=True,
     enable_async=True,
     loader=FileSystemLoader("public_website"),
+    optimized=False,  # Outsource optimization to html_minify
 )
 # Jinja custom functions
 _jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
-_jinja.filters["markdown"] = lambda x: mistune.create_markdown(escape=False, plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
+_jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
 
 # Azure Communication Services
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
@@ -143,10 +143,6 @@ async def health_readiness_get() -> JSONResponse:
     )
 
 
-# Serve static files
-api.mount("/static", StaticFiles(directory="public_website/static"))
-
-
 @api.get(
     "/report",
     description="Display the calls history for all phone numbers in a web page.",
@@ -156,7 +152,7 @@ async def report_get(
     phone_number: Optional[Union[PhoneNumber, Literal[""]]] = None,
 ) -> HTMLResponse:
     count = 100
-    calls = (
+    calls, total = (
         await _db.call_asearch_all(
             count=count,
             phone_number=phone_number or None,
@@ -165,11 +161,14 @@ async def report_get(
     )
     template = _jinja.get_template("list.html.jinja")
     render = await template.render_async(
+        application_insights_connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
         calls=calls or [],
         count=count,
         phone_number=phone_number,
+        total=total,
         version=CONFIG.version,
     )
+    render = html_minify(render)  # Minify HTML
     return HTMLResponse(content=render)
 
 
@@ -187,23 +186,26 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
         )
     template = _jinja.get_template("single.html.jinja")
     render = await template.render_async(
+        application_insights_connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
         bot_company=CONFIG.workflow.bot_company,
         bot_name=CONFIG.workflow.bot_name,
         call=call,
         next_actions=[action for action in NextActionEnum],
         version=CONFIG.version,
     )
+    render = html_minify(render)  # Minify HTML
     return HTMLResponse(content=render)
 
 
+# TODO: Add total (int) and calls (list) as a wrapper for the list of calls
 @api.get(
     "/call",
     description="Search all calls by phone number.",
     name="Search calls",
 )
 async def call_search_get(phone_number: PhoneNumber) -> list[CallGetModel]:
-    calls = await _db.call_asearch_all(phone_number=phone_number, count=1) or []
-    output = [CallGetModel.model_validate(call) for call in calls]
+    calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=1)
+    output = [CallGetModel.model_validate(call) for call in calls or []]
     return output
 
 
