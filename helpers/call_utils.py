@@ -1,16 +1,18 @@
+from contextlib import asynccontextmanager
 from enum import Enum
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from models.call import CallStateModel
 from models.message import StyleEnum as MessageStyleEnum
-from typing import Generator, Optional
+from typing import AsyncGenerator, Generator, Optional
 from azure.communication.callautomation import (
+    CallAutomationClient,
+    CallConnectionClient,
     FileSource,
     PhoneNumberIdentifier,
     RecognitionChoice,
     RecognizeInputType,
     SsmlSource,
-    CallConnectionClient,
 )
 from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
 from models.message import (
@@ -60,7 +62,7 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
 
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
 async def _handle_recognize_media(
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
     sound_url: str,
 ) -> None:
@@ -69,13 +71,15 @@ async def _handle_recognize_media(
     """
     _logger.debug(f"Recognizing media")
     try:
-        client.start_recognizing_media(
-            end_silence_timeout=3,  # Sometimes user includes breaks in their speech
-            input_type=RecognizeInputType.SPEECH,
-            play_prompt=FileSource(url=sound_url),
-            speech_language=call.lang.short_code,
-            target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
-        )
+        assert call.voice_id, "Voice ID is required for recognizing media"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            call_client.start_recognizing_media(
+                end_silence_timeout=3,  # Sometimes user includes breaks in their speech
+                input_type=RecognizeInputType.SPEECH,
+                play_prompt=FileSource(url=sound_url),
+                speech_language=call.lang.short_code,
+                target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
+            )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing")
     except HttpResponseError as e:
@@ -86,7 +90,7 @@ async def _handle_recognize_media(
 
 
 async def handle_media(
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
     sound_url: str,
     context: Optional[str] = None,
@@ -97,10 +101,12 @@ async def handle_media(
     If `context` is provided, it will be used to track the operation.
     """
     try:
-        client.play_media(
-            operation_context=context,
-            play_source=FileSource(url=sound_url),
-        )
+        assert call.voice_id, "Voice ID is required for recognizing media"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            call_client.play_media(
+                operation_context=context,
+                play_source=FileSource(url=sound_url),
+            )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
@@ -111,7 +117,7 @@ async def handle_media(
 
 
 async def handle_recognize_text(
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
     text: Optional[str] = None,
@@ -139,7 +145,7 @@ async def handle_recognize_text(
 
 
 async def handle_play(
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
     text: str,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
@@ -184,12 +190,14 @@ async def handle_play(
 
     # Play each chunk
     try:
-        for chunk in chunks:
-            _logger.info(f"Playing text: {text} ({style})")
-            client.play_media(
-                operation_context=context,
-                play_source=_audio_from_text(chunk, style, call),
-            )
+        assert call.voice_id, "Voice ID is required for recognizing media"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            for chunk in chunks:
+                _logger.info(f"Playing text: {text} ({style})")
+                call_client.play_media(
+                    operation_context=context,
+                    play_source=_audio_from_text(chunk, style, call),
+                )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
@@ -227,7 +235,7 @@ def _audio_from_text(
 
 
 async def handle_recognize_ivr(
-    client: CallConnectionClient,
+    client: CallAutomationClient,
     call: CallStateModel,
     text: str,
     choices: list[RecognitionChoice],
@@ -240,14 +248,64 @@ async def handle_recognize_ivr(
     _logger.info(f"Playing text before IVR: {text}")
     _logger.debug(f"Recognizing IVR")
     try:
-        client.start_recognizing_media(
-            choices=choices,
-            end_silence_timeout=20,
-            input_type=RecognizeInputType.CHOICES,
-            interrupt_prompt=True,
-            play_prompt=_audio_from_text(text, MessageStyleEnum.NONE, call),
-            speech_language=call.lang.short_code,
-            target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
-        )
+        assert call.voice_id, "Voice ID is required for recognizing media"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            call_client.start_recognizing_media(
+                choices=choices,
+                end_silence_timeout=20,
+                input_type=RecognizeInputType.CHOICES,
+                interrupt_prompt=True,
+                play_prompt=_audio_from_text(text, MessageStyleEnum.NONE, call),
+                speech_language=call.lang.short_code,
+                target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
+            )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing")
+
+
+async def handle_hangup(
+    client: CallAutomationClient,
+    call: CallStateModel,
+) -> None:
+    _logger.debug("Hanging up call")
+    try:
+        assert call.voice_id, "Voice ID is required for recognizing media"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            call_client.hang_up(is_for_everyone=True)
+    except ResourceNotFoundError:
+        _logger.debug("Call already hung up")
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            _logger.debug("Call hung up before playing")
+        else:
+            raise e
+
+
+async def handle_transfer(
+    client: CallAutomationClient,
+    call: CallStateModel,
+    target: str,
+    context: Optional[str] = None,
+) -> None:
+    _logger.debug(f"Transferring call to {target}")
+    try:
+        assert call.voice_id, "Voice ID is required for recognizing media"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            call_client.transfer_call_to_participant(
+                operation_context=context,
+                target_participant=PhoneNumberIdentifier(target),
+            )
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before transferring")
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            _logger.debug(f"Call hung up before transferring")
+        else:
+            raise e
+
+
+@asynccontextmanager
+async def _use_call_client(
+    client: CallAutomationClient, voice_id: str
+) -> AsyncGenerator[CallConnectionClient, None]:
+    yield client.get_call_connection(call_connection_id=voice_id)

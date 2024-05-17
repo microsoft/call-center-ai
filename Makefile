@@ -18,6 +18,7 @@ bot_company ?= $(shell cat config.yaml | yq '.workflow.bot_company')
 bot_name ?= $(shell cat config.yaml | yq '.workflow.bot_name')
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_number')
 event_subscription_name ?= $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
+twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
 # Bicep outputs
 app_url ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
@@ -36,6 +37,9 @@ install:
 
 	@echo "➡️ Installing Allure..."
 	allure --version || brew install allure
+
+	@echo "➡️ Installing Twilio CLI..."
+	twilio --version || brew tap twilio/brew && brew install twilio
 
 	@echo "➡️ Installing Python app dependencies..."
 	python3 -m pip install -r requirements.txt
@@ -101,6 +105,7 @@ dev:
 		--reload \
 		--reload-extra-file .env \
 		--reload-extra-file config.yaml \
+		--workers 2 \
 		--worker-class uvicorn.workers.UvicornWorker
 
 build:
@@ -140,18 +145,21 @@ deploy:
 		--template-file bicep/main.bicep \
 	 	--name $(name)
 
-	$(MAKE) post-deploy name=$(name)
+	@$(MAKE) post-deploy name=$(name)
 
 post-deploy:
-	$(MAKE) copy-resources \
+	@$(MAKE) copy-resources \
 		name=$(blob_storage_public_name)
 
-	$(MAKE) eventgrid-register \
+	@$(MAKE) eventgrid-register \
 		endpoint=$(app_url) \
 		source=$(communication_id)
 
+	@$(MAKE) twilio-register \
+		endpoint=$(app_url)
+
 	@echo "🚀 Claim AI is running on $(app_url)"
-	$(MAKE) logs name=$(name)
+	@$(MAKE) logs name=$(name)
 
 destroy:
 	@echo "🧐 Are you sure you want to delete? Type 'delete now $(name)' to confirm."
@@ -179,20 +187,51 @@ logs-history:
 		--workspace $(log_analytics_workspace_customer_id)
 
 eventgrid-register:
-	@echo "⚙️ Deleting previous Event Grid webhook..."
-	az eventgrid event-subscription delete --name $(event_subscription_name) || true
+	@$(MAKE) eventgrid-subscription-delete \
+		event_source=$(source) \
+		event_subscription_name=$(event_subscription_name)
 
-	@echo "⚙️ Registering Event Grid webhook..."
+	@$(MAKE) eventgrid-subscription-create \
+		event_filter="data.to.PhoneNumber.Value" \
+		event_phone_number=$(bot_phone_number) \
+		event_source=$(source) \
+		event_subscription_name=$(event_subscription_name) \
+		event_types="Microsoft.Communication.IncomingCall"
+
+	@$(MAKE) eventgrid-subscription-delete \
+		event_source=$(source) \
+		event_subscription_name=$(event_subscription_name)-sms
+
+	@$(MAKE) eventgrid-subscription-create \
+		event_filter="data.to" \
+		event_phone_number=$(bot_phone_number) \
+		event_source=$(source) \
+		event_subscription_name=$(event_subscription_name)-sms \
+		event_types="Microsoft.Communication.SMSReceived"
+
+eventgrid-subscription-create:
+	@echo "⚙️ Registering Event Grid webhook $(event_subscription_name)..."
 	az eventgrid event-subscription create \
-		--advanced-filter data.to.PhoneNumber.Value StringBeginsWith $(bot_phone_number) \
+		--advanced-filter $(event_filter) StringBeginsWith $(event_phone_number) \
 		--enable-advanced-filtering-on-arrays true \
 		--endpoint $(endpoint)/eventgrid/event \
 		--event-delivery-schema eventgridschema \
 		--event-ttl 3 \
-		--included-event-types Microsoft.Communication.IncomingCall \
+		--included-event-types "$(event_types)" \
 		--max-delivery-attempts 8 \
 		--name $(event_subscription_name) \
-		--source-resource-id $(source)
+		--source-resource-id $(event_source)
+
+eventgrid-subscription-delete:
+	@echo "⚙️ Deleting Event Grid webhook $(event_subscription_name)..."
+	az eventgrid event-subscription delete \
+		--name $(event_subscription_name) \
+		--source-resource-id $(event_source)
+
+twilio-register:
+	@echo "⚙️ Registering Twilio webhook..."
+	twilio phone-numbers:update $(twilio_phone_number) \
+		--sms-url $(endpoint)/twilio/sms
 
 copy-resources:
 	@echo "📦 Copying resources to Azure storage account..."

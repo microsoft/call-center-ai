@@ -48,6 +48,7 @@ Extract of the data stored during the call:
 - [x] Access the claim on a public website
 - [x] Access to customer conversation history
 - [x] Allow user to change the language of the conversation
+- [x] Assistant can send SMS to the user for futher information
 - [x] Bot can be called from a phone number
 - [x] Bot use multiple voice tones (e.g. happy, sad, neutral) to keep the conversation engaging
 - [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
@@ -61,6 +62,7 @@ Extract of the data stored during the call:
 - [x] Help the user to find the information needed to complete the claim
 - [x] Lower AI Search cost by usign a Redis cache
 - [x] Monitoring and tracing with Application Insights
+- [x] Receive SMS during a conversation for explicit wordings
 - [x] Responses are streamed from the LLM to the user, to avoid long pauses
 - [x] Send a SMS report after the call
 - [x] Take back a conversation after a disengagement
