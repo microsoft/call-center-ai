@@ -100,6 +100,7 @@ tunnel:
 
 dev:
 	VERSION=$(version_full) API__EVENTS_DOMAIN=$(tunnel_url) python3 -m gunicorn main:api \
+		--access-logfile - \
 		--bind 0.0.0.0:8080 \
 		--proxy-protocol \
 		--reload \
