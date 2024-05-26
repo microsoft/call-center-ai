@@ -159,7 +159,7 @@ post-deploy:
 	@$(MAKE) twilio-register \
 		endpoint=$(app_url)
 
-	@echo "🚀 Claim AI is running on $(app_url)"
+	@echo "🚀 Call Center AI is running on $(app_url)"
 	@$(MAKE) logs name=$(name)
 
 destroy:
