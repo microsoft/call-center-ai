@@ -14,14 +14,29 @@ import random
 import string
 import xml.etree.ElementTree as ET
 from azure.communication.callautomation import (
+    CallAutomationClient,
+    CallConnectionClient,
     FileSource,
     SsmlSource,
     TextSource,
-    CallConnectionClient,
 )
 
 
 _logger = build_logger(__name__)
+
+
+class CallAutomationClientMock(CallAutomationClient):
+    _play_media_callback: Callable[[str], None]
+
+    def __init__(self, play_media_callback: Callable[[str], None]) -> None:
+        self._play_media_callback = play_media_callback
+
+    def get_call_connection(
+        self,
+        *args,
+        **kwargs,
+    ) -> CallConnectionClient:
+        return CallConnectionClientMock(self._play_media_callback)
 
 
 class CallConnectionClientMock(CallConnectionClient):
@@ -41,7 +56,6 @@ class CallConnectionClientMock(CallConnectionClient):
         self,
         play_source: Union[FileSource, TextSource, SsmlSource],
         *args,
-        operation_context: Optional[str] = None,
         **kwargs,
     ) -> None:
         if isinstance(play_source, TextSource):
