@@ -1,18 +1,22 @@
 from datetime import datetime, UTC, tzinfo
 from helpers.config_models.workflow import LanguageEntryModel
+from helpers.config_models.workflow import WorkflowInitiateModel
 from helpers.pydantic_types.phone_numbers import PhoneNumber
-from models.claim import ClaimModel
 from models.message import MessageModel, ActionEnum as MessageActionEnum
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from models.training import TrainingModel
-from pydantic import BaseModel, Field, computed_field
-from typing import Optional
+from pydantic import BaseModel, Field, computed_field, field_validator, ValidationInfo
+from typing import Any, Optional
 from uuid import UUID, uuid4
 import asyncio
 import random
 import string
+
+
+class CallInitiateModel(WorkflowInitiateModel):
+    phone_number: PhoneNumber
 
 
 class CallGetModel(BaseModel):
@@ -20,11 +24,12 @@ class CallGetModel(BaseModel):
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     # Editable fields
-    claim: ClaimModel = Field(default_factory=ClaimModel)
+    initiate: CallInitiateModel = Field(frozen=True)
+    claim: dict[str, Any] = Field(
+        default={}
+    )  # Place after "initiate" as it depends on it for validation
     messages: list[MessageModel] = []
     next: Optional[NextModel] = None
-    phone_number: PhoneNumber
-    recognition_retry: int = Field(default=0)
     reminders: list[ReminderModel] = []
     synthesis: Optional[SynthesisModel] = None
     voice_id: Optional[str] = None
@@ -49,8 +54,18 @@ class CallGetModel(BaseModel):
         # Otherwise, we assume the call is completed
         return False
 
-    def tz(self) -> tzinfo:
-        return PhoneNumber.tz(self.phone_number)
+    @field_validator("claim")
+    def _validate_claim(
+        cls, claim: Optional[dict[str, Any]], info: ValidationInfo
+    ) -> dict[str, Any]:
+        initiate: Optional[CallInitiateModel] = info.data.get("initiate", None)
+        if not initiate:
+            return {}
+        return (
+            initiate.claim_model()
+            .model_validate(claim, strict=True)
+            .model_dump(exclude_none=True)
+        )
 
 
 class CallStateModel(CallGetModel):
@@ -73,16 +88,18 @@ class CallStateModel(CallGetModel):
     def lang(self) -> LanguageEntryModel:  # type: ignore
         from helpers.config import CONFIG
 
+        lang = CONFIG.workflow.initiate.lang
+        default = lang.default_lang
         if self.lang_short_code:
             return next(
                 (
                     lang
-                    for lang in CONFIG.workflow.lang.availables
+                    for lang in lang.availables
                     if lang.short_code == self.lang_short_code
                 ),
-                CONFIG.workflow.lang.default_lang,
+                default,
             )
-        return CONFIG.workflow.lang.default_lang
+        return default
 
     @lang.setter
     def lang(self, short_code: str) -> None:
@@ -99,7 +116,7 @@ class CallStateModel(CallGetModel):
 
         with TRACER.start_as_current_span("trainings"):
             search = CONFIG.ai_search.instance()
-            trainings_tasks = await asyncio.gather(
+            tasks = await asyncio.gather(
                 *[
                     search.training_asearch_all(
                         text=message.content, lang=self.lang.short_code
@@ -108,10 +125,9 @@ class CallStateModel(CallGetModel):
                 ],
             )  # Get trainings from last messages
             trainings = sorted(
-                set(
-                    training
-                    for trainings in trainings_tasks
-                    for training in trainings or []
-                )
+                set(training for trainings in tasks for training in trainings or [])
             )  # Flatten, remove duplicates, and sort by score
             return trainings
+
+    def tz(self) -> tzinfo:
+        return PhoneNumber.tz(self.initiate.phone_number)

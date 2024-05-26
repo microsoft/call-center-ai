@@ -79,9 +79,9 @@ class SqliteStore(IStore):
         call = None
         async with self._use_db() as db:
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
+                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
                 (
-                    phone_number,  # data.phone_number
+                    phone_number,  # data.initiate.phone_number
                     phone_number,  # data.claim.policyholder_phone
                 ),
             )
@@ -113,13 +113,15 @@ class SqliteStore(IStore):
         calls: list[CallStateModel] = []
         async with self._use_db() as db:
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""} ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT ?",
+                f"SELECT data FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""} ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT ?",
                 (
-                    phone_number,  # data.phone_number
-                    phone_number,  # data.claim.policyholder_phone
-                    count,  # limit
-                ) if phone_number else (
-                    count,  # limit
+                    (
+                        phone_number,  # data.initiate.phone_number
+                        phone_number,  # data.claim.policyholder_phone
+                        count,  # limit
+                    )
+                    if phone_number
+                    else (count,)  # limit
                 ),
             )
             rows = await cursor.fetchall()
@@ -138,11 +140,15 @@ class SqliteStore(IStore):
     ) -> int:
         async with self._use_db() as db:
             cursor = await db.execute(
-                f"SELECT COUNT(*) FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""}",
+                f"SELECT COUNT(*) FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""}",
                 (
-                    phone_number,  # data.phone_number
-                    phone_number,  # data.claim.policyholder_phone
-                ) if phone_number else (),
+                    (
+                        phone_number,  # data.initiate.phone_number
+                        phone_number,  # data.claim.policyholder_phone
+                    )
+                    if phone_number
+                    else ()
+                ),
             )
             row = await cursor.fetchone()
         return int(row[0]) if row else 0
@@ -162,7 +168,7 @@ class SqliteStore(IStore):
         )
         # Create indexes
         await db.execute(
-            f"CREATE INDEX IF NOT EXISTS {self._config.table}_data_phone_number ON {self._config.table} (JSON_EXTRACT(data, '$.phone_number'))"
+            f"CREATE INDEX IF NOT EXISTS {self._config.table}_data_initiate_phone_number ON {self._config.table} (JSON_EXTRACT(data, '$.initiate.phone_number'))"
         )
         await db.execute(
             f"CREATE INDEX IF NOT EXISTS {self._config.table}_data_created_at ON {self._config.table} (DATETIME(JSON_EXTRACT(data, '$.created_at')))"

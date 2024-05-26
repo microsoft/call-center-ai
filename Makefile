@@ -13,9 +13,6 @@ cognitive_communication_location := westeurope
 openai_location := southcentralus
 search_location := northeurope
 # App configuration
-agent_phone_number ?= $(shell cat config.yaml | yq '.workflow.agent_phone_number')
-bot_company ?= $(shell cat config.yaml | yq '.workflow.bot_company')
-bot_name ?= $(shell cat config.yaml | yq '.workflow.bot_name')
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_number')
 event_subscription_name ?= $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
 twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
@@ -100,6 +97,7 @@ tunnel:
 
 dev:
 	VERSION=$(version_full) API__EVENTS_DOMAIN=$(tunnel_url) python3 -m gunicorn main:api \
+		--access-logfile - \
 		--bind 0.0.0.0:8080 \
 		--proxy-protocol \
 		--reload \
@@ -136,9 +134,6 @@ deploy:
 	az deployment sub create \
 		--location $(app_location) \
 		--parameters \
-			'agentPhoneNumber=$(agent_phone_number)' \
-			'botCompany=$(bot_company)' \
-			'botName=$(bot_name)' \
 			'cognitiveCommunicationLocation=$(cognitive_communication_location)' \
 			'openaiLocation=$(openai_location)' \
 			'searchLocation=$(search_location)' \
@@ -158,7 +153,7 @@ post-deploy:
 	@$(MAKE) twilio-register \
 		endpoint=$(app_url)
 
-	@echo "🚀 Claim AI is running on $(app_url)"
+	@echo "🚀 Call Center AI is running on $(app_url)"
 	@$(MAKE) logs name=$(name)
 
 destroy:

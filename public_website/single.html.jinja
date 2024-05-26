@@ -1,20 +1,20 @@
 {% extends "templates/base.html.jinja" %}
 
 {% block title %}
-Claim {{ call.claim.claim_id }} ({{ call.phone_number }})
+Claim ({{ call.initiate.phone_number }})
 {% endblock %}
 
 {% block content %}
 <!-- Top introduction -->
 <header class="col-span-full mx-4 mb-4">
   <div class="my-4 text-neutral-600 dark:text-neutral-400">
-    <a class="hover:underline" href="/report?phone_number={{ call.phone_number | quote_plus }}">
+    <a class="hover:underline" href="/report?phone_number={{ call.initiate.phone_number | quote_plus }}">
       ⬅ Go back to your call history
     </a>
   </div>
 
   <h1>Hello {{ (call.claim.policyholder_name | title) if call.claim.policyholder_name else '' }} 👋🏻</h1>
-  <p class="text-2xl">Your claim <span class="font-mono">#{{ call.claim.claim_id }}</span> {{ ('about ' ~ call.synthesis.short | lower) if call.synthesis.short }} is being processed.</p>
+  <p class="text-2xl">Your claim {{ ('about ' ~ call.synthesis.short | lower) if call.synthesis.short }} is being processed.</p>
 </header>
 
 <!-- Long synthesis -->
@@ -165,7 +165,7 @@ Claim {{ call.claim.claim_id }} ({{ call.phone_number }})
             },
             {
               'title': 'Phone used',
-              'value': call.phone_number or 'N/A'
+              'value': call.initiate.phone_number or 'N/A'
             }
           ]
         %}
@@ -178,6 +178,14 @@ Claim {{ call.claim.claim_id }} ({{ call.phone_number }})
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <!-- Task -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
+    <h2 class="text-lg">🫡 Task</h2>
+    <p class="text-neutral-600 dark:text-neutral-400">
+      {{ call.initiate.task }}
+    </p>
   </div>
 </div>
 {% endblock %}

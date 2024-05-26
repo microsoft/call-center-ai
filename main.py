@@ -32,7 +32,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse, HTMLResponse
 from jinja2 import Environment, FileSystemLoader
-from models.call import CallStateModel, CallGetModel
+from models.call import CallStateModel, CallGetModel, CallInitiateModel
 from models.next import ActionEnum as NextActionEnum
 from urllib.parse import quote_plus, urljoin
 import asyncio
@@ -197,8 +197,8 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
     template = _jinja.get_template("single.html.jinja")
     render = await template.render_async(
         application_insights_connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
-        bot_company=CONFIG.workflow.bot_company,
-        bot_name=CONFIG.workflow.bot_name,
+        bot_company=call.initiate.bot_company,
+        bot_name=call.initiate.bot_name,
         call=call,
         next_actions=[action for action in NextActionEnum],
         version=CONFIG.version,
@@ -239,13 +239,13 @@ async def call_get(call_id: UUID) -> CallGetModel:
     description="Initiate a call to a phone number.",
     name="Create call",
 )
-async def call_post(phone_number: PhoneNumber) -> CallGetModel:
-    url, call = await _communicationservices_event_url(phone_number)
+async def call_post(initiate: CallInitiateModel) -> CallGetModel:
+    url, call = await _communicationservices_event_url(initiate.phone_number, initiate)
     call_connection_properties = _automation_client.create_call(
         callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
-        target_participant=PhoneNumberIdentifier(phone_number),  # type: ignore
+        target_participant=PhoneNumberIdentifier(initiate.phone_number),  # type: ignore
     )
     _logger.info(
         f"Created call with connection id: {call_connection_properties.call_connection_id}"
@@ -475,7 +475,7 @@ async def _communicationservices_event_worker(
 
 
 async def _communicationservices_event_url(
-    phone_number: PhoneNumber,
+    phone_number: PhoneNumber, initiate: Optional[CallInitiateModel] = None
 ) -> tuple[str, CallStateModel]:
     """
     Generate the callback URL for a call.
@@ -484,7 +484,13 @@ async def _communicationservices_event_url(
     """
     call = await _db.call_asearch_one(phone_number)
     if not call:
-        call = CallStateModel(phone_number=phone_number)
+        call = CallStateModel(
+            initiate=initiate
+            or CallInitiateModel(
+                **CONFIG.workflow.initiate.model_dump(),
+                phone_number=phone_number,
+            )
+        )
         await _db.call_aset(call)  # Create for the first time
     url = _COMMUNICATIONSERVICES_EVENT_TPL.format(
         callback_secret=call.callback_secret,

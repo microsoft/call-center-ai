@@ -8,6 +8,72 @@ AI-powered call center solution with Azure and OpenAI GPT.
 
 ## Overview
 
+Send a phone call from AI agent, in an API call. Or, directly call the bot from the configured phone number!
+
+Insurance, IT support, customer service, and more. The bot can be customized in few seconds (really) to fit your needs.
+
+```bash
+# Ask the bot to call a phone number
+data='{
+  "bot_company": "Contoso",
+  "bot_name": "Marion",
+  "phone_number": "+11234567890",
+  "task": "Assistant will help the customer with their digital workplace. Assistant is working for the IT support department. The objective is to help the customer with their issue and gather information in the claim.",
+  "agent_phone_number": "+33612345678",
+  "claim": [
+    {
+      "name": "hardware_info",
+      "type": "text"
+    },
+    {
+      "name": "first_seen",
+      "type": "datetime"
+    },
+    {
+      "name": "building_location",
+      "type": "text"
+    }
+  ]
+}'
+
+curl \
+  --header 'Content-Type: application/json' \
+  --request POST \
+  --url https://xxx/call \
+  --data $data
+```
+
+### Features
+
+> [!NOTE]
+> This project is a proof of concept. It is not intended to be used in production. This demonstrates how can be combined Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
+
+- [x] Access the claim on a public website
+- [x] Access to customer conversation history
+- [x] Allow user to change the language of the conversation
+- [x] Assistant can send SMS to the user for futher information
+- [x] Bot can be called from a phone number
+- [x] Bot use multiple voice tones (e.g. happy, sad, neutral) to keep the conversation engaging
+- [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
+- [x] Create by itself a todo list of tasks to complete the claim
+- [x] Customizable prompts
+- [x] Disengaging from a human agent when needed
+- [x] Filter out inappropriate content from the LLM, like profanity or concurrence company names
+- [x] Fine understanding of the customer request with GPT-4 Turbo
+- [x] Follow a specific data schema for the claim
+- [x] Has access to a documentation database (few-shot training / RAG)
+- [x] Help the user to find the information needed to complete the claim
+- [x] Lower AI Search cost by usign a Redis cache
+- [x] Monitoring and tracing with Application Insights
+- [x] Receive SMS during a conversation for explicit wordings
+- [x] Responses are streamed from the LLM to the user, to avoid long pauses
+- [x] Send a SMS report after the call
+- [x] Take back a conversation after a disengagement
+- [ ] Call back the user when needed
+- [ ] Simulate a IVR workflow
+
+### Demo
+
 A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
 
 [![French demo](https://img.youtube.com/vi/4r5s-NZ9CuY/maxresdefault.jpg)](https://youtube.com/watch?v=4r5s-NZ9CuY)
@@ -40,35 +106,6 @@ Extract of the data stored during the call:
 }
 ```
 
-### Features
-
-> [!NOTE]
-> This project is a proof of concept. It is not intended to be used in production. This demonstrates how can be combined Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
-
-- [x] Access the claim on a public website
-- [x] Access to customer conversation history
-- [x] Allow user to change the language of the conversation
-- [x] Assistant can send SMS to the user for futher information
-- [x] Bot can be called from a phone number
-- [x] Bot use multiple voice tones (e.g. happy, sad, neutral) to keep the conversation engaging
-- [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
-- [x] Create by itself a todo list of tasks to complete the claim
-- [x] Customizable prompts
-- [x] Disengaging from a human agent when needed
-- [x] Filter out inappropriate content from the LLM, like profanity or concurrence company names
-- [x] Fine understanding of the customer request with GPT-4 Turbo
-- [x] Follow a specific data schema for the claim
-- [x] Has access to a documentation database (few-shot training / RAG)
-- [x] Help the user to find the information needed to complete the claim
-- [x] Lower AI Search cost by usign a Redis cache
-- [x] Monitoring and tracing with Application Insights
-- [x] Receive SMS during a conversation for explicit wordings
-- [x] Responses are streamed from the LLM to the user, to avoid long pauses
-- [x] Send a SMS report after the call
-- [x] Take back a conversation after a disengagement
-- [ ] Call back the user when needed
-- [ ] Simulate a IVR workflow
-
 ### User report after the call
 
 A report is available at `https://[your_domain]/report/[phone_number]` (like `http://localhost:8080/report/%2B133658471534`). It shows the conversation history, claim data and reminders.
@@ -85,11 +122,11 @@ graph
   user(["User"])
   agent(["Agent"])
 
-  api["Claim AI"]
+  app["Call Center AI"]
 
-  api -- Transfer to --> agent
-  api -. Send voice .-> user
-  user -- Call --> api
+  app -- Transfer to --> agent
+  app -. Send voice .-> user
+  user -- Call --> app
 ```
 
 ### Component level architecture
@@ -104,7 +141,7 @@ graph LR
 
   subgraph "Claim AI"
     ai_search[("RAG\n(AI Search)")]
-    api["API"]
+    app["App"]
     communication_service_sms["SMS gateway\n(Communication Services)"]
     communication_service["Call gateway\n(Communication Services)"]
     constent_safety["Moderation\n(Content Safety)"]
@@ -115,16 +152,16 @@ graph LR
     translation["Translation\n(Cognitive Services)"]
   end
 
-  api -- Answer with text --> communication_service
-  api -- Ask for translation --> translation
-  api -- Few-shot training --> ai_search
-  api -- Generate completion --> gpt
-  api -- Get cached data --> redis
-  api -- Save conversation --> db
-  api -- Send SMS report --> communication_service_sms
-  api -- Test for profanity --> constent_safety
-  api -- Transfer to agent --> communication_service
-  api -. Watch .-> event_grid
+  app -- Answer with text --> communication_service
+  app -- Ask for translation --> translation
+  app -- Few-shot training --> ai_search
+  app -- Generate completion --> gpt
+  app -- Get cached data --> redis
+  app -- Save conversation --> db
+  app -- Send SMS report --> communication_service_sms
+  app -- Test for profanity --> constent_safety
+  app -- Transfer to agent --> communication_service
+  app -. Watch .-> event_grid
 
   communication_service -- Notifies --> event_grid
   communication_service -- Transfer to --> agent
@@ -149,58 +186,58 @@ sequenceDiagram
     participant Event Grid
     participant Communication Services
     participant Content Safety
-    participant API
+    participant App
     participant Cosmos DB
     participant OpenAI GPT
     participant AI Search
 
-    API->>Event Grid: Subscribe to events
+    App->>Event Grid: Subscribe to events
     Customer->>PSTN: Initiate a call
     PSTN->>Communication Services: Forward call
     Communication Services->>Event Grid: New call event
-    Event Grid->>API: Send event to event URL (HTTP webhook)
-    activate API
-    API->>Communication Services: Accept the call and give inbound URL
-    deactivate API
+    Event Grid->>App: Send event to event URL (HTTP webhook)
+    activate App
+    App->>Communication Services: Accept the call and give inbound URL
+    deactivate App
     Communication Services->>Speech to Text: Transform speech to text
 
-    Communication Services->>API: Send text to the inbound URL
-    activate API
+    Communication Services->>App: Send text to the inbound URL
+    activate App
     alt First call
-        API->>Communication Services: Send static SSML text
+        App->>Communication Services: Send static SSML text
     else Callback
-        API->>AI Search: Gather training data
-        API->>OpenAI GPT: Ask for a completion
-        OpenAI GPT-->>API: Answer (HTTP/2 SSE)
+        App->>AI Search: Gather training data
+        App->>OpenAI GPT: Ask for a completion
+        OpenAI GPT-->>App: Answer (HTTP/2 SSE)
         loop Over buffer
             loop Over multiple tools
                 alt Is this a claim data update?
-                    API->>Content Safety: Ask for safety test
+                    App->>Content Safety: Ask for safety test
                     alt Is the text safe?
-                        API->>Communication Services: Send dynamic SSML text
+                        App->>Communication Services: Send dynamic SSML text
                     end
-                    API->>Cosmos DB: Update claim data
+                    App->>Cosmos DB: Update claim data
                 else Does the user want the human agent?
-                    API->>Communication Services: Send static SSML text
-                    API->>Communication Services: Transfer to a human
+                    App->>Communication Services: Send static SSML text
+                    App->>Communication Services: Transfer to a human
                     Communication Services->>Human agent: Call the phone number
                 else Should we end the call?
-                    API->>Communication Services: Send static SSML text
-                    API->>Communication Services: End the call
+                    App->>Communication Services: Send static SSML text
+                    App->>Communication Services: End the call
                 end
             end
             alt Is there a text?
                 alt Is there enough text to make a sentence?
-                    API->>Content Safety: Ask for safety test
+                    App->>Content Safety: Ask for safety test
                     alt Is the text safe?
-                        API->>Communication Services: Send dynamic SSML text
+                        App->>Communication Services: Send dynamic SSML text
                     end
                 end
             end
         end
-        API->>Cosmos DB: Persist conversation
+        App->>Cosmos DB: Persist conversation
     end
-    deactivate API
+    deactivate App
     Communication Services->>PSTN: Send voice
     PSTN->>Customer: Forward voice
 ```
@@ -217,10 +254,11 @@ Create a local `config.yaml` file (most of the fields are filled automatically b
 ```yaml
 # config.yaml
 workflow:
-  agent_phone_number: "+33612345678"
-  bot_company: Contoso
-  bot_name: Robert
-  lang: {}
+  initiate:
+    agent_phone_number: "+33612345678"
+    bot_company: Contoso
+    bot_name: Robert
+    lang: {}
 
 communication_service:
   phone_number: "+33612345678"
@@ -260,9 +298,10 @@ resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
 workflow:
-  agent_phone_number: "+33612345678"
-  bot_company: Contoso
-  bot_name: Robert
+  initiate:
+    agent_phone_number: "+33612345678"
+    bot_company: Contoso
+    bot_name: Robert
 
 communication_service:
   access_key: xxx
@@ -364,6 +403,164 @@ Required index schema:
 
 An exampe is [available at `examples/import-training.ipynb`](examples/import-training.ipynb). It shows how to import training data from a PDF files dataset.
 
+### Customize the languages
+
+The bot can be used in multiple languages. It can understand the language the user chose.
+
+See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages) for the Text-to-Speech service.
+
+```yaml
+# config.yaml
+[...]
+
+workflow:
+  initiate:
+    lang:
+      default_short_code: "fr-FR"
+      availables:
+        - pronunciations_en: ["French", "FR", "France"]
+          short_code: "fr-FR"
+          voice_name: "fr-FR-DeniseNeural"
+        - pronunciations_en: ["Chinese", "ZH", "China"]
+          short_code: "zh-CN"
+          voice_name: "zh-CN-XiaoxiaoNeural"
+```
+
+### Customize the moderation levels
+
+Levels are defined for each category of Content Safety. The higher the score, the more strict the moderation is, from 0 to 7.
+
+Moderation is applied on all bot data, including the web page and the conversation.
+
+```yaml
+# config.yaml
+[...]
+
+content_safety:
+  category_hate_score: 0
+  category_self_harm_score: 0
+  category_sexual_score: 5
+  category_violence_score: 0
+```
+
+### Customize the claim data schema
+
+Customization of the data schema is fully supported. You can add or remove fields as needed, depending on the requirements.
+
+By default, the schema of composed of:
+
+- `caller_email` (`email`)
+- `caller_name` (`text`)
+- `caller_phone` (`phone_number`)
+- `extra_details` (`text`)
+
+Values are validated to ensure the data format commit to your schema. They can be either:
+
+- `datetime`
+- `email`
+- `phone_number` (`E164` format)
+- `text`
+
+Finally, an optional description can be provided. The description must be short and meaningful, it will be passed to the LLM.
+
+Default schema, for inbound calls, is defined in the configuration:
+
+```yaml
+# config.yaml
+[...]
+
+workflow:
+  default_initiate:
+    claim:
+      - name: additional_notes
+        type: text
+        # description: xxx
+      - name: device_info
+        type: text
+        # description: xxx
+      - name: incident_datetime
+        type: datetime
+        # description: xxx
+```
+
+Claim schema can be customized for each call, by adding the `claim` field in the `POST /call` API call.
+
+### Customize the call objective
+
+The objective is a description of what the bot will do during the call. It is used to give a context to the LLM. It should be short, meaningful, and written in English.
+
+This solution is priviledged instead of overriding the LLM prompt.
+
+Default task, for inbound calls, is defined in the configuration:
+
+```yaml
+# config.yaml
+[...]
+
+workflow:
+  initiate:
+    task: "Assistant will help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered."
+```
+
+Task can be customized for each call, by adding the `task` field in the `POST /call` API call.
+
+### Use an OpenAI compatible model for the LLM
+
+To use a model compatible with the OpenAI completion API, you need to create an account and get the following information:
+
+- API key
+- Context window size
+- Endpoint URL
+- Model name
+- Streaming capability
+
+Then, add the following in the `config.yaml` file:
+
+```yaml
+# config.yaml
+[...]
+
+llm:
+  backup:
+    mode: openai
+    openai:
+      api_key: xxx
+      context: 16385
+      endpoint: https://api.openai.com
+      model: gpt-35-turbo
+      streaming: true
+  primary:
+    mode: openai
+    openai:
+      api_key: xxx
+      context: 128000
+      endpoint: https://api.openai.com
+      model: gpt-4
+      streaming: true
+```
+
+### Use Twilio for SMS
+
+To use Twilio for SMS, you need to create an account and get the following information:
+
+- Account SID
+- Auth Token
+- Phone number
+
+Then, add the following in the `config.yaml` file:
+
+```yaml
+# config.yaml
+[...]
+
+sms:
+  mode: twilio
+  twilio:
+    account_sid: xxx
+    auth_token: xxx
+    phone_number: "+33612345678"
+```
+
 ### Customize the prompts
 
 Note that prompt examples contains `{xxx}` placeholders. These placeholders are replaced by the bot with the corresponding data. For example, `{bot_name}` is internally replaced by the bot name.
@@ -425,133 +622,12 @@ prompts:
       {reminders}
 ```
 
-### Customize the languages
+## Q&A
 
-The bot can be used in multiple languages. It can understand the language the user chose.
+### Why no LLM framework is used?
 
-See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages) for the Text-to-Speech service.
+At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
 
-```yaml
-# config.yaml
-[...]
+### What's missing in this project for production deployment?
 
-workflow:
-  lang:
-    default_short_code: "fr-FR"
-    availables:
-      - pronunciations_en: ["French", "FR", "France"]
-        short_code: "fr-FR"
-        voice_name: "fr-FR-DeniseNeural"
-      - pronunciations_en: ["Chinese", "ZH", "China"]
-        short_code: "zh-CN"
-        voice_name: "zh-CN-XiaoxiaoNeural"
-```
-
-### Customize the moderation levels
-
-Levels are defined for each category of Content Safety. The higher the score, the more strict the moderation is, from 0 to 7.
-
-Moderation is applied on all bot data, including the web page and the conversation.
-
-```yaml
-# config.yaml
-[...]
-
-content_safety:
-  category_hate_score: 0
-  category_self_harm_score: 0
-  category_sexual_score: 5
-  category_violence_score: 0
-```
-
-### Customize the claim data schema
-
-Customization of the data schema is not supported yet through the configuration file. However, you can customize the data schema by modifying the application source code.
-
-The data schema is defined in `models/claim.py`. All the fields are required to be of type `Optional[str]` (except the immutable fields).
-
-```python
-# models/claim.py
-class ClaimModel(BaseModel):
-    # Immutable fields
-    # [...]
-    # Editable fields
-    additional_notes: Optional[str] = None
-    device_info: Optional[str] = None
-    error_messages: Optional[str] = None
-    follow_up_required: Optional[bool] = None
-    incident_date_time: Optional[datetime] = None
-    issue_description: Optional[str] = None
-    resolution_details: Optional[str] = None
-    steps_taken: Optional[str] = None
-    ticket_id: Optional[str] = None
-    user_email: Optional[EmailStr] = None
-    user_name: Optional[str] = None
-    user_phone: Optional[PhoneNumber] = None
-
-    # Depending on requirements, you might also include fields for:
-    # - Software version
-    # - Operating system
-    # - Network details (if relevant to the issue)
-    # - Any attachments like screenshots or log files (consider how to handle binary data)
-
-    # Built-in functions
-    [...]
-```
-
-### Use an OpenAI compatible model for the LLM
-
-To use a model compatible with the OpenAI completion API, you need to create an account and get the following information:
-
-- API key
-- Context window size
-- Endpoint URL
-- Model name
-- Streaming capability
-
-Then, add the following in the `config.yaml` file:
-
-```yaml
-# config.yaml
-[...]
-
-llm:
-  backup:
-    mode: openai
-    openai:
-      api_key: xxx
-      context: 16385
-      endpoint: https://api.openai.com
-      model: gpt-35-turbo
-      streaming: true
-  primary:
-    mode: openai
-    openai:
-      api_key: xxx
-      context: 128000
-      endpoint: https://api.openai.com
-      model: gpt-4
-      streaming: true
-```
-
-### Use Twilio for SMS
-
-To use Twilio for SMS, you need to create an account and get the following information:
-
-- Account SID
-- Auth Token
-- Phone number
-
-Then, add the following in the `config.yaml` file:
-
-```yaml
-# config.yaml
-[...]
-
-sms:
-  mode: twilio
-  twilio:
-    account_sid: xxx
-    auth_token: xxx
-    phone_number: "+33612345678"
-```
+Mostly decoupling. Today, post-call intelligence is done with the BackgroundTasks implementation from Starlette. But this executes tasks in the worker same thread, after the HTTP reponse made. For production, a message broker like Azure Service Bus should be used (Dapr can ease your life by abstracting it from the code).

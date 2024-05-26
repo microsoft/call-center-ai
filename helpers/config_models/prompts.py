@@ -1,5 +1,6 @@
 from azure.core.exceptions import HttpResponseError
 from datetime import datetime, UTC
+from fastapi.encoders import jsonable_encoder
 from functools import cached_property
 from logging import Logger
 from models.call import CallStateModel
@@ -10,6 +11,7 @@ from models.training import TrainingModel
 from pydantic import TypeAdapter, BaseModel
 from textwrap import dedent
 from typing import Optional
+import json
 
 
 class SoundModel(BaseModel):
@@ -39,16 +41,16 @@ class LlmModel(BaseModel):
     """
 
     default_system_tpl: str = """
-        Assistant is called {bot_name} and is working in a call center for company {bot_company} as an expert with 20 years of experience. {bot_company} is a well-known and trusted insurance company in France. Assistant is proud to work for {bot_company}. Take a deep breath. This is critical for the customer.
+        Assistant is called {bot_name} and is working in a call center for company {bot_company} as an expert with 20 years of experience. {bot_company} is a well-known and trusted company. Assistant is proud to work for {bot_company}.
 
-        Always assist with care, respect, and truth. Respond with utmost utility yet securely. Avoid harmful, unethical, prejudiced, or negative content. Ensure replies promote fairness and positivity.
+        Take a deep breath. This is critical for the customer. Always assist with care, respect, and truth. Respond with utmost utility yet securely. Avoid harmful, unethical, prejudiced, or negative content. Ensure replies promote fairness and positivity.
 
         # Context
         Today is {date}. The customer is calling from {phone_number}. The call center number is {bot_phone_number}.
     """
     chat_system_tpl: str = """
         # Objective
-        Assistant will help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
+        {task}
 
         # Rules
         - Answer directly to the customer's questions
@@ -76,16 +78,14 @@ class LlmModel(BaseModel):
         - Use trusted data to answer the customer's questions
         - Welcome the customer when they call
         - When the customer says a word and then spells out letters, this means that the word is written in the way the customer spelled it (e.g., "I live in Paris PARIS" -> "Paris", "My name is John JOHN" -> "John", "My email is Clemence CLEMENCE at gmail GMAIL dot com COM" -> "clemence@gmail.com")
-        - Will answer the customer's questions if they are related to their contract, claim, or insurance
+        - Will answer the customer's questions if they are related to the objective or the claim
         - Work for {bot_company}, not someone else
 
         # Required customer data to be gathered by the assistant (if not already in the claim)
-        - Address
         - Date and time of the incident
-        - Insurance policy number
         - Location of the incident
         - Name (first and last)
-        - Phone number or email address
+        - Mean of contact (e.g. phone number)
 
         # General process to follow
         1. Quickly introduce yourself, if the customer is not already familiar with you, and recall the last conversation, if any
@@ -146,7 +146,6 @@ class LlmModel(BaseModel):
         - Answers in {default_lang}, even if the customer speaks another language
         - Briefly summarize the call with the customer
         - Can include personal details about the customer
-        - Cannot talk about any topic besides insurance claims
         - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
         - Include details stored in the claim, to make the customer confident that the situation is understood
         - Include salutations (e.g., "Have a nice day", "Best regards", "Best wishes for recovery")
@@ -154,6 +153,9 @@ class LlmModel(BaseModel):
         - Refer to the customer by their name, if known
         - Use simple and short sentences
         - Won't make any assumptions
+
+        # Initial objective of the call
+        {task}
 
         # Claim status
         {claim}
@@ -187,12 +189,8 @@ class LlmModel(BaseModel):
         - Prefix the answer with a determiner (e.g., "the theft of your car", "your broken window")
         - Won't make any assumptions
 
-        # Answer examples
-        - "the breakdown of your scooter"
-        - "the flooding in your field"
-        - "the theft of your car"
-        - "the water damage in your kitchen"
-        - "your broken window"
+        # Initial objective of the call
+        {task}
 
         # Claim status
         {claim}
@@ -200,8 +198,12 @@ class LlmModel(BaseModel):
         # Reminders
         {reminders}
 
-        # Conversation history
-        {messages}
+        # Answer examples
+        - "the breakdown of your scooter"
+        - "the flooding in your field"
+        - "the theft of your car"
+        - "the water damage in your kitchen"
+        - "your broken window"
     """
     synthesis_long_system_tpl: str = """
         # Objective
@@ -218,6 +220,9 @@ class LlmModel(BaseModel):
         - Say "you" to refer to the customer, and "I" to refer to the assistant
         - Use Markdown syntax to format the message with paragraphs, bold text, and URL
         - Won't make any assumptions
+
+        # Initial objective of the call
+        {task}
 
         # Claim status
         {claim}
@@ -246,9 +251,6 @@ class LlmModel(BaseModel):
 
         # Reminders
         {reminders}
-
-        # Conversation history
-        {messages}
 
         # Response format
         [source text]\\n
@@ -280,6 +282,9 @@ class LlmModel(BaseModel):
         - Won't make any assumptions
         - Write no more than a few sentences as justification
 
+        # Initial objective of the call
+        {task}
+
         # Allowed actions
         {actions}
 
@@ -288,9 +293,6 @@ class LlmModel(BaseModel):
 
         # Reminders
         {reminders}
-
-        # Conversation history
-        {messages}
 
         # Response format
         {{
@@ -329,26 +331,25 @@ class LlmModel(BaseModel):
         }}
     """
 
-    def default_system(self, phone_number: str) -> str:
+    def default_system(self, call: CallStateModel) -> str:
         from helpers.config import CONFIG
 
         # TODO: Parse the date from the end-user timezone, allowing LLM to be used in multiple countries
         return self._return(
             self.default_system_tpl.format(
-                bot_company=CONFIG.workflow.bot_company,
-                bot_name=CONFIG.workflow.bot_name,
+                bot_company=call.initiate.bot_company,
+                bot_name=call.initiate.bot_name,
                 bot_phone_number=CONFIG.communication_service.phone_number,
                 date=datetime.now(UTC)
                 .astimezone()
                 .strftime(
                     "%Y-%m-%d %H:%M"
                 ),  # Don't include seconds to enhance cache during unit tests. Example: "2024-02-01 18:58".
-                phone_number=phone_number,
+                phone_number=call.initiate.phone_number,
             )
         )
 
     def chat_system(self, call: CallStateModel, trainings: list[TrainingModel]) -> str:
-        from helpers.config import CONFIG
         from models.message import (
             ActionEnum as MessageActionEnum,
             StyleEnum as MessageStyleEnum,
@@ -357,49 +358,54 @@ class LlmModel(BaseModel):
         return self._return(
             self.chat_system_tpl,
             actions=", ".join([action.value for action in MessageActionEnum]),
-            bot_company=CONFIG.workflow.bot_company,
-            claim=call.claim.model_dump_json(),
+            bot_company=call.initiate.bot_company,
+            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
             default_lang=call.lang.human_name,
             reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders)
+            .dump_json(call.reminders, exclude_none=True)
             .decode(),
             styles=", ".join([style.value for style in MessageStyleEnum]),
+            task=call.initiate.task,
             trainings=trainings,
         )
 
     def sms_summary_system(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG
-
         return self._return(
             self.sms_summary_system_tpl,
-            bot_company=CONFIG.workflow.bot_company,
-            bot_name=CONFIG.workflow.bot_name,
-            claim=call.claim.model_dump_json(),
+            bot_company=call.initiate.bot_company,
+            bot_name=call.initiate.bot_name,
+            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
             default_lang=call.lang.human_name,
-            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders)
+            messages=TypeAdapter(list[MessageModel])
+            .dump_json(call.messages, exclude_none=True)
             .decode(),
+            reminders=TypeAdapter(list[ReminderModel])
+            .dump_json(call.reminders, exclude_none=True)
+            .decode(),
+            task=call.initiate.task,
         )
 
     def synthesis_short_system(self, call: CallStateModel) -> str:
         return self._return(
             self.synthesis_short_system_tpl,
-            claim=call.claim.model_dump_json(),
-            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
+            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
             reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders)
+            .dump_json(call.reminders, exclude_none=True)
             .decode(),
+            task=call.initiate.task,
         )
 
     def synthesis_long_system(self, call: CallStateModel) -> str:
         return self._return(
             self.synthesis_long_system_tpl,
-            claim=call.claim.model_dump_json(),
-            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders)
+            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            messages=TypeAdapter(list[MessageModel])
+            .dump_json(call.messages, exclude_none=True)
             .decode(),
+            reminders=TypeAdapter(list[ReminderModel])
+            .dump_json(call.reminders, exclude_none=True)
+            .decode(),
+            task=call.initiate.task,
         )
 
     def citations_system(
@@ -410,26 +416,14 @@ class LlmModel(BaseModel):
 
         The citations system is only used if `text` param is not empty, otherwise `None` is returned.
         """
-        from models.message import PersonaEnum as MessagePersonaEnum
-
         if not text:
             return None
 
         return self._return(
             self.citations_system_tpl,
-            claim=call.claim.model_dump_json(),
-            messages=TypeAdapter(list[MessageModel])
-            .dump_json(
-                [
-                    message
-                    for message in call.messages
-                    if message.persona != MessagePersonaEnum.TOOL
-                ],
-                exclude={"tool_calls"},
-            )
-            .decode(),  # Filter out tool messages, to avoid LLM to cite itself
+            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
             reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders)
+            .dump_json(call.reminders, exclude_none=True)
             .decode(),
             text=text,
         )
@@ -438,11 +432,11 @@ class LlmModel(BaseModel):
         return self._return(
             self.next_system_tpl,
             actions=", ".join([action.value for action in NextActionEnum]),
-            claim=call.claim.model_dump_json(),
-            messages=TypeAdapter(list[MessageModel]).dump_json(call.messages).decode(),
+            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
             reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders)
+            .dump_json(call.reminders, exclude_none=True)
             .decode(),
+            task=call.initiate.task,
         )
 
     def _return(
@@ -451,8 +445,8 @@ class LlmModel(BaseModel):
         trainings: Optional[list[TrainingModel]] = None,
         **kwargs: str,
     ) -> str:
-        # Build template
-        res = dedent(prompt_tpl.format(**kwargs))
+        # Remove possible indentation then render the template
+        res = dedent(prompt_tpl.format(**kwargs)).strip()
 
         # Format trainings, if any
         if trainings:
@@ -491,17 +485,13 @@ class TtsModel(BaseModel):
         "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
     )
     hello_tpl: str = """
-        Hello, I'm {bot_name}, the virtual assistant {bot_company}! I'm a claims specialist. I can't work and listen at the same time.
+        Hello, I'm {bot_name}, the virtual assistant {bot_company}! I can't work and listen at the same time.
 
         Here's how I work: while I'm processing your information, you might hear some light background music. As soon as you hear the beep, it's your turn to talk. Feel free to speak to me in a natural way - I'm designed to understand your requests.
 
-        Examples of questions you can ask me:
-        - "I fell off my bike yesterday, broke my arm, my neighbor took me to hospital"
-        - "I had an accident this morning, I was shopping".
-
         During the conversation, you can also send me text messages. I'll get back to you by phone.
 
-        May I ask what your problem is?
+        How can I help you today?
 """
     timeout_silence_tpl: str = (
         "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
@@ -527,22 +517,18 @@ class TtsModel(BaseModel):
         return await self._translate(self.error_tpl, call)
 
     async def goodbye(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG
-
         return await self._translate(
             self.goodbye_tpl,
             call,
-            bot_company=CONFIG.workflow.bot_company,
+            bot_company=call.initiate.bot_company,
         )
 
     async def hello(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG
-
         return await self._translate(
             self.hello_tpl,
             call,
-            bot_company=CONFIG.workflow.bot_company,
-            bot_name=CONFIG.workflow.bot_name,
+            bot_company=call.initiate.bot_company,
+            bot_name=call.initiate.bot_name,
         )
 
     async def timeout_silence(self, call: CallStateModel) -> str:
@@ -554,8 +540,8 @@ class TtsModel(BaseModel):
         return await self._translate(
             self.welcome_back_tpl,
             call,
-            bot_company=CONFIG.workflow.bot_company,
-            bot_name=CONFIG.workflow.bot_name,
+            bot_company=call.initiate.bot_company,
+            bot_name=call.initiate.bot_name,
             conversation_timeout_hour=CONFIG.workflow.conversation_timeout_hour,
         )
 
@@ -563,10 +549,8 @@ class TtsModel(BaseModel):
         return await self._translate(self.timeout_loading_tpl, call)
 
     async def ivr_language(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG
-
         res = ""
-        for i, lang in enumerate(CONFIG.workflow.lang.availables):
+        for i, lang in enumerate(call.initiate.lang.availables):
             res += (
                 self._return(
                     self.ivr_language_tpl,
@@ -578,6 +562,9 @@ class TtsModel(BaseModel):
         return await self._translate(res.strip(), call)
 
     def _return(self, prompt_tpl: str, **kwargs) -> str:
+        """
+        Remove possible indentation in a string.
+        """
         return dedent(prompt_tpl.format(**kwargs)).strip()
 
     async def _translate(self, prompt_tpl: str, call: CallStateModel, **kwargs) -> str:

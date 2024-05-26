@@ -5,7 +5,7 @@ from helpers.config import CONFIG
 from helpers.logging import build_logger
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
-from models.call import CallStateModel
+from models.call import CallStateModel, CallInitiateModel
 from textwrap import dedent
 from typing import Any, Callable, Optional, Tuple, Union
 import hashlib
@@ -14,14 +14,29 @@ import random
 import string
 import xml.etree.ElementTree as ET
 from azure.communication.callautomation import (
+    CallAutomationClient,
+    CallConnectionClient,
     FileSource,
     SsmlSource,
     TextSource,
-    CallConnectionClient,
 )
 
 
 _logger = build_logger(__name__)
+
+
+class CallAutomationClientMock(CallAutomationClient):
+    _play_media_callback: Callable[[str], None]
+
+    def __init__(self, play_media_callback: Callable[[str], None]) -> None:
+        self._play_media_callback = play_media_callback
+
+    def get_call_connection(
+        self,
+        *args,
+        **kwargs,
+    ) -> CallConnectionClient:
+        return CallConnectionClientMock(self._play_media_callback)
 
 
 class CallConnectionClientMock(CallConnectionClient):
@@ -41,7 +56,6 @@ class CallConnectionClientMock(CallConnectionClient):
         self,
         play_source: Union[FileSource, TextSource, SsmlSource],
         *args,
-        operation_context: Optional[str] = None,
         **kwargs,
     ) -> None:
         if isinstance(play_source, TextSource):
@@ -82,7 +96,11 @@ def random_text() -> str:
 @pytest.fixture
 def call() -> CallStateModel:
     call = CallStateModel(
-        phone_number="+33612345678",  # type: ignore
+        initiate=CallInitiateModel(
+            **CONFIG.workflow.initiate.model_dump(),
+            phone_number="+33612345678",  # type: ignore
+        ),
+        voice_id="dummy",
     )
     return call
 
