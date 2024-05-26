@@ -99,7 +99,7 @@ class CallStateModel(CallGetModel):
 
         with TRACER.start_as_current_span("trainings"):
             search = CONFIG.ai_search.instance()
-            trainings_tasks = await asyncio.gather(
+            tasks = await asyncio.gather(
                 *[
                     search.training_asearch_all(
                         text=message.content, lang=self.lang.short_code
@@ -108,10 +108,6 @@ class CallStateModel(CallGetModel):
                 ],
             )  # Get trainings from last messages
             trainings = sorted(
-                set(
-                    training
-                    for trainings in trainings_tasks
-                    for training in trainings or []
-                )
+                set(training for trainings in tasks for training in trainings or [])
             )  # Flatten, remove duplicates, and sort by score
             return trainings
