@@ -80,7 +80,7 @@ async def on_call_connected(
     client: CallAutomationClient,
 ) -> None:
     _logger.info("Call connected")
-    call.recognition_retry = 0  # Reset recognition retry counter
+    call.voice_recognition_retry = 0  # Reset recognition retry counter
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.CALL,
@@ -131,14 +131,14 @@ async def on_speech_timeout_error(
     call: CallStateModel,
     client: CallAutomationClient,
 ) -> None:
-    if call.recognition_retry < 10:
+    if call.voice_recognition_retry < 10:
         await handle_recognize_text(
             call=call,
             client=client,
             store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
             text=await CONFIG.prompts.tts.timeout_silence(call),
         )
-        call.recognition_retry += 1
+        call.voice_recognition_retry += 1
     else:
         await handle_play(
             call=call,
@@ -189,7 +189,7 @@ async def on_play_completed(
         await handle_transfer(
             call=call,
             client=client,
-            target=CONFIG.workflow.agent_phone_number,
+            target=call.initiate.agent_phone_number,
         )
 
 
@@ -222,8 +222,8 @@ async def on_ivr_recognized(
 ) -> None:
     try:
         lang = next(
-            (x for x in CONFIG.workflow.lang.availables if x.short_code == label),
-            CONFIG.workflow.lang.default_lang,
+            (x for x in call.initiate.lang.availables if x.short_code == label),
+            call.initiate.lang.default_lang,
         )
     except ValueError:
         _logger.warning(f"Unknown IVR {label}, code not implemented")
@@ -284,7 +284,7 @@ async def on_sms_received(
     client: CallAutomationClient,
     message: str,
 ) -> bool:
-    _logger.info(f"SMS received from {call.phone_number}: {message}")
+    _logger.info(f"SMS received from {call.initiate.phone_number}: {message}")
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.SMS,
@@ -365,7 +365,9 @@ async def _post_call_sms(call: CallStateModel) -> None:
 
     # Send the SMS to both the current caller and the policyholder
     success = False
-    for number in set([call.phone_number, call.claim.policyholder_phone]):
+    for number in set(
+        [call.initiate.phone_number, call.claim.get("policyholder_phone", None)]
+    ):
         if not number:
             continue
         res = await _sms.asend(content, number)
@@ -457,7 +459,7 @@ async def _handle_ivr_language(
         DtmfTone.NINE,
     ]
     choices = []
-    for i, lang in enumerate(CONFIG.workflow.lang.availables):
+    for i, lang in enumerate(CONFIG.workflow.initiate.lang.availables):
         choices.append(
             RecognitionChoice(
                 label=lang.short_code,

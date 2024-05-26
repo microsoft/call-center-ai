@@ -38,11 +38,15 @@ async def test_acid(call: CallStateModel, database_mode: DatabaseModeEnum) -> No
 
     # Check not exists
     assume(not await db.call_aget(call.call_id))
-    assume(await db.call_asearch_one(call.phone_number) != call)
+    assume(await db.call_asearch_one(call.initiate.phone_number) != call)
     assume(
         call
         not in (
-            (await db.call_asearch_all(phone_number=call.phone_number, count=1))[0]
+            (
+                await db.call_asearch_all(
+                    phone_number=call.initiate.phone_number, count=1
+                )
+            )[0]
             or []
         )
     )
@@ -53,12 +57,16 @@ async def test_acid(call: CallStateModel, database_mode: DatabaseModeEnum) -> No
     # Check point read
     assume(await db.call_aget(call.call_id) == call)
     # Check search one
-    assume(await db.call_asearch_one(call.phone_number) == call)
+    assume(await db.call_asearch_one(call.initiate.phone_number) == call)
     # Check search all
     assume(
         call
         in (
-            (await db.call_asearch_all(phone_number=call.phone_number, count=1))[0]
+            (
+                await db.call_asearch_all(
+                    phone_number=call.initiate.phone_number, count=1
+                )
+            )[0]
             or []
         )
     )

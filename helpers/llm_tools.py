@@ -5,7 +5,6 @@ from helpers.llm_utils import function_schema
 from helpers.logging import build_logger
 from inspect import getmembers, isfunction
 from models.call import CallStateModel
-from models.claim import ClaimModel
 from models.message import (
     ActionEnum as MessageActionEnum,
     MessageModel,
@@ -100,7 +99,7 @@ class LlmPlugins:
         # Store the last message and use it at first message of the new claim
         last_message = self.call.messages[-1]
         call = CallStateModel(
-            phone_number=self.call.phone_number,
+            initiate=self.call.initiate.model_copy(),
             voice_id=self.call.voice_id,
         )
         call.messages += [
@@ -187,7 +186,13 @@ class LlmPlugins:
             The field to update, in English.
 
             # Available fields
-            {{ call.claim.editable_fields() | join(', ') }}
+            {% for name, info in call.initiate.claim_model().model_fields.items() %}
+            {% if not info.description %}
+            - {{ name }}
+            {% else %}
+            - '{{ name }}', {{ info.description }}
+            {% endif %}
+            {% endfor %}
 
             # Data format
             - For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58)
@@ -222,17 +227,14 @@ class LlmPlugins:
 
     def _update_claim_field(self, update: UpdateClaimDict) -> str:
         field = update["field"]
-        value = update["value"]
-        # Check if field is editable
-        if not field in self.call.claim.editable_fields():
-            return f'Failed to update a non-editable field "{field}".'
+        new_value = update["value"]
         try:
-            # Define the field and force to trigger validation
-            copy = self.call.claim.model_dump()
-            copy[field] = value
-            self.call.claim = ClaimModel.model_validate(copy)
-            return f'Updated claim field "{field}" with value "{value}".'
-        except ValidationError as e:  # Catch error to inform LLM
+            old_value = self.call.claim.get(field, None)
+            self.call.claim[field] = new_value
+            CallStateModel.model_validate(self.call)  # Force a re-validation
+            return f'Updated claim field "{field}" with value "{new_value}".'
+        except ValidationError as e:  # Catch error to inform LLM and rollback changes
+            self.call.claim[field] = old_value
             return f'Failed to edit field "{field}": {e.json()}'
 
     async def talk_to_human(self) -> str:
@@ -364,7 +366,7 @@ class LlmPlugins:
         await self.user_callback(customer_response, self.style)
         success = await _sms.asend(
             content=message,
-            phone_number=self.call.phone_number,
+            phone_number=self.call.initiate.phone_number,
         )
         if not success:
             return "Failed to send SMS"

@@ -34,7 +34,9 @@ class CosmosDbStore(IStore):
         test_partition = "+33612345678"
         test_dict = {
             "id": test_id,  # unique id
-            "phone_number": test_partition,  # partition key
+            "initiate": {
+                "phone_number": test_partition,  # partition key
+            },
             "test": "test",
         }
         try:
@@ -114,7 +116,7 @@ class CosmosDbStore(IStore):
             async with self._use_db() as db:
                 items = db.query_items(
                     max_item_count=1,
-                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.workflow.conversation_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
+                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.workflow.conversation_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
                     parameters=[
                         {
                             "name": "@phone_number",
@@ -154,7 +156,7 @@ class CosmosDbStore(IStore):
         try:
             async with self._use_db() as db:
                 items = db.query_items(
-                    query=f"SELECT * FROM c {"WHERE STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""} ORDER BY c.created_at DESC OFFSET 0 LIMIT @count",
+                    query=f"SELECT * FROM c {"WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""} ORDER BY c.created_at DESC OFFSET 0 LIMIT @count",
                     parameters=[
                         {
                             "name": "@phone_number",
@@ -184,7 +186,7 @@ class CosmosDbStore(IStore):
         try:
             async with self._use_db() as db:
                 items = db.query_items(
-                    query=f"SELECT VALUE COUNT(1) FROM c {"WHERE STRINGEQUALS(c.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""}",
+                    query=f"SELECT VALUE COUNT(1) FROM c {"WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""}",
                     parameters=[
                         {
                             "name": "@phone_number",

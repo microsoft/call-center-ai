@@ -1,8 +1,5 @@
 param adaModel string
 param adaVersion string
-param agentPhoneNumber string
-param botCompany string
-param botName string
 param cognitiveCommunicationLocation string
 param gptBackupContext int
 param gptBackupModel string
@@ -22,6 +19,7 @@ var appUrl = 'https://call-center-ai.${acaEnv.properties.defaultDomain}'
 var gptBackupModelFullName = toLower('${gptBackupModel}-${gptBackupVersion}')
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 var adaModelFullName = toLower('${adaModel}-${adaVersion}')
+var cosmosContainerName = 'calls-v3'  // Third schema version
 var localConfig = loadYamlContent('../config.yaml')
 var config = {
   api: {
@@ -45,10 +43,12 @@ var config = {
     public_url: storageAccount.properties.primaryEndpoints.web
   }
   workflow: {
-    agent_phone_number: agentPhoneNumber
-    bot_company: botCompany
-    bot_name: botName
-    lang: localConfig.workflow.lang
+    initiate: {
+      agent_phone_number: localConfig.workflow.initiate.agent_phone_number
+      bot_company: localConfig.workflow.initiate.bot_company
+      bot_name: localConfig.workflow.initiate.bot_name
+      lang: localConfig.workflow.initiate.lang
+    }
   }
   communication_service: {
     access_key: communication.listKeys().primaryKey
@@ -508,10 +508,10 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15
 
 resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-11-15' = {
   parent: database
-  name: 'calls'
+  name: cosmosContainerName
   properties: {
     resource: {
-      id: 'calls'
+      id: cosmosContainerName
       indexingPolicy: {
         automatic: true
         includedPaths: [
@@ -544,7 +544,7 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
       }
       partitionKey: {
         paths: [
-          '/phone_number'
+          '/initiate/phone_number'
         ]
         kind: 'Hash'
       }

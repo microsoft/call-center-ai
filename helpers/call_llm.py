@@ -98,9 +98,7 @@ def _llm_completion_system(
 ) -> list[ChatCompletionSystemMessageParam]:
     messages = [
         ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.default_system(
-                phone_number=call.phone_number,
-            ),
+            content=CONFIG.prompts.llm.default_system(call),
             role="system",
         ),
         ChatCompletionSystemMessageParam(
@@ -327,9 +325,7 @@ async def _execute_llm_chat(
     # Build system prompts
     system = [
         ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.default_system(
-                phone_number=call.phone_number,
-            ),
+            content=CONFIG.prompts.llm.default_system(call),
             role="system",
         ),
         ChatCompletionSystemMessageParam(

@@ -1,8 +1,5 @@
 param adaModel string = 'text-embedding-ada-002'
 param adaVersion string = '2'
-param agentPhoneNumber string
-param botCompany string
-param botName string
 param cognitiveCommunicationLocation string
 param gptBackupContext int = 16385
 param gptBackupModel string = 'gpt-35-turbo'
@@ -43,9 +40,6 @@ module app 'app.bicep' = {
   params: {
     adaModel: adaModel
     adaVersion: adaVersion
-    agentPhoneNumber: agentPhoneNumber
-    botCompany: botCompany
-    botName: botName
     cognitiveCommunicationLocation: cognitiveCommunicationLocation
     gptBackupContext: gptBackupContext
     gptBackupModel: gptBackupModel

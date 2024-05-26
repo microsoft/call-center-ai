@@ -19,6 +19,7 @@ from models.reminder import ReminderModel
 from models.training import TrainingModel
 from pydantic import TypeAdapter
 from pytest import assume
+import json
 import pytest
 from tests.conftest import CallConnectionClientMock
 
@@ -34,7 +35,7 @@ _logger = build_logger(__name__)
             [
                 "Hello hello!",
             ],
-            f"Hello, it is {CONFIG.workflow.bot_name}, from {CONFIG.workflow.bot_company}. How can I help you?",
+            f"Hello, it is {CONFIG.workflow.initiate.bot_name}, from {CONFIG.workflow.initiate.bot_company}. How can I help you?",
             {
                 # No claim test inclusions
             },
@@ -68,7 +69,7 @@ _logger = build_logger(__name__)
                 "Ok I understood, my house is located at 11 rue des Citronniers 75001 Paris.",
                 "Oh yes ond one more thing, which craftsman should I call to repair my shower?",
             ],
-            f"My name is {CONFIG.workflow.bot_name}, from {CONFIG.workflow.bot_company}. I'm truly sorry to hear that. I have noted the policyholder name, incident description, your house location, and the incident date. If you need, I can create a reminder to follow up on a repair appointment?",
+            f"My name is {CONFIG.workflow.initiate.bot_name}, from {CONFIG.workflow.initiate.bot_company}. I'm truly sorry to hear that. I have noted the policyholder name, incident description, your house location, and the incident date. If you need, I can create a reminder to follow up on a repair appointment?",
             [
                 "incident_date_time",
                 "incident_description",
@@ -202,12 +203,12 @@ async def test_llm(
 
     # Log for dev review
     _logger.info(f"actual_output: {actual_output}")
-    _logger.info(f"claim: {call.claim.model_dump(exclude_none=True)}")
+    _logger.info(f"claim: {call.claim}")
     _logger.info(f"full_input: {full_input}")
 
     # Test claim data
     for field in claim_tests_incl:
-        assume(getattr(call.claim, field) is not None, f"Claim field {field} is None")
+        assume(call.claim.get(field, None), f"Claim field {field} is missing")
 
     # Configure LLM tests
     test_case = LLMTestCase(
@@ -215,7 +216,7 @@ async def test_llm(
         expected_output=expected_output,
         input=full_input,
         retrieval_context=[
-            call.claim.model_dump_json(exclude_none=True),
+            json.dumps(call.claim),
             TypeAdapter(list[ReminderModel]).dump_json(call.reminders).decode(),
             TypeAdapter(list[TrainingModel]).dump_json(await call.trainings()).decode(),
         ],

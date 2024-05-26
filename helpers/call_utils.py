@@ -78,7 +78,7 @@ async def _handle_recognize_media(
                 input_type=RecognizeInputType.SPEECH,
                 play_prompt=FileSource(url=sound_url),
                 speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
+                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing")
@@ -257,7 +257,7 @@ async def handle_recognize_ivr(
                 interrupt_prompt=True,
                 play_prompt=_audio_from_text(text, MessageStyleEnum.NONE, call),
                 speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(call.phone_number),  # type: ignore
+                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
             )
     except ResourceNotFoundError:
         _logger.debug(f"Call hung up before recognizing")

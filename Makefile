@@ -13,9 +13,6 @@ cognitive_communication_location := westeurope
 openai_location := southcentralus
 search_location := northeurope
 # App configuration
-agent_phone_number ?= $(shell cat config.yaml | yq '.workflow.agent_phone_number')
-bot_company ?= $(shell cat config.yaml | yq '.workflow.bot_company')
-bot_name ?= $(shell cat config.yaml | yq '.workflow.bot_name')
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_number')
 event_subscription_name ?= $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
 twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
@@ -137,9 +134,6 @@ deploy:
 	az deployment sub create \
 		--location $(app_location) \
 		--parameters \
-			'agentPhoneNumber=$(agent_phone_number)' \
-			'botCompany=$(bot_company)' \
-			'botName=$(bot_name)' \
 			'cognitiveCommunicationLocation=$(cognitive_communication_location)' \
 			'openaiLocation=$(openai_location)' \
 			'searchLocation=$(search_location)' \

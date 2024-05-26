@@ -5,7 +5,7 @@ from helpers.config import CONFIG
 from helpers.logging import build_logger
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
-from models.call import CallStateModel
+from models.call import CallStateModel, CallInitiateModel
 from textwrap import dedent
 from typing import Any, Callable, Optional, Tuple, Union
 import hashlib
@@ -96,7 +96,11 @@ def random_text() -> str:
 @pytest.fixture
 def call() -> CallStateModel:
     call = CallStateModel(
-        phone_number="+33612345678",  # type: ignore
+        initiate=CallInitiateModel(
+            **CONFIG.workflow.initiate.model_dump(),
+            phone_number="+33612345678",  # type: ignore
+        ),
+        voice_id="dummy",
     )
     return call
 
