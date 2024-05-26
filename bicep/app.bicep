@@ -359,7 +359,7 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   parent: cognitiveOpenai
   name: gptModelFullName
   sku: {
-    capacity: 80
+    capacity: 20  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -378,7 +378,7 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
   parent: cognitiveOpenai
   name: gptBackupModelFullName
   sku: {
-    capacity: 80
+    capacity: 20  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
