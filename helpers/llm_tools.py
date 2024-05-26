@@ -159,7 +159,7 @@ class LlmPlugins:
                     reminder.due_date_time = due_date_time  # type: ignore
                     reminder.owner = owner
                     return f'Reminder "{title}" updated.'
-                except ValidationError as e:  # Catch error
+                except ValidationError as e:
                     return f'Failed to edit reminder "{title}": {e.json()}'
 
         # Create new reminder
@@ -172,7 +172,7 @@ class LlmPlugins:
             )
             self.call.reminders.append(reminder)
             return f'Reminder "{title}" created.'
-        except ValidationError as e:  # Catch error
+        except ValidationError as e:
             return f'Failed to create reminder "{title}": {e.json()}'
 
     async def updated_claim(
