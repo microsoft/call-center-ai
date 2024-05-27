@@ -21,7 +21,7 @@ from pydantic import TypeAdapter
 from pytest import assume
 import json
 import pytest
-from tests.conftest import CallConnectionClientMock
+from tests.conftest import CallAutomationClientMock
 
 
 _logger = build_logger(__name__)
@@ -175,7 +175,7 @@ async def test_llm(
     actual_output = ""
 
     # Mock client
-    client = CallConnectionClientMock(play_media_callback=_play_media_callback)
+    client = CallAutomationClientMock(play_media_callback=_play_media_callback)
 
     # Mock call
     call.lang = lang

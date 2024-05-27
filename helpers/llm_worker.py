@@ -228,7 +228,6 @@ async def _completion_stream_worker(
 @TRACER.start_as_current_span("completion_sync")
 async def completion_sync(
     max_tokens: int,
-    messages: list[MessageModel],
     system: list[ChatCompletionSystemMessageParam],
     json_output: bool = False,
 ) -> Optional[str]:
@@ -242,7 +241,6 @@ async def completion_sync(
         return await _completion_sync_worker(
             is_backup=False,
             max_tokens=max_tokens,
-            messages=messages,
             system=system,
             json_output=json_output,
         )
@@ -267,7 +265,6 @@ async def completion_sync(
             return await _completion_sync_worker(
                 is_backup=True,
                 max_tokens=max_tokens,
-                messages=messages,
                 system=system,
                 json_output=json_output,
             )
@@ -276,7 +273,6 @@ async def completion_sync(
 async def _completion_sync_worker(
     is_backup: bool,
     max_tokens: int,
-    messages: list[MessageModel],
     system: list[ChatCompletionSystemMessageParam],
     json_output: bool = False,
 ) -> Optional[str]:
@@ -284,7 +280,7 @@ async def _completion_sync_worker(
     Returns a completion.
     """
     # Try cache
-    cache_key = f"{__name__}-completion_sync-{system}-{messages}-{max_tokens}"
+    cache_key = f"{__name__}-completion_sync-{system}-{max_tokens}"
     cached = await _cache.aget(cache_key)
     if cached:
         return cached.decode()
@@ -299,7 +295,7 @@ async def _completion_sync_worker(
         prompt = _limit_messages(
             context=platform.context,
             max_tokens=max_tokens,
-            messages=messages,
+            messages=[],
             model=platform.model,
             system=system,
         )
@@ -334,7 +330,6 @@ async def _completion_sync_worker(
 @TRACER.start_as_current_span("completion_model_sync")
 async def completion_model_sync(
     max_tokens: int,
-    messages: list[MessageModel],
     model: Type[ModelType],
     system: list[ChatCompletionSystemMessageParam],
 ) -> Optional[ModelType]:
@@ -346,7 +341,6 @@ async def completion_model_sync(
     res = await completion_sync(
         json_output=True,
         max_tokens=max_tokens,
-        messages=messages,
         system=system,
     )
     if not res:

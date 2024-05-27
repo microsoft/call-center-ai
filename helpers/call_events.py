@@ -17,6 +17,7 @@ from models.message import (
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
     remove_message_action,
+    StyleEnum as MessageStyleEnum,
 )
 from helpers.call_utils import (
     ContextEnum as CallContextEnum,
@@ -246,6 +247,7 @@ async def on_ivr_recognized(
         await handle_play(
             call=call,
             client=client,
+            style=MessageStyleEnum.CHEERFUL,
             text=await CONFIG.prompts.tts.welcome_back(call),
         )
         call = await load_llm_chat(
@@ -409,6 +411,10 @@ async def _post_call_synthesis(call: CallStateModel) -> None:
             ),
         ),
     )
+
+    # Delete action and style from the message as they are in the history and LLM hallucinates them
+    _, short = extract_message_style(remove_message_action(short or ""))
+    _, long = extract_message_style(remove_message_action(long or ""))
 
     if not short or not long:
         _logger.warning("Error generating synthesis")
