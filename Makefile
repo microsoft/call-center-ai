@@ -130,6 +130,9 @@ stop:
 	$(docker) stop call-center-ai
 
 deploy:
+	@echo "👀 Current subscription:"
+	@az account show --query "{subscriptionId:id, subscriptionName:name, tenantId:tenantId}" --output table
+
 	@echo "🛠️ Deploying to Azure..."
 	az deployment sub create \
 		--location $(app_location) \
