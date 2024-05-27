@@ -53,7 +53,6 @@ async def llm_completion(text: Optional[str], call: CallStateModel) -> Optional[
     try:
         content = await completion_sync(
             max_tokens=1000,
-            messages=call.messages,
             system=system,
         )
     except APIError as e:
@@ -83,7 +82,6 @@ async def llm_model(
     try:
         res = await completion_model_sync(
             max_tokens=1000,
-            messages=call.messages,
             model=model,
             system=system,
         )

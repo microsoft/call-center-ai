@@ -198,6 +198,9 @@ class LlmModel(BaseModel):
         # Reminders
         {reminders}
 
+        # Conversation history
+        {messages}
+
         # Answer examples
         - "the breakdown of your scooter"
         - "the flooding in your field"
@@ -294,6 +297,9 @@ class LlmModel(BaseModel):
         # Reminders
         {reminders}
 
+        # Conversation history
+        {messages}
+
         # Response format
         {{
             "action": "[action]",
@@ -389,6 +395,9 @@ class LlmModel(BaseModel):
         return self._return(
             self.synthesis_short_system_tpl,
             claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            messages=TypeAdapter(list[MessageModel])
+            .dump_json(call.messages, exclude_none=True)
+            .decode(),
             reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders, exclude_none=True)
             .decode(),
@@ -433,6 +442,9 @@ class LlmModel(BaseModel):
             self.next_system_tpl,
             actions=", ".join([action.value for action in NextActionEnum]),
             claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            messages=TypeAdapter(list[MessageModel])
+            .dump_json(call.messages, exclude_none=True)
+            .decode(),
             reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders, exclude_none=True)
             .decode(),
