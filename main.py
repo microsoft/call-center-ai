@@ -483,7 +483,9 @@ async def _communicationservices_event_url(
     If the caller has already called, use the same call ID, to keep the conversation history. Otherwise, create a new call ID.
     """
     call = await _db.call_asearch_one(phone_number)
-    if not call:
+    if not call or (
+        initiate and call.initiate != initiate
+    ):  # Create new call if initiate is different
         call = CallStateModel(
             initiate=initiate
             or CallInitiateModel(
