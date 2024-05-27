@@ -412,6 +412,10 @@ async def _post_call_synthesis(call: CallStateModel) -> None:
         ),
     )
 
+    # Delete action and style from the message as they are in the history and LLM hallucinates them
+    _, short = extract_message_style(remove_message_action(short or ""))
+    _, long = extract_message_style(remove_message_action(long or ""))
+
     if not short or not long:
         _logger.warning("Error generating synthesis")
         return
