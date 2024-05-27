@@ -17,6 +17,7 @@ from models.message import (
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
     remove_message_action,
+    StyleEnum as MessageStyleEnum,
 )
 from helpers.call_utils import (
     ContextEnum as CallContextEnum,
@@ -246,6 +247,7 @@ async def on_ivr_recognized(
         await handle_play(
             call=call,
             client=client,
+            style=MessageStyleEnum.CHEERFUL,
             text=await CONFIG.prompts.tts.welcome_back(call),
         )
         call = await load_llm_chat(
