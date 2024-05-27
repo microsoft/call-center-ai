@@ -508,9 +508,7 @@ class TtsModel(BaseModel):
     timeout_silence_tpl: str = (
         "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
     )
-    welcome_back_tpl: str = (
-        "Hello, I'm {bot_name}, assistant {bot_company}! I see you've already called less than {conversation_timeout_hour} hours ago. Please allow me a few seconds to retrieve your file…"
-    )
+    welcome_back_tpl: str = "Hello, I'm {bot_name}, from {bot_company}!"
     timeout_loading_tpl: str = (
         "It's taking me longer than expected to reply. Thank you for your patience…"
     )
