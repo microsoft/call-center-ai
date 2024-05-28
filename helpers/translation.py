@@ -1,16 +1,16 @@
 from azure.ai.translation.text.aio import TextTranslationClient
-from azure.ai.translation.text.models import InputTextItem, TranslatedTextItem
+from azure.ai.translation.text.models import TranslatedTextItem
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import HttpResponseError
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.logging import build_logger
 from typing import AsyncGenerator, Optional
-from azure.core.exceptions import HttpResponseError
 from tenacity import (
+    retry_if_exception_type,
     retry,
     stop_after_attempt,
     wait_random_exponential,
-    retry_if_exception_type,
 )
 
 
@@ -47,9 +47,9 @@ async def translate_text(
     translation: Optional[str] = None
     async with _use_client() as client:  # Perform translation
         res: list[TranslatedTextItem] = await client.translate(
-            content=[InputTextItem(text=text)],  # type: ignore
-            from_parameter=source_lang,
-            to=[target_lang],
+            body=[text],
+            from_language=source_lang,
+            to_language=[target_lang],
         )
         translation = (
             res[0].translations[0].text if res and res[0].translations else None

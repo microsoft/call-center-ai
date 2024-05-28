@@ -1,28 +1,28 @@
 aiohttp==3.9.5  # Required for azure-search-documents, azure-ai-contentsafety, azure-cosmos
 aiosqlite==0.20.0
 azure-ai-contentsafety==1.0.0
-azure-ai-translation-text==1.0.0b1
+azure-ai-translation-text==1.0.0
 azure-communication-callautomation==1.2.0
 azure-communication-sms==1.0.1
-azure-cosmos==4.6.0
+azure-cosmos==4.7.0
 azure-eventgrid==4.19.0
 azure-identity==1.16.0  # Required for all Azure SDKs
-azure-monitor-opentelemetry==1.4.1
+azure-monitor-opentelemetry==1.4.2
 azure-search-documents==11.6.0b3
 django-htmlmin==0.11.0
 fastapi==0.111.0
 gunicorn==22.0.0
 jinja2==3.1.4
-json-repair==0.19.1
+json-repair==0.20.1
 mistune==3.0.2
-openai==1.29.0
+openai==1.30.3
 opentelemetry-instrumentation-aiohttp-client==0.45b0
 opentelemetry-instrumentation-fastapi==0.45b0
 opentelemetry-instrumentation-httpx==0.45b0
-opentelemetry-instrumentation-openai==0.17.7
+opentelemetry-instrumentation-openai==0.21.0
 opentelemetry-instrumentation-redis==0.45b0
 opentelemetry-instrumentation-sqlite3==0.45b0
-phonenumbers==8.13.36  # Required for pydantic-extra-types
+phonenumbers==8.13.37  # Required for pydantic-extra-types
 pydantic-extra-types==2.7.0  # Required for pydantic
 pydantic-settings==2.2.1
 pydantic[email]==2.7.1
@@ -30,8 +30,8 @@ python-dotenv==1.0.1
 pytz==2024.1
 pyyaml==6.0.1
 redis==5.0.4
-tenacity==8.2.3
+tenacity==8.3.0
 tiktoken==0.7.0
-twilio==9.0.5
-typing-extensions==4.11.0
-uvicorn[standard]==0.29.0  # Required for Gunicorn
+twilio==9.1.0
+typing-extensions==4.12.0
+uvicorn[standard]==0.30.0  # Required for Gunicorn

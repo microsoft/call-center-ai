@@ -100,7 +100,8 @@ class RedisCache(ICache):
             retry_on_error=[BusyLoadingError, ConnectionError],
             retry_on_timeout=True,
             retry=_retry,
-            socket_timeout=10,  # Copied to socket_connect_timeout
+            socket_connect_timeout=1,  # Timeout for connection, we want it to fail fast, that's cache
+            socket_timeout=10,  # Timeout for queries
             # Azure deployment
             host=self._config.host,
             port=self._config.port,
