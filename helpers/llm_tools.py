@@ -1,5 +1,5 @@
 from azure.communication.callautomation import CallAutomationClient
-from helpers.call_utils import ContextEnum as CallContextEnum, handle_play
+from helpers.call_utils import ContextEnum as CallContextEnum, handle_recognize_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
 from helpers.logging import build_logger
@@ -31,7 +31,6 @@ class UpdateClaimDict(TypedDict):
 
 class LlmPlugins:
     call: CallStateModel
-    cancellation_callback: Callable[[], Awaitable]
     client: CallAutomationClient
     post_call_intelligence: Callable[[CallStateModel], None]
     style: MessageStyleEnum = MessageStyleEnum.NONE
@@ -40,13 +39,11 @@ class LlmPlugins:
     def __init__(
         self,
         call: CallStateModel,
-        cancellation_callback: Callable[[], Awaitable],
         client: CallAutomationClient,
         post_call_intelligence: Callable[[CallStateModel], None],
         user_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
         self.call = call
-        self.cancellation_callback = cancellation_callback
         self.client = client
         self.post_call_intelligence = post_call_intelligence
         self.user_callback = user_callback
@@ -67,12 +64,12 @@ class LlmPlugins:
         - 'Goodbye, see you tomorrow'
         - 'I want to hangup'
         """
-        await self.cancellation_callback()
-        await handle_play(
+        await handle_recognize_text(
             call=self.call,
             client=self.client,
             context=CallContextEnum.GOODBYE,
             text=await CONFIG.prompts.tts.goodbye(self.call),
+            trigger_timeout=False,  # Shouldn't trigger anything, as call is ending
         )
         return "Call ended"
 
@@ -254,11 +251,11 @@ class LlmPlugins:
         - 'I want to talk to a human'
         - 'I want to talk to a real person'
         """
-        await self.cancellation_callback()
-        await handle_play(
+        await handle_recognize_text(
             call=self.call,
             client=self.client,
             context=CallContextEnum.CONNECT_AGENT,
+            trigger_timeout=False,  # Shouldn't trigger anything, as conversation with Assistant is ending
             text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
         )
         return "Transferring to human agent"

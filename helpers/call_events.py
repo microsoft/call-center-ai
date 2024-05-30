@@ -1,3 +1,4 @@
+from typing import Optional
 from azure.communication.callautomation import (
     CallAutomationClient,
     DtmfTone,
@@ -21,8 +22,8 @@ from models.message import (
 )
 from helpers.call_utils import (
     ContextEnum as CallContextEnum,
+    handle_clear_queue,
     handle_hangup,
-    handle_play,
     handle_recognize_ivr,
     handle_recognize_text,
     handle_transfer,
@@ -42,7 +43,7 @@ _db = CONFIG.database.instance()
 async def on_new_call(
     callback_url: str,
     client: CallAutomationClient,
-    context: str,
+    incoming_context: str,
     phone_number: str,
 ) -> bool:
     _logger.debug(f"Incoming call handler caller ID: {phone_number}")
@@ -51,7 +52,7 @@ async def on_new_call(
         answer_call_result = client.answer_call(
             callback_url=callback_url,
             cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
-            incoming_call_context=context,
+            incoming_call_context=incoming_context,
         )
         _logger.info(
             f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
@@ -119,6 +120,9 @@ async def on_speech_recognized(
     await _db.call_aset(
         call
     )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
+    await handle_clear_queue(
+        call=call, client=client
+    )  # When the user speak, the conversation should continue based on its last message
     call = await load_llm_chat(
         background_tasks=background_tasks,
         call=call,
@@ -131,23 +135,30 @@ async def on_speech_recognized(
 async def on_speech_timeout_error(
     call: CallStateModel,
     client: CallAutomationClient,
+    contexts: Optional[list[CallContextEnum]],
 ) -> None:
+    if not (contexts and CallContextEnum.LAST_CHUNK in contexts):
+        _logger.debug("Ignoring timeout if bot is still speaking")
+        return
+
+    res_context = None
     if call.voice_recognition_retry < 10:
-        await handle_recognize_text(
-            call=call,
-            client=client,
-            store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
-            text=await CONFIG.prompts.tts.timeout_silence(call),
-        )
         call.voice_recognition_retry += 1
+        trigger_timeout = True  # Should re-trigger an error or the LLM
+        text = await CONFIG.prompts.tts.timeout_silence(call)
     else:
-        await handle_play(
-            call=call,
-            client=client,
-            context=CallContextEnum.GOODBYE,
-            text=await CONFIG.prompts.tts.goodbye(call),
-            store=False,  # Do not store goodbye prompt as it perturbs the LLM and makes it hallucinate
-        )
+        trigger_timeout = False  # Shouldn't trigger anything, as call is ending
+        res_context = CallContextEnum.GOODBYE
+        text = await CONFIG.prompts.tts.goodbye(call)
+
+    await handle_recognize_text(
+        call=call,
+        client=client,
+        context=res_context,
+        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+        text=text,
+        trigger_timeout=trigger_timeout,
+    )
 
 
 @TRACER.start_as_current_span("on_speech_unknown_error")
@@ -175,17 +186,21 @@ async def on_play_completed(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
-    context: str,
+    contexts: Optional[list[CallContextEnum]],
 ) -> None:
     _logger.debug("Play completed")
 
+    if not contexts:
+        return
+
     if (
-        context == CallContextEnum.TRANSFER_FAILED or context == CallContextEnum.GOODBYE
+        CallContextEnum.TRANSFER_FAILED in contexts
+        or CallContextEnum.GOODBYE in contexts
     ):  # Call ended
         _logger.info("Ending call")
         await _handle_hangup(background_tasks, client, call)
 
-    elif context == CallContextEnum.CONNECT_AGENT:  # Call transfer
+    elif CallContextEnum.CONNECT_AGENT in contexts:  # Call transfer
         _logger.info("Initiating transfer call initiated")
         await handle_transfer(
             call=call,
@@ -195,9 +210,7 @@ async def on_play_completed(
 
 
 @TRACER.start_as_current_span("on_play_error")
-async def on_play_error(
-    error_code: int,
-) -> None:
+async def on_play_error(error_code: int) -> None:
     _logger.debug("Play failed")
     # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
     if error_code == 8535:  # Action failed, file format
@@ -244,11 +257,12 @@ async def on_ivr_recognized(
         )
 
     else:  # Returning call
-        await handle_play(
+        await handle_recognize_text(
             call=call,
             client=client,
             style=MessageStyleEnum.CHEERFUL,
             text=await CONFIG.prompts.tts.welcome_back(call),
+            trigger_timeout=False,  # Do not trigger timeout, as the chat will continue
         )
         call = await load_llm_chat(
             background_tasks=background_tasks,
@@ -271,7 +285,7 @@ async def on_transfer_error(
     error_code: int,
 ) -> None:
     _logger.info(f"Error during call transfer, subCode {error_code}")
-    await handle_play(
+    await handle_recognize_text(
         call=call,
         client=client,
         context=CallContextEnum.TRANSFER_FAILED,
@@ -306,7 +320,6 @@ async def on_sms_received(
             call=call,
             client=client,
             post_call_intelligence=_post_call_intelligence,
-            then_recognize=False,
         )
     return True
 

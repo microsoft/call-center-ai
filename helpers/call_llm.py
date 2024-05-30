@@ -12,8 +12,8 @@ from models.message import (
     ToolModel as MessageToolModel,
 )
 from helpers.call_utils import (
+    handle_clear_queue,
     handle_media,
-    handle_play,
     handle_recognize_text,
     tts_sentence_split,
 )
@@ -30,9 +30,11 @@ from helpers.llm_worker import (
 )
 from openai import APIError
 from openai.types.chat import ChatCompletionSystemMessageParam
+import time
 
 
 _logger = build_logger(__name__)
+_cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
 
 
@@ -113,7 +115,6 @@ async def load_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
     post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
-    then_recognize: bool = True,
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
     """
@@ -140,14 +141,29 @@ async def load_llm_chat(
             return
 
         should_play_sound = False
-        await handle_play(
+        await handle_recognize_text(
             call=call,
             client=client,
-            store=False,
             style=style,
             text=text,
+            trigger_timeout=False,  # Voice will continue, don't trigger
         )
 
+        await _db.call_aset(
+            call
+        )  # Save ASAP in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
+
+    # Pointer
+    def _pointer_task() -> asyncio.Task:
+        return asyncio.create_task(asyncio.sleep(pointer_timer))
+
+    pointer_timer = 1  # Fetch pointer every seconds
+    pointer_cache_key = f"{__name__}-load_llm_chat-pointer-{call.call_id}"
+    pointer_current = time.time()  # Get system current time
+    await _cache.aset(pointer_cache_key, str(pointer_current))
+    pointer_task = _pointer_task()
+
+    # Chat
     chat_task = asyncio.create_task(
         _execute_llm_chat(
             background_tasks=background_tasks,
@@ -159,6 +175,14 @@ async def load_llm_chat(
         )
     )
 
+    # Loading
+    def _loading_task() -> asyncio.Task:
+        return asyncio.create_task(asyncio.sleep(loading_timer))
+
+    loading_timer = 5  # Play loading sound every 5 seconds
+    loading_task = _loading_task()
+
+    # Timeouts
     soft_timeout_triggered = False
     soft_timeout_task = asyncio.create_task(
         asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
@@ -167,22 +191,47 @@ async def load_llm_chat(
         asyncio.sleep(CONFIG.workflow.intelligence_hard_timeout_sec)
     )
 
+    await handle_media(
+        call=call,
+        client=client,
+        sound_url=CONFIG.prompts.sounds.loading(),
+    )  # Play loading sound a first time
+
+    def _clear_tasks() -> None:
+        chat_task.cancel()
+        hard_timeout_task.cancel()
+        loading_task.cancel()
+        soft_timeout_task.cancel()
+
     is_error = True
     continue_chat = True
-    should_user_answer = True
     try:
         while True:
             _logger.debug(f"Chat task status: {chat_task.done()}")
+
+            if pointer_task.done():  # Test if another chat is running
+                if pointer_current == float(
+                    (await _cache.aget(pointer_cache_key) or b"0").decode()
+                ):  # Pointer not updated
+                    pointer_task = _pointer_task()
+                else:  # Pointer updated by another instance
+                    _logger.warning("Another chat is running, stopping this one")
+                    # Clean up Communication Services queue
+                    await handle_clear_queue(call=call, client=client)
+                    # Clean up tasks
+                    _clear_tasks()
+                    break
+
             if chat_task.done():  # Break when chat coroutine is done
                 # Clean up
-                soft_timeout_task.cancel()
-                hard_timeout_task.cancel()
-                is_error, continue_chat, should_user_answer, call = (
+                _clear_tasks()
+                # Get result
+                is_error, continue_chat, call = (
                     chat_task.result()
                 )  # Store updated chat model
                 await _db.call_aset(
                     call
-                )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
+                )  # Save ASAP in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
                 break
 
             if hard_timeout_task.done():  # Break when hard timeout is reached
@@ -190,8 +239,7 @@ async def load_llm_chat(
                     f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached"
                 )
                 # Clean up
-                chat_task.cancel()
-                soft_timeout_task.cancel()
+                _clear_tasks()
                 break
 
             if should_play_sound:  # Catch timeout if async loading is not started
@@ -202,22 +250,26 @@ async def load_llm_chat(
                         f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached"
                     )
                     soft_timeout_triggered = True
-                    await handle_play(
+                    await handle_recognize_text(
                         call=call,
                         client=client,
-                        text=await CONFIG.prompts.tts.timeout_loading(call),
+                        trigger_timeout=False,  # Voice will continue, don't trigger
                         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+                        text=await CONFIG.prompts.tts.timeout_loading(call),
                     )
 
-                else:  # Do not play timeout prompt plus loading, it can be frustrating for the user
+                elif (
+                    loading_task.done()
+                ):  # Do not play timeout prompt plus loading, it can be frustrating for the user
+                    loading_task = _loading_task()
                     await handle_media(
                         call=call,
                         client=client,
                         sound_url=CONFIG.prompts.sounds.loading(),
                     )  # Play loading sound
 
-            # Wait to not block the event loop and play too many sounds
-            await asyncio.sleep(5)
+            # Wait to not block the event loop for other requests
+            await asyncio.sleep(0.5)
 
     except Exception:
         _logger.warning("Error loading intelligence", exc_info=True)
@@ -225,7 +277,6 @@ async def load_llm_chat(
     if is_error:  # Error during chat
         if not continue_chat or _iterations_remaining < 1:  # Maximum retries reached
             _logger.warning("Maximum retries reached, stopping chat")
-            should_user_answer = True
             content = await CONFIG.prompts.tts.error(call)
             style = MessageStyleEnum.NONE
             await _user_callback(content, style)
@@ -257,12 +308,6 @@ async def load_llm_chat(
             _iterations_remaining=_iterations_remaining - 1,
         )
 
-    if then_recognize and should_user_answer:
-        await handle_recognize_text(
-            call=call,
-            client=client,
-        )
-
     return call
 
 
@@ -273,7 +318,7 @@ async def _execute_llm_chat(
     post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
     use_tools: bool,
     user_callback: Callable[[str, MessageStyleEnum], Awaitable],
-) -> Tuple[bool, bool, bool, CallStateModel]:
+) -> Tuple[bool, bool, CallStateModel]:
     """
     Perform the chat with the LLM model.
 
@@ -286,12 +331,10 @@ async def _execute_llm_chat(
 
     1. `bool`, notify error
     2. `bool`, should retry chat
-    3. `bool`, if the chat should continue
     4. `CallStateModel`, the updated model
     """
     _logger.debug("Running LLM chat")
     content_full = ""
-    should_user_answer = True
 
     async def _tools_callback(text: str, style: MessageStyleEnum) -> None:
         nonlocal content_full
@@ -309,11 +352,6 @@ async def _execute_llm_chat(
         if local_content:
             await user_callback(local_content, new_style)
         return new_style
-
-    async def _tools_cancellation_callback() -> None:
-        nonlocal should_user_answer
-        _logger.info("Chat stopped by tool")
-        should_user_answer = False
 
     # Build RAG
     trainings = await call.trainings()
@@ -338,7 +376,6 @@ async def _execute_llm_chat(
     # Build plugins
     plugins = LlmPlugins(
         call=call,
-        cancellation_callback=_tools_cancellation_callback,
         client=client,
         post_call_intelligence=lambda call: post_call_intelligence(
             call, background_tasks
@@ -379,7 +416,7 @@ async def _execute_llm_chat(
                     plugins.style = await _content_callback(sentence, plugins.style)
     except APIError as e:
         _logger.warning(f"OpenAI API call error: {e}")
-        return True, True, should_user_answer, call
+        return True, True, call
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
@@ -403,12 +440,12 @@ async def _execute_llm_chat(
         tool_call.function_name == "multi_tool_use.parallel" for tool_call in tool_calls
     ):
         _logger.warning(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
-        return True, True, should_user_answer, call
+        return True, True, call
 
     # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
     if not content_full and not tool_calls:
         _logger.warning("Empty content, retrying")
-        return True, True, should_user_answer, call
+        return True, True, call
 
     # Execute tools
     tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
@@ -416,17 +453,22 @@ async def _execute_llm_chat(
     call = plugins.call  # Update call model if object reference changed
 
     # Store message
-    call.messages.append(
-        MessageModel(
+    if call.messages[-1].persona == MessagePersonaEnum.ASSISTANT:
+        message = call.messages[-1]
+        message.content = content_full.strip()
+        message.style = plugins.style
+        message.tool_calls = tool_calls
+    else:
+        message = MessageModel(
             content=content_full.strip(),
             persona=MessagePersonaEnum.ASSISTANT,
             style=plugins.style,
             tool_calls=tool_calls,
         )
-    )
+        call.messages.append(message)
 
     # Recusive call if needed
-    if tool_calls and should_user_answer:
-        return False, True, should_user_answer, call
+    if tool_calls:
+        return False, True, call
 
-    return False, False, should_user_answer, call
+    return False, False, call

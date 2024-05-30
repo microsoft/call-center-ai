@@ -163,7 +163,7 @@ async def _completion_stream_worker(
             extra["tools"] = tools  # Add tools if any
 
         prompt = _limit_messages(
-            context=platform.context,
+            context_window=platform.context,
             max_messages=20,  # Quick response
             max_tokens=max_tokens,
             messages=messages,
@@ -293,7 +293,7 @@ async def _completion_sync_worker(
             extra["response_format"] = {"type": "json_object"}
 
         prompt = _limit_messages(
-            context=platform.context,
+            context_window=platform.context,
             max_tokens=max_tokens,
             messages=[],
             model=platform.model,
@@ -349,7 +349,7 @@ async def completion_model_sync(
 
 
 def _limit_messages(
-    context: int,
+    context_window: int,
     max_tokens: int,
     messages: list[MessageModel],
     model: str,
@@ -370,7 +370,7 @@ def _limit_messages(
     The context size is the maximum number of tokens allowed by the model. The messages are selected from the newest to the oldest, until the context or the maximum number of messages is reached.
     """
     counter = 0
-    max_context = context - max_tokens
+    max_context = context_window - max_tokens
     selected_messages = []
     tokens = 0
     total = min(len(system) + len(messages), max_messages)

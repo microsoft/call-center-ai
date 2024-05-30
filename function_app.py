@@ -54,9 +54,11 @@ from helpers.call_events import (
     on_transfer_completed,
     on_transfer_error,
 )
+from helpers.call_utils import ContextEnum as CallContextEnum
 from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
 from htmlmin.minify import html_minify
 import azure.functions as func
+import json
 
 
 # Jinja configuration
@@ -71,13 +73,13 @@ _jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
 _jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
 
 # Azure Communication Services
-_source_caller = PhoneNumberIdentifier(CONFIG.communication_service.phone_number)
-_logger.info(f"Using phone number {str(CONFIG.communication_service.phone_number)}")
+_source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
+_logger.info(f"Using phone number {str(CONFIG.communication_services.phone_number)}")
 # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
 _automation_client = CallAutomationClient(
-    endpoint=CONFIG.communication_service.endpoint,
+    endpoint=CONFIG.communication_services.endpoint,
     credential=AzureKeyCredential(
-        CONFIG.communication_service.access_key.get_secret_value()
+        CONFIG.communication_services.access_key.get_secret_value()
     ),
 )
 
@@ -284,7 +286,7 @@ async def eventgrid_event_post(msg: func.QueueMessage) -> None:
         await on_new_call(
             callback_url=url,
             client=_automation_client,
-            context=call_context,
+            incoming_context=call_context,
             phone_number=phone_number,
         )
 
@@ -347,10 +349,15 @@ async def _communicationservices_event_worker(
     # Store connection ID
     connection_id = event.data["callConnectionId"]
     call.voice_id = connection_id
-
+    # Extract context
+    event_type = event.type
     # Extract event context
     operation_context = event.data.get("operationContext", None)
-    event_type = event.type
+    operation_contexts: Optional[list[CallContextEnum]] = (
+        [CallContextEnum(context) for context in json.loads(operation_context)]
+        if operation_context
+        else None
+    )
 
     _logger.debug(f"Call event received {event_type} for call {call}")
     _logger.debug(event.data)
@@ -374,13 +381,14 @@ async def _communicationservices_event_worker(
         recognition_result: str = event.data["recognitionType"]
 
         if recognition_result == "speech":  # Handle voice
-            speech_text: str = event.data["speechResult"]["speech"]
-            await on_speech_recognized(
-                background_tasks=background_tasks,
-                call=call,
-                client=_automation_client,
-                text=speech_text,
-            )
+            speech_text: Optional[str] = event.data["speechResult"]["speech"]
+            if speech_text:
+                await on_speech_recognized(
+                    background_tasks=background_tasks,
+                    call=call,
+                    client=_automation_client,
+                    text=speech_text,
+                )
 
         elif recognition_result == "choices":  # Handle IVR
             label_detected: str = event.data["choiceResult"]["label"]
@@ -405,6 +413,7 @@ async def _communicationservices_event_worker(
             await on_speech_timeout_error(
                 call=call,
                 client=_automation_client,
+                contexts=operation_contexts,
             )
         else:  # Unknown error
             await on_speech_unknown_error(
@@ -418,7 +427,7 @@ async def _communicationservices_event_worker(
             background_tasks=background_tasks,
             call=call,
             client=_automation_client,
-            context=operation_context,
+            contexts=operation_contexts,
         )
 
     elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed

@@ -21,6 +21,7 @@ from models.message import (
     StyleEnum as MessageStyleEnum,
 )
 import re
+import json
 
 
 _logger = build_logger(__name__)
@@ -39,6 +40,7 @@ class ContextEnum(str, Enum):
 
     CONNECT_AGENT = "connect_agent"  # Transfer to agent
     GOODBYE = "goodbye"  # Hang up
+    LAST_CHUNK = "last_chunk"  # Last chunk of text
     TRANSFER_FAILED = "transfer_failed"  # Transfer failed
 
 
@@ -62,9 +64,12 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
 
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
 async def _handle_recognize_media(
-    client: CallAutomationClient,
     call: CallStateModel,
-    sound_url: str,
+    client: CallAutomationClient,
+    contexts: Optional[list[ContextEnum]],
+    end_silence: Optional[int],
+    style: MessageStyleEnum,
+    text: str,
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
@@ -74,9 +79,15 @@ async def _handle_recognize_media(
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             call_client.start_recognizing_media(
-                end_silence_timeout=3,  # Sometimes user includes breaks in their speech
+                end_silence_timeout=end_silence,
                 input_type=RecognizeInputType.SPEECH,
-                play_prompt=FileSource(url=sound_url),
+                interrupt_prompt=True,
+                operation_context=json.dumps(contexts) if contexts else None,
+                play_prompt=_audio_from_text(
+                    call=call,
+                    style=style,
+                    text=text,
+                ),
                 speech_language=call.lang.short_code,
                 target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
             )
@@ -104,7 +115,7 @@ async def handle_media(
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             call_client.play_media(
-                operation_context=context,
+                operation_context=json.dumps([context]) if context else None,
                 play_source=FileSource(url=sound_url),
             )
     except ResourceNotFoundError:
@@ -119,8 +130,10 @@ async def handle_media(
 async def handle_recognize_text(
     client: CallAutomationClient,
     call: CallStateModel,
+    text: str,
+    trigger_timeout: bool = True,
+    context: Optional[ContextEnum] = None,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
-    text: Optional[str] = None,
     store: bool = True,
 ) -> None:
     """
@@ -128,49 +141,79 @@ async def handle_recognize_text(
 
     If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    if text:
-        await handle_play(
-            call=call,
-            client=client,
-            store=store,
-            style=style,
-            text=text,
-        )
-
-    await _handle_recognize_media(
+    contexts = [context] if context else []
+    chunks = await _chunk_before_tts(
         call=call,
-        client=client,
-        sound_url=CONFIG.prompts.sounds.ready(),
+        store=store,
+        style=style,
+        text=text,
     )
 
+    for i, chunk in enumerate(chunks):
+        context = None
+        end_silence = None
+        if i == len(chunks) - 1:  # Last chunk
+            end_silence = (
+                5  # Wait 5 seconds for the user to speak and end the recognition
+            )
+            if trigger_timeout:
+                contexts.append(ContextEnum.LAST_CHUNK)
+        await _handle_recognize_media(
+            call=call,
+            client=client,
+            contexts=contexts,
+            end_silence=end_silence,
+            style=style,
+            text=chunk,
+        )
 
-async def handle_play(
+
+async def handle_clear_queue(
     client: CallAutomationClient,
     call: CallStateModel,
-    text: str,
-    style: MessageStyleEnum = MessageStyleEnum.NONE,
-    context: Optional[str] = None,
-    store: bool = True,
 ) -> None:
     """
-    Play a text to a call participant.
+    Clear the media queue of a call.
+    """
+    try:
+        assert call.voice_id, "Voice ID is required for recognizing media"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            call_client.cancel_all_media_operations()
+    except ResourceNotFoundError:
+        _logger.debug(f"Call hung up before playing")
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            _logger.debug(f"Call hung up before playing")
+        else:
+            raise e
 
-    If store is True, the text will be stored in the call messages. Compatible with text larger than 400 characters, in that case the text will be split in chunks and played sequentially.
 
-    See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
+async def _chunk_before_tts(
+    call: CallStateModel,
+    style: MessageStyleEnum,
+    text: str,
+    store: bool = True,
+) -> list[str]:
+    """
+    Split a text in chunks and store them in the call messages.
     """
     # Sanitize text for TTS
     text = re.sub(_TTS_SANITIZER_R, "", text)
 
     # Store text in call messages
     if store:
-        call.messages.append(
-            MessageModel(
-                content=text,
-                persona=MessagePersonaEnum.ASSISTANT,
-                style=style,
+        if (
+            call.messages and call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
+        ):  # Append to last message if possible
+            call.messages[-1].content += f" {text}"
+        else:
+            call.messages.append(
+                MessageModel(
+                    content=text,
+                    persona=MessagePersonaEnum.ASSISTANT,
+                    style=style,
+                )
             )
-        )
 
     # Split text in chunks of max 400 characters, separated by sentence
     chunks = []
@@ -183,27 +226,13 @@ async def handle_play(
     if chunk:
         chunks.append(chunk)
 
-    # Play each chunk
-    try:
-        assert call.voice_id, "Voice ID is required for recognizing media"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            for chunk in chunks:
-                _logger.info(f"Playing text: {text} ({style})")
-                call_client.play_media(
-                    operation_context=context,
-                    play_source=_audio_from_text(chunk, style, call),
-                )
-    except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing")
-        else:
-            raise e
+    return chunks
 
 
 def _audio_from_text(
-    text: str, style: MessageStyleEnum, call: CallStateModel
+    call: CallStateModel,
+    style: MessageStyleEnum,
+    text: str,
 ) -> SsmlSource:
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
@@ -252,7 +281,11 @@ async def handle_recognize_ivr(
                 end_silence_timeout=20,
                 input_type=RecognizeInputType.CHOICES,
                 interrupt_prompt=True,
-                play_prompt=_audio_from_text(text, MessageStyleEnum.NONE, call),
+                play_prompt=_audio_from_text(
+                    call=call,
+                    style=MessageStyleEnum.NONE,
+                    text=text,
+                ),
                 speech_language=call.lang.short_code,
                 target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
             )
@@ -289,7 +322,7 @@ async def handle_transfer(
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             call_client.transfer_call_to_participant(
-                operation_context=context,
+                operation_context=json.dumps([context]) if context else None,
                 target_participant=PhoneNumberIdentifier(target),
             )
     except ResourceNotFoundError:
