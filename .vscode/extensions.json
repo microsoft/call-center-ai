@@ -1,19 +1,18 @@
 {
   "recommendations": [
     "EditorConfig.EditorConfig",
-    "ms-python.python",
-    "ms-toolsai.jupyter",
-    "mikestead.dotenv",
-    "ms-python.black-formatter",
-    "redhat.vscode-yaml",
-    "ms-python.vscode-pylance",
-    "qwtel.sqlite-viewer",
     "mechatroner.rainbow-csv",
-    "ms-azuretools.vscode-docker",
-    "ms-vscode.makefile-tools",
-    "wholroyd.jinja",
-    "visualstudioexptteam.vscodeintellicode",
+    "mikestead.dotenv",
     "ms-azuretools.vscode-bicep",
-    "tomoki1207.pdf"
+    "ms-python.black-formatter",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-toolsai.jupyter",
+    "ms-vscode.makefile-tools",
+    "qwtel.sqlite-viewer",
+    "redhat.vscode-yaml",
+    "tomoki1207.pdf",
+    "visualstudioexptteam.vscodeintellicode",
+    "wholroyd.jinja"
   ]
 }

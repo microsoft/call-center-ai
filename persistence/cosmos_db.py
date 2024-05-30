@@ -155,8 +155,13 @@ class CosmosDbStore(IStore):
         calls: list[CallStateModel] = []
         try:
             async with self._use_db() as db:
+                where_clause = (
+                    "WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)"
+                    if phone_number
+                    else ""
+                )
                 items = db.query_items(
-                    query=f"SELECT * FROM c {"WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""} ORDER BY c.created_at DESC OFFSET 0 LIMIT @count",
+                    query=f"SELECT * FROM c {where_clause} ORDER BY c.created_at DESC OFFSET 0 LIMIT @count",
                     parameters=[
                         {
                             "name": "@phone_number",
@@ -185,8 +190,13 @@ class CosmosDbStore(IStore):
     ) -> int:
         try:
             async with self._use_db() as db:
+                where_clause = (
+                    "WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)"
+                    if phone_number
+                    else ""
+                )
                 items = db.query_items(
-                    query=f"SELECT VALUE COUNT(1) FROM c {"WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""}",
+                    query=f"SELECT VALUE COUNT(1) FROM c {where_clause}",
                     parameters=[
                         {
                             "name": "@phone_number",

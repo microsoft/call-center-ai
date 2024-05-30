@@ -220,9 +220,11 @@ def _audio_from_text(
     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{call.lang.short_code}">
         <voice name="{call.lang.voice}" effect="eq_telecomhp8k">
             <lexicon uri="{CONFIG.resources.public_url}/lexicon.xml" />
-            <mstts:express-as style="{style.value}" styledegree="0.5">
-                <prosody rate="0.95">{text}</prosody>
-            </mstts:express-as>
+            <lang xml:lang="{call.lang.short_code}">
+                <mstts:express-as style="{style.value}" styledegree="0.5">
+                    <prosody rate="0.95">{text}</prosody>
+                </mstts:express-as>
+            </lang>
         </voice>
     </speak>
     """

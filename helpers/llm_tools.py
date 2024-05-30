@@ -14,7 +14,8 @@ from models.message import (
 from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
-from typing import Awaitable, Callable, Annotated, Literal, TypedDict
+from typing import Awaitable, Callable, Annotated, Literal
+from typing_extensions import TypedDict
 import asyncio
 
 

@@ -56,6 +56,7 @@ from helpers.call_events import (
 )
 from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
 from htmlmin.minify import html_minify
+import azure.functions as func
 
 
 # Jinja configuration
@@ -87,7 +88,6 @@ _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()
 
 # FastAPI
-_logger.info(f'Using root path "{CONFIG.api.root_path}"')
 api = FastAPI(
     contact={
         "url": "https://github.com/clemlesne/call-center-ai",
@@ -97,18 +97,29 @@ api = FastAPI(
         "name": "Apache-2.0",
         "url": "https://github.com/clemlesne/call-center-ai/blob/master/LICENCE",
     },
-    root_path=CONFIG.api.root_path,
     title="call-center-ai",
     version=CONFIG.version,
+    servers=[
+        {
+            "url": CONFIG.public_domain,
+            "description": "Current environment",
+        },
+    ],
 )
 
+# Azure Functions
+app = func.AsgiFunctionApp(
+    app=api,
+    http_auth_level=func.AuthLevel.ANONYMOUS,
+)
 
-assert CONFIG.api.events_domain, "api.events_domain config is not set"
-_COMMUNICATIONSERVICES_EVENT_TPL = urljoin(
-    str(CONFIG.api.events_domain),
+#
+assert CONFIG.public_domain, "public_domain config is not set"
+_COMMUNICATIONSERVICES_CALLABACK_TPL = urljoin(
+    str(CONFIG.public_domain),
     "/communicationservices/event/{call_id}/{callback_secret}",
 )
-_logger.info(f"Using call event URL {_COMMUNICATIONSERVICES_EVENT_TPL}")
+_logger.info(f"Using call event URL {_COMMUNICATIONSERVICES_CALLABACK_TPL}")
 
 
 @api.get(
@@ -253,63 +264,29 @@ async def call_post(initiate: CallInitiateModel) -> CallGetModel:
     return CallGetModel.model_validate(call)
 
 
-# TODO: Secure this endpoint with a secret, either in the Authorization header or in the URL
-@api.post(
-    "/eventgrid/event",
-    description="Handle incoming call from a Azure Event Grid event originating from Azure Communication Services.",
-    name="Receive Event Grid event",
+@app.queue_trigger(
+    arg_name="msg",
+    connection="Storage",
+    queue_name=CONFIG.communication_service.queue_name,
 )
-async def eventgrid_event_post(
-    background_tasks: BackgroundTasks,
-    request: Request,
-) -> Response:
-    responses = await asyncio.gather(
-        *[
-            _eventgrid_event_worker(
-                background_tasks=background_tasks,
-                event_dict=event_dict,
-            )
-            for event_dict in await request.json()
-        ]
-    )
-    for response in responses:
-        if response:
-            return response
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-async def _eventgrid_event_worker(
-    background_tasks: BackgroundTasks,
-    event_dict: dict[str, Any],
-) -> Optional[Union[JSONResponse, Response]]:
-    event = EventGridEvent.from_dict(event_dict)
+async def eventgrid_event_post(msg: func.QueueMessage) -> None:
+    background_tasks = BackgroundTasks()
+    event = EventGridEvent.from_json(msg.get_body())
     event_type = event.event_type
 
     _logger.debug(f"Call inbound event {event_type} with data {event.data}")
 
-    if event_type == SystemEventNames.EventGridSubscriptionValidationEventName:
-        validation_code: str = event.data["validationCode"]
-        _logger.info(f"Validating Event Grid subscription ({validation_code})")
-        return JSONResponse(
-            content={"validationResponse": event.data["validationCode"]},
-            status_code=status.HTTP_200_OK,
-        )
-
-    elif event_type == SystemEventNames.AcsIncomingCallEventName:
+    if event_type == SystemEventNames.AcsIncomingCallEventName:
         call_context: str = event.data["incomingCallContext"]
         phone_number = event.data["from"]["phoneNumber"]["value"]
         phone_number = PhoneNumber(phone_number)
         url, _ = await _communicationservices_event_url(phone_number)
-        event_status = await on_new_call(
+        await on_new_call(
             callback_url=url,
             client=_automation_client,
             context=call_context,
             phone_number=phone_number,
         )
-        if not event_status:
-            return Response(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
 
     elif event_type == SystemEventNames.AcsSmsReceivedEventName:
         message: str = event.data["message"]
@@ -317,19 +294,15 @@ async def _eventgrid_event_worker(
         call = await _db.call_asearch_one(phone_number)
         if not call:
             _logger.warning(f"Call for phone number {phone_number} not found")
-            return Response(
-                status_code=status.HTTP_404_NOT_FOUND,
-            )
-        event_status = await on_sms_received(
+            return
+        await on_sms_received(
             background_tasks=background_tasks,
             call=call,
             client=_automation_client,
             message=message,
         )
-        if not event_status:
-            return Response(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+
+    await background_tasks()
 
 
 @api.post(
@@ -494,7 +467,7 @@ async def _communicationservices_event_url(
             )
         )
         await _db.call_aset(call)  # Create for the first time
-    url = _COMMUNICATIONSERVICES_EVENT_TPL.format(
+    url = _COMMUNICATIONSERVICES_CALLABACK_TPL.format(
         callback_secret=call.callback_secret,
         call_id=str(call.call_id),
     )

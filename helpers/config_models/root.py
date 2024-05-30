@@ -1,6 +1,5 @@
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.config_models.ai_translation import AiTranslationModel
-from helpers.config_models.api import ApiModel
 from helpers.config_models.cache import CacheModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_service import CommunicationServiceModel
@@ -25,11 +24,11 @@ class RootModel(BaseSettings):
     )
 
     # Immutable fields
+    public_domain: str = Field(frozen=True)
     version: str = Field(default="0.0.0-unknown", frozen=True)
     # Editable fields
     ai_search: AiSearchModel
     ai_translation: AiTranslationModel
-    api: ApiModel = ApiModel()  # Object is fully defined by default
     cache: CacheModel = CacheModel()  # Object is fully defined by default
     cognitive_service: CognitiveServiceModel
     communication_service: CommunicationServiceModel
