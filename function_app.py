@@ -269,7 +269,7 @@ async def call_post(initiate: CallInitiateModel) -> CallGetModel:
 @app.queue_trigger(
     arg_name="msg",
     connection="Storage",
-    queue_name=CONFIG.communication_service.queue_name,
+    queue_name=CONFIG.communication_services.queue_name,
 )
 async def eventgrid_event_post(msg: func.QueueMessage) -> None:
     background_tasks = BackgroundTasks()

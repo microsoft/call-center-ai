@@ -51,10 +51,10 @@ var config = {
       lang: localConfig.workflow.initiate.lang
     }
   }
-  communication_service: {
+  communication_services: {
     access_key: communicationServices.listKeys().primaryKey
     endpoint: communicationServices.properties.hostName
-    phone_number: localConfig.communication_service.phone_number
+    phone_number: localConfig.communication_services.phone_number
     queue_name: communicationServicesQueue.name
   }
   sms: localConfig.sms
@@ -356,7 +356,7 @@ resource assignmentEventgridTopicQueueSender 'Microsoft.Authorization/roleAssign
 
 resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2024-06-01-preview' = {
   parent: eventgridTopic
-  name: '${prefix}-${replace(localConfig.communication_service.phone_number, '+', '')}'
+  name: '${prefix}-${replace(localConfig.communication_services.phone_number, '+', '')}'
   properties: {
     eventDeliverySchema: 'EventGridSchema'
     deliveryWithResourceIdentity: {
@@ -379,7 +379,7 @@ resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscr
           operatorType: 'StringBeginsWith'
           key: 'data.to.PhoneNumber.Value'
           values: [
-            localConfig.communication_service.phone_number
+            localConfig.communication_services.phone_number
           ]
         }
       ]
@@ -391,7 +391,7 @@ resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscr
 
 resource eventgridSubscriptionSms 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2024-06-01-preview' = {
   parent: eventgridTopic
-  name: '${prefix}-${replace(localConfig.communication_service.phone_number, '+', '')}-sms'
+  name: '${prefix}-${replace(localConfig.communication_services.phone_number, '+', '')}-sms'
   properties: {
     eventDeliverySchema: 'EventGridSchema'
     deliveryWithResourceIdentity: {
@@ -414,7 +414,7 @@ resource eventgridSubscriptionSms 'Microsoft.EventGrid/systemTopics/eventSubscri
           operatorType: 'StringBeginsWith'
           key: 'data.to'
           values: [
-            localConfig.communication_service.phone_number
+            localConfig.communication_services.phone_number
           ]
         }
       ]

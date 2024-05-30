@@ -24,7 +24,7 @@ class CommunicationServiceModel(BaseModel, frozen=True):
         from persistence.communication_services import CommunicationServicesSms
         from helpers.config import CONFIG
 
-        return CommunicationServicesSms(CONFIG.communication_service)
+        return CommunicationServicesSms(CONFIG.communication_services)
 
 
 class TwilioModel(BaseModel, frozen=True):

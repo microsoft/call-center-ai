@@ -11,7 +11,7 @@ functionapp_location := swedencentral
 openai_location := southcentralus
 search_location := northeurope
 # App configuration
-bot_phone_number ?= $(shell cat config.yaml | yq '.communication_service.phone_number')
+bot_phone_number ?= $(shell cat config.yaml | yq '.communication_services.phone_number')
 event_subscription_name ?= $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
 twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
 # Bicep outputs

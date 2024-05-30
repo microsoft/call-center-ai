@@ -143,7 +143,7 @@ graph LR
     ai_search[("RAG\n(AI Search)")]
     app["App"]
     communication_service_sms["SMS gateway\n(Communication Services)"]
-    communication_service["Call gateway\n(Communication Services)"]
+    communication_services["Call gateway\n(Communication Services)"]
     constent_safety["Moderation\n(Content Safety)"]
     db[("Conversations and claims\n(Cosmos DB or SQLite)")]
     event_grid[("Broker\n(Event Grid)")]
@@ -152,7 +152,7 @@ graph LR
     translation["Translation\n(Cognitive Services)"]
   end
 
-  app -- Answer with text --> communication_service
+  app -- Answer with text --> communication_services
   app -- Ask for translation --> translation
   app -- Few-shot training --> ai_search
   app -- Generate completion --> gpt
@@ -160,16 +160,16 @@ graph LR
   app -- Save conversation --> db
   app -- Send SMS report --> communication_service_sms
   app -- Test for profanity --> constent_safety
-  app -- Transfer to agent --> communication_service
+  app -- Transfer to agent --> communication_services
   app -. Watch .-> event_grid
 
-  communication_service -- Notifies --> event_grid
-  communication_service -- Transfer to --> agent
-  communication_service -. Send voice .-> user
+  communication_services -- Notifies --> event_grid
+  communication_services -- Transfer to --> agent
+  communication_services -. Send voice .-> user
 
   communication_service_sms -- Send SMS --> user
 
-  user -- Call --> communication_service
+  user -- Call --> communication_services
 ```
 
 ### Sequence diagram
@@ -257,7 +257,7 @@ workflow:
     bot_name: Robert
     lang: {}
 
-communication_service:
+communication_services:
   phone_number: "+33612345678"
 
 sms: {}
@@ -300,7 +300,7 @@ workflow:
     bot_company: Contoso
     bot_name: Robert
 
-communication_service:
+communication_services:
   access_key: xxx
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"

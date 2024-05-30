@@ -345,7 +345,7 @@ class LlmModel(BaseModel):
             self.default_system_tpl.format(
                 bot_company=call.initiate.bot_company,
                 bot_name=call.initiate.bot_name,
-                bot_phone_number=CONFIG.communication_service.phone_number,
+                bot_phone_number=CONFIG.communication_services.phone_number,
                 date=datetime.now(UTC)
                 .astimezone()
                 .strftime(

@@ -2,7 +2,7 @@ from azure.communication.sms import SmsSendResult
 from azure.communication.sms.aio import SmsClient
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 from contextlib import asynccontextmanager
-from helpers.config_models.communication_service import CommunicationServiceModel
+from helpers.config_models.communication_services import CommunicationServicesModel
 from helpers.logging import build_logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessStatus
@@ -14,9 +14,9 @@ _logger = build_logger(__name__)
 
 
 class CommunicationServicesSms(ISms):
-    _config: CommunicationServiceModel
+    _config: CommunicationServicesModel
 
-    def __init__(self, config: CommunicationServiceModel):
+    def __init__(self, config: CommunicationServicesModel):
         _logger.info(f"Using Communication Services from number {config.phone_number}")
         self._config = config
 
