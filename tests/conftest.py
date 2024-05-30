@@ -2,7 +2,7 @@ from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
 from fastapi import BackgroundTasks
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
 from models.call import CallStateModel, CallInitiateModel
@@ -20,9 +20,6 @@ from azure.communication.callautomation import (
     SsmlSource,
     TextSource,
 )
-
-
-_logger = build_logger(__name__)
 
 
 class CallAutomationClientMock(CallAutomationClient):
@@ -50,7 +47,7 @@ class CallConnectionClientMock(CallConnectionClient):
         *args,
         **kwargs,
     ) -> None:
-        _logger.info("start_recognizing_media, ignoring")
+        logger.info("start_recognizing_media, ignoring")
 
     def play_media(
         self,
@@ -65,21 +62,21 @@ class CallConnectionClientMock(CallConnectionClient):
                 if text.strip():
                     self._play_media_callback(text.strip())
         else:
-            _logger.warning("play_media, ignoring")
+            logger.warning("play_media, ignoring")
 
     def transfer_call_to_participant(
         self,
         *args,
         **kwargs,
     ) -> None:
-        _logger.info("transfer_call_to_participant, ignoring")
+        logger.info("transfer_call_to_participant, ignoring")
 
     def hang_up(
         self,
         *args,
         **kwargs,
     ) -> None:
-        _logger.info("hang_up, ignoring")
+        logger.info("hang_up, ignoring")
 
 
 @pytest.fixture

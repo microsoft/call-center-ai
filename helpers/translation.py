@@ -4,7 +4,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from typing import AsyncGenerator, Optional
 from tenacity import (
     retry_if_exception_type,
@@ -14,8 +14,7 @@ from tenacity import (
 )
 
 
-_logger = build_logger(__name__)
-_logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
+logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
 
 _cache = CONFIG.cache.instance()
 

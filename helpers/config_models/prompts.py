@@ -469,14 +469,14 @@ class LlmModel(BaseModel):
         # Remove newlines to avoid hallucinations issues with GPT-4 Turbo
         res = " ".join([line.strip() for line in res.splitlines()])
 
-        self._logger.debug(f"LLM prompt: {res}")
+        self.logger.debug(f"LLM prompt: {res}")
         return res
 
     @cached_property
-    def _logger(self) -> Logger:
-        from helpers.logging import build_logger
+    def logger(self) -> Logger:
+        from helpers.logging import logger
 
-        return build_logger(__name__)
+        return logger
 
 
 class TtsModel(BaseModel):
@@ -592,15 +592,15 @@ class TtsModel(BaseModel):
                 initial, self.tts_lang, call.lang.short_code
             )
         except HttpResponseError as e:
-            self._logger.warning(f"Failed to translate TTS prompt: {e}")
+            self.logger.warning(f"Failed to translate TTS prompt: {e}")
             pass
         return translation or initial
 
     @cached_property
-    def _logger(self) -> Logger:
-        from helpers.logging import build_logger
+    def logger(self) -> Logger:
+        from helpers.logging import logger
 
-        return build_logger(__name__)
+        return logger
 
 
 class PromptsModel(BaseModel):

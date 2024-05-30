@@ -13,7 +13,7 @@ from helpers.call_events import (
     on_call_connected,
 )
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.call import CallStateModel
 from models.reminder import ReminderModel
 from models.training import TrainingModel
@@ -22,9 +22,6 @@ from pytest import assume
 import json
 import pytest
 from tests.conftest import CallAutomationClientMock
-
-
-_logger = build_logger(__name__)
 
 
 @pytest.mark.parametrize(
@@ -202,9 +199,9 @@ async def test_llm(
     full_input = _remove_newlines(" ".join(inputs))
 
     # Log for dev review
-    _logger.info(f"actual_output: {actual_output}")
-    _logger.info(f"claim: {call.claim}")
-    _logger.info(f"full_input: {full_input}")
+    logger.info(f"actual_output: {actual_output}")
+    logger.info(f"claim: {call.claim}")
+    logger.info(f"full_input: {full_input}")
 
     # Test claim data
     for field in claim_tests_incl:

@@ -7,10 +7,10 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from os import environ
 
 
-# Logging levels
-_LOGGING_APP_LEVEL = CONFIG.monitoring.logging.app_level.value
-_LOGGING_SYS_LEVEL = CONFIG.monitoring.logging.sys_level.value
-basicConfig(level=_LOGGING_SYS_LEVEL)
+# Logger
+basicConfig(level=CONFIG.monitoring.logging.sys_level.value)
+logger = getLogger("call-center-ai")
+logger.setLevel(CONFIG.monitoring.logging.app_level.value)
 
 # OpenTelemetry
 environ["OTEL_TRACES_SAMPLER_ARG"] = str(0.5)  # Sample 50% of traces
@@ -19,13 +19,7 @@ configure_azure_monitor(
 )  # Configure Azure monitor collection
 AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
 HTTPXClientInstrumentor().instrument()  # Instrument httpx
-TRACER = trace.get_tracer(
+tracer = trace.get_tracer(
     instrumenting_library_version=CONFIG.version,
     instrumenting_module_name="com.github.clemlesne.call-center-ai",
 )  # Create a tracer that will be used in the app
-
-
-def build_logger(name: str) -> Logger:
-    logger = getLogger(name)
-    logger.setLevel(_LOGGING_APP_LEVEL)
-    return logger

@@ -1,10 +1,9 @@
 # First imports, to make sure the following logs are first
-from helpers.logging import build_logger
+from helpers.logging import logger
 from helpers.config import CONFIG
 
 
-_logger = build_logger(__name__)
-_logger.info(f"call-center-ai v{CONFIG.version}")
+logger.info(f"call-center-ai v{CONFIG.version}")
 
 
 # General imports
@@ -74,7 +73,7 @@ _jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", 
 
 # Azure Communication Services
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
-_logger.info(f"Using phone number {str(CONFIG.communication_services.phone_number)}")
+logger.info(f"Using phone number {str(CONFIG.communication_services.phone_number)}")
 # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
 _automation_client = CallAutomationClient(
     endpoint=CONFIG.communication_services.endpoint,
@@ -121,7 +120,7 @@ _COMMUNICATIONSERVICES_CALLABACK_TPL = urljoin(
     str(CONFIG.public_domain),
     "/communicationservices/event/{call_id}/{callback_secret}",
 )
-_logger.info(f"Using call event URL {_COMMUNICATIONSERVICES_CALLABACK_TPL}")
+logger.info(f"Using call event URL {_COMMUNICATIONSERVICES_CALLABACK_TPL}")
 
 
 @api.get(
@@ -260,7 +259,7 @@ async def call_post(initiate: CallInitiateModel) -> CallGetModel:
         source_caller_id_number=_source_caller,
         target_participant=PhoneNumberIdentifier(initiate.phone_number),  # type: ignore
     )
-    _logger.info(
+    logger.info(
         f"Created call with connection id: {call_connection_properties.call_connection_id}"
     )
     return CallGetModel.model_validate(call)
@@ -276,7 +275,7 @@ async def eventgrid_event_post(msg: func.QueueMessage) -> None:
     event = EventGridEvent.from_json(msg.get_body())
     event_type = event.event_type
 
-    _logger.debug(f"Call inbound event {event_type} with data {event.data}")
+    logger.debug(f"Call inbound event {event_type} with data {event.data}")
 
     if event_type == SystemEventNames.AcsIncomingCallEventName:
         call_context: str = event.data["incomingCallContext"]
@@ -295,7 +294,7 @@ async def eventgrid_event_post(msg: func.QueueMessage) -> None:
         phone_number: str = event.data["from"]
         call = await _db.call_asearch_one(phone_number)
         if not call:
-            _logger.warning(f"Call for phone number {phone_number} not found")
+            logger.warning(f"Call for phone number {phone_number} not found")
             return
         await on_sms_received(
             background_tasks=background_tasks,
@@ -337,10 +336,10 @@ async def _communicationservices_event_worker(
 ) -> None:
     call = await _db.call_aget(call_id)
     if not call:
-        _logger.warning(f"Call {call_id} not found")
+        logger.warning(f"Call {call_id} not found")
         return
     if call.callback_secret != secret:
-        _logger.warning(f"Secret for call {call_id} does not match")
+        logger.warning(f"Secret for call {call_id} does not match")
         return
 
     event = CloudEvent.from_dict(event_dict)
@@ -359,8 +358,8 @@ async def _communicationservices_event_worker(
         else None
     )
 
-    _logger.debug(f"Call event received {event_type} for call {call}")
-    _logger.debug(event.data)
+    logger.debug(f"Call event received {event_type} for call {call}")
+    logger.debug(event.data)
 
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
         await on_call_connected(
@@ -509,7 +508,7 @@ async def twilio_sms(
     phone_number = PhoneNumber(From)
     call = await _db.call_asearch_one(phone_number)
     if not call:
-        _logger.warning(f"Call for phone number {phone_number} not found")
+        logger.warning(f"Call for phone number {phone_number} not found")
     else:
         event_status = await on_sms_received(
             call=call,

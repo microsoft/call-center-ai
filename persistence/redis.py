@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from helpers.config_models.cache import RedisModel
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.readiness import ReadinessStatus
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from persistence.icache import ICache
@@ -16,7 +16,6 @@ import hashlib
 # Instrument redis
 RedisInstrumentor().instrument()
 
-_logger = build_logger(__name__)
 _retry = Retry(backoff=ExponentialBackoff(), retries=3)
 
 
@@ -24,7 +23,7 @@ class RedisCache(ICache):
     _config: RedisModel
 
     def __init__(self, config: RedisModel):
-        _logger.info(f"Using Redis cache {config.host}:{config.port}")
+        logger.info(f"Using Redis cache {config.host}:{config.port}")
         self._config = config
 
     async def areadiness(self) -> ReadinessStatus:
@@ -49,9 +48,9 @@ class RedisCache(ICache):
                 assert await db.get(test_name) is None
             return ReadinessStatus.OK
         except AssertionError as e:
-            _logger.error(f"Readiness test failed, {e}")
+            logger.error(f"Readiness test failed, {e}")
         except RedisError as e:
-            _logger.error(f"Error requesting Redis, {e}")
+            logger.error(f"Error requesting Redis, {e}")
         return ReadinessStatus.FAIL
 
     async def aget(self, key: str) -> Optional[bytes]:
@@ -68,7 +67,7 @@ class RedisCache(ICache):
             async with self._use_db() as db:
                 res = await db.get(sha_key)
         except RedisError as e:
-            _logger.error(f"Error getting value, {e}")
+            logger.error(f"Error getting value, {e}")
         return res
 
     async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
@@ -84,7 +83,7 @@ class RedisCache(ICache):
             async with self._use_db() as db:
                 await db.set(sha_key, value if value else "")
         except RedisError as e:
-            _logger.error(f"Error setting value, {e}")
+            logger.error(f"Error setting value, {e}")
             return False
         return True
 

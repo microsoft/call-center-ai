@@ -5,7 +5,7 @@ from azure.communication.callautomation import (
     RecognitionChoice,
 )
 from helpers.config import CONFIG
-from helpers.logging import build_logger, TRACER
+from helpers.logging import logger, tracer
 from azure.core.exceptions import (
     ClientAuthenticationError,
     HttpResponseError,
@@ -34,19 +34,18 @@ from models.next import NextModel
 from helpers.call_llm import llm_completion, llm_model, load_llm_chat
 
 
-_logger = build_logger(__name__)
 _sms = CONFIG.sms.instance()
 _db = CONFIG.database.instance()
 
 
-@TRACER.start_as_current_span("on_new_call")
+@tracer.start_as_current_span("on_new_call")
 async def on_new_call(
     callback_url: str,
     client: CallAutomationClient,
     incoming_context: str,
     phone_number: str,
 ) -> bool:
-    _logger.debug(f"Incoming call handler caller ID: {phone_number}")
+    logger.debug(f"Incoming call handler caller ID: {phone_number}")
 
     try:
         answer_call_result = client.answer_call(
@@ -54,34 +53,34 @@ async def on_new_call(
             cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
             incoming_call_context=incoming_context,
         )
-        _logger.info(
+        logger.info(
             f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
         )
         return True
 
     except ClientAuthenticationError as e:
-        _logger.error(
+        logger.error(
             "Authentication error with Communication Services, check the credentials",
             exc_info=True,
         )
 
     except HttpResponseError as e:
         if "lifetime validation of the signed http request failed" in e.message.lower():
-            _logger.debug("Old call event received, ignoring")
+            logger.debug("Old call event received, ignoring")
         else:
-            _logger.error(
+            logger.error(
                 f"Unknown error answering call with {phone_number}", exc_info=True
             )
 
     return False
 
 
-@TRACER.start_as_current_span("on_call_connected")
+@tracer.start_as_current_span("on_call_connected")
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
 ) -> None:
-    _logger.info("Call connected")
+    logger.info("Call connected")
     call.voice_recognition_retry = 0  # Reset recognition retry counter
     call.messages.append(
         MessageModel(
@@ -98,24 +97,24 @@ async def on_call_connected(
     )  # Every time a call is answered, confirm the language
 
 
-@TRACER.start_as_current_span("on_call_disconnected")
+@tracer.start_as_current_span("on_call_disconnected")
 async def on_call_disconnected(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
 ) -> None:
-    _logger.info("Call disconnected")
+    logger.info("Call disconnected")
     await _handle_hangup(background_tasks, client, call)
 
 
-@TRACER.start_as_current_span("on_speech_recognized")
+@tracer.start_as_current_span("on_speech_recognized")
 async def on_speech_recognized(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
     text: str,
 ) -> None:
-    _logger.info(f"Voice recognition: {text}")
+    logger.info(f"Voice recognition: {text}")
     call.messages.append(MessageModel(content=text, persona=MessagePersonaEnum.HUMAN))
     await _db.call_aset(
         call
@@ -131,14 +130,14 @@ async def on_speech_recognized(
     )
 
 
-@TRACER.start_as_current_span("on_speech_timeout_error")
+@tracer.start_as_current_span("on_speech_timeout_error")
 async def on_speech_timeout_error(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: Optional[list[CallContextEnum]],
 ) -> None:
     if not (contexts and CallContextEnum.LAST_CHUNK in contexts):
-        _logger.debug("Ignoring timeout if bot is still speaking")
+        logger.debug("Ignoring timeout if bot is still speaking")
         return
 
     res_context = None
@@ -161,16 +160,16 @@ async def on_speech_timeout_error(
     )
 
 
-@TRACER.start_as_current_span("on_speech_unknown_error")
+@tracer.start_as_current_span("on_speech_unknown_error")
 async def on_speech_unknown_error(
     call: CallStateModel,
     client: CallAutomationClient,
     error_code: int,
 ) -> None:
     if error_code == 8511:  # Failure while trying to play the prompt
-        _logger.warning("Failed to play prompt")
+        logger.warning("Failed to play prompt")
     else:
-        _logger.warning(
+        logger.warning(
             f"Recognition failed with unknown error code {error_code}, answering with default error"
         )
     await handle_recognize_text(
@@ -181,14 +180,14 @@ async def on_speech_unknown_error(
     )
 
 
-@TRACER.start_as_current_span("on_play_completed")
+@tracer.start_as_current_span("on_play_completed")
 async def on_play_completed(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: Optional[list[CallContextEnum]],
 ) -> None:
-    _logger.debug("Play completed")
+    logger.debug("Play completed")
 
     if not contexts:
         return
@@ -197,11 +196,11 @@ async def on_play_completed(
         CallContextEnum.TRANSFER_FAILED in contexts
         or CallContextEnum.GOODBYE in contexts
     ):  # Call ended
-        _logger.info("Ending call")
+        logger.info("Ending call")
         await _handle_hangup(background_tasks, client, call)
 
     elif CallContextEnum.CONNECT_AGENT in contexts:  # Call transfer
-        _logger.info("Initiating transfer call initiated")
+        logger.info("Initiating transfer call initiated")
         await handle_transfer(
             call=call,
             client=client,
@@ -209,25 +208,25 @@ async def on_play_completed(
         )
 
 
-@TRACER.start_as_current_span("on_play_error")
+@tracer.start_as_current_span("on_play_error")
 async def on_play_error(error_code: int) -> None:
-    _logger.debug("Play failed")
+    logger.debug("Play failed")
     # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
     if error_code == 8535:  # Action failed, file format
-        _logger.warning("Error during media play, file format is invalid")
+        logger.warning("Error during media play, file format is invalid")
     elif error_code == 8536:  # Action failed, file downloaded
-        _logger.warning("Error during media play, file could not be downloaded")
+        logger.warning("Error during media play, file could not be downloaded")
     elif error_code == 8565:  # Action failed, AI services config
-        _logger.error(
+        logger.error(
             "Error during media play, impossible to connect with Azure AI services"
         )
     elif error_code == 9999:  # Unknown
-        _logger.warning("Error during media play, unknown internal server error")
+        logger.warning("Error during media play, unknown internal server error")
     else:
-        _logger.warning(f"Error during media play, unknown error code {error_code}")
+        logger.warning(f"Error during media play, unknown error code {error_code}")
 
 
-@TRACER.start_as_current_span("on_ivr_recognized")
+@tracer.start_as_current_span("on_ivr_recognized")
 async def on_ivr_recognized(
     client: CallAutomationClient,
     call: CallStateModel,
@@ -240,10 +239,10 @@ async def on_ivr_recognized(
             call.initiate.lang.default_lang,
         )
     except ValueError:
-        _logger.warning(f"Unknown IVR {label}, code not implemented")
+        logger.warning(f"Unknown IVR {label}, code not implemented")
         return
 
-    _logger.info(f"Setting call language to {lang}")
+    logger.info(f"Setting call language to {lang}")
     call.lang = lang.short_code
     await _db.call_aset(
         call
@@ -272,19 +271,19 @@ async def on_ivr_recognized(
         )
 
 
-@TRACER.start_as_current_span("on_transfer_completed")
+@tracer.start_as_current_span("on_transfer_completed")
 async def on_transfer_completed() -> None:
-    _logger.info("Call transfer accepted event")
+    logger.info("Call transfer accepted event")
     # TODO: Is there anything to do here?
 
 
-@TRACER.start_as_current_span("on_transfer_error")
+@tracer.start_as_current_span("on_transfer_error")
 async def on_transfer_error(
     call: CallStateModel,
     client: CallAutomationClient,
     error_code: int,
 ) -> None:
-    _logger.info(f"Error during call transfer, subCode {error_code}")
+    logger.info(f"Error during call transfer, subCode {error_code}")
     await handle_recognize_text(
         call=call,
         client=client,
@@ -293,14 +292,14 @@ async def on_transfer_error(
     )
 
 
-@TRACER.start_as_current_span("on_sms_received")
+@tracer.start_as_current_span("on_sms_received")
 async def on_sms_received(
     background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
     message: str,
 ) -> bool:
-    _logger.info(f"SMS received from {call.initiate.phone_number}: {message}")
+    logger.info(f"SMS received from {call.initiate.phone_number}: {message}")
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.SMS,
@@ -312,9 +311,9 @@ async def on_sms_received(
         call
     )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
     if not call.in_progress:
-        _logger.info("Call not in progress, answering with SMS")
+        logger.info("Call not in progress, answering with SMS")
     else:
-        _logger.info("Call in progress, answering with voice")
+        logger.info("Call in progress, answering with voice")
         await load_llm_chat(
             background_tasks=background_tasks,
             call=call,
@@ -352,7 +351,7 @@ def _post_call_intelligence(
         and call.messages[-2].persona == MessagePersonaEnum.ASSISTANT
         and call.messages[-1].action == MessageActionEnum.HANGUP
     ):
-        _logger.info(
+        logger.info(
             "Call ended before any interaction, skipping post-call intelligence"
         )
         return
@@ -374,9 +373,9 @@ async def _post_call_sms(call: CallStateModel) -> None:
     _, content = extract_message_style(remove_message_action(content or ""))
 
     if not content:
-        _logger.warning("Error generating SMS report")
+        logger.warning("Error generating SMS report")
         return
-    _logger.info(f"SMS report: {content}")
+    logger.info(f"SMS report: {content}")
 
     # Send the SMS to both the current caller and the policyholder
     success = False
@@ -387,7 +386,7 @@ async def _post_call_sms(call: CallStateModel) -> None:
             continue
         res = await _sms.asend(content, number)
         if not res:
-            _logger.warning(f"Failed sending SMS report to {number}")
+            logger.warning(f"Failed sending SMS report to {number}")
             continue
         success = True
 
@@ -406,7 +405,7 @@ async def _post_call_synthesis(call: CallStateModel) -> None:
     """
     Synthesize the call and store it to the model.
     """
-    _logger.debug("Synthesizing call")
+    logger.debug("Synthesizing call")
 
     short, long = await asyncio.gather(
         llm_completion(
@@ -430,11 +429,11 @@ async def _post_call_synthesis(call: CallStateModel) -> None:
     _, long = extract_message_style(remove_message_action(long or ""))
 
     if not short or not long:
-        _logger.warning("Error generating synthesis")
+        logger.warning("Error generating synthesis")
         return
 
-    _logger.info(f"Short synthesis: {short}")
-    _logger.info(f"Long synthesis: {long}")
+    logger.info(f"Short synthesis: {short}")
+    logger.info(f"Long synthesis: {long}")
 
     call.synthesis = SynthesisModel(
         long=long,
@@ -454,10 +453,10 @@ async def _post_call_next(call: CallStateModel) -> None:
     )
 
     if not next:
-        _logger.warning("Error generating next action")
+        logger.warning("Error generating next action")
         return
 
-    _logger.info(f"Next action: {next}")
+    logger.info(f"Next action: {next}")
     call.next = next
     await _db.call_aset(call)
 

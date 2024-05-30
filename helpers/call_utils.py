@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from enum import Enum
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.call import CallStateModel
 from models.message import StyleEnum as MessageStyleEnum
 from typing import AsyncGenerator, Generator, Optional
@@ -24,7 +24,6 @@ import re
 import json
 
 
-_logger = build_logger(__name__)
 _SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"  # Split by sentence by punctuation
 _TTS_SANITIZER_R = re.compile(
     r"[^\w\s'«»“”\"\"‘’''(),.!?;:\-\+_@/]"
@@ -74,7 +73,7 @@ async def _handle_recognize_media(
     """
     Play a media to a call participant and start recognizing the response.
     """
-    _logger.debug(f"Recognizing media")
+    logger.debug(f"Recognizing media")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -92,10 +91,10 @@ async def _handle_recognize_media(
                 target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
             )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before recognizing")
+        logger.debug(f"Call hung up before recognizing")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing")
+            logger.debug(f"Call hung up before playing")
         else:
             raise e
 
@@ -119,10 +118,10 @@ async def handle_media(
                 play_source=FileSource(url=sound_url),
             )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing")
+        logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing")
+            logger.debug(f"Call hung up before playing")
         else:
             raise e
 
@@ -180,10 +179,10 @@ async def handle_clear_queue(
         async with _use_call_client(client, call.voice_id) as call_client:
             call_client.cancel_all_media_operations()
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before playing")
+        logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before playing")
+            logger.debug(f"Call hung up before playing")
         else:
             raise e
 
@@ -241,7 +240,7 @@ def _audio_from_text(
     """
     # Azure Speech Service TTS limit is 400 characters
     if len(text) > 400:
-        _logger.warning(
+        logger.warning(
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
@@ -271,8 +270,8 @@ async def handle_recognize_ivr(
 
     Starts by playing text, then starts recognizing the response. The recognition will be interrupted by the user if they start speaking. The recognition will be played in the call language.
     """
-    _logger.info(f"Playing text before IVR: {text}")
-    _logger.debug(f"Recognizing IVR")
+    logger.info(f"Playing text before IVR: {text}")
+    logger.debug(f"Recognizing IVR")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -290,23 +289,23 @@ async def handle_recognize_ivr(
                 target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
             )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before recognizing")
+        logger.debug(f"Call hung up before recognizing")
 
 
 async def handle_hangup(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
-    _logger.debug("Hanging up call")
+    logger.debug("Hanging up call")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             call_client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
-        _logger.debug("Call already hung up")
+        logger.debug("Call already hung up")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug("Call hung up before playing")
+            logger.debug("Call hung up before playing")
         else:
             raise e
 
@@ -317,7 +316,7 @@ async def handle_transfer(
     target: str,
     context: Optional[str] = None,
 ) -> None:
-    _logger.debug(f"Transferring call to {target}")
+    logger.debug(f"Transferring call to {target}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -326,10 +325,10 @@ async def handle_transfer(
                 target_participant=PhoneNumberIdentifier(target),
             )
     except ResourceNotFoundError:
-        _logger.debug(f"Call hung up before transferring")
+        logger.debug(f"Call hung up before transferring")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
-            _logger.debug(f"Call hung up before transferring")
+            logger.debug(f"Call hung up before transferring")
         else:
             raise e
 

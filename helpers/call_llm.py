@@ -1,7 +1,7 @@
 from typing import Awaitable, Callable, Optional, Tuple, Type
 from azure.communication.callautomation import CallAutomationClient
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.call import CallStateModel
 from models.message import (
     extract_message_style,
@@ -33,7 +33,6 @@ from openai.types.chat import ChatCompletionSystemMessageParam
 import time
 
 
-_logger = build_logger(__name__)
 _cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
 
@@ -44,7 +43,7 @@ async def llm_completion(text: Optional[str], call: CallStateModel) -> Optional[
 
     If the system prompt is None, no completion will be run and None will be returned. Otherwise, the response of the LLM will be returned.
     """
-    _logger.info("Running LLM completion")
+    logger.info("Running LLM completion")
 
     if not text:
         return None
@@ -58,9 +57,9 @@ async def llm_completion(text: Optional[str], call: CallStateModel) -> Optional[
             system=system,
         )
     except APIError as e:
-        _logger.warning(f"OpenAI API call error: {e}")
+        logger.warning(f"OpenAI API call error: {e}")
     except SafetyCheckError as e:
-        _logger.warning(f"OpenAI safety check error: {e}")
+        logger.warning(f"OpenAI safety check error: {e}")
 
     return content
 
@@ -73,7 +72,7 @@ async def llm_model(
 
     The logic will try its best to return a model of the expected type, but it is not guaranteed. It it fails, `None` will be returned.
     """
-    _logger.debug("Running LLM model")
+    logger.debug("Running LLM model")
 
     if not text:
         return None
@@ -88,7 +87,7 @@ async def llm_model(
             system=system,
         )
     except APIError as e:
-        _logger.warning(f"OpenAI API call error: {e}")
+        logger.warning(f"OpenAI API call error: {e}")
 
     return res
 
@@ -106,7 +105,7 @@ def _llm_completion_system(
             role="system",
         ),
     ]
-    _logger.debug(f"Messages: {messages}")
+    logger.debug(f"Messages: {messages}")
     return messages
 
 
@@ -124,7 +123,7 @@ async def load_llm_chat(
 
     Returns the updated call model.
     """
-    _logger.info("Loading LLM chat")
+    logger.info("Loading LLM chat")
 
     should_play_sound = True
 
@@ -137,7 +136,7 @@ async def load_llm_chat(
         try:
             await safety_check(text)
         except SafetyCheckError as e:
-            _logger.warning(f"Unsafe text detected, not playing: {e}")
+            logger.warning(f"Unsafe text detected, not playing: {e}")
             return
 
         should_play_sound = False
@@ -207,7 +206,7 @@ async def load_llm_chat(
     continue_chat = True
     try:
         while True:
-            _logger.debug(f"Chat task status: {chat_task.done()}")
+            logger.debug(f"Chat task status: {chat_task.done()}")
 
             if pointer_task.done():  # Test if another chat is running
                 if pointer_current == float(
@@ -215,7 +214,7 @@ async def load_llm_chat(
                 ):  # Pointer not updated
                     pointer_task = _pointer_task()
                 else:  # Pointer updated by another instance
-                    _logger.warning("Another chat is running, stopping this one")
+                    logger.warning("Another chat is running, stopping this one")
                     # Clean up Communication Services queue
                     await handle_clear_queue(call=call, client=client)
                     # Clean up tasks
@@ -235,7 +234,7 @@ async def load_llm_chat(
                 break
 
             if hard_timeout_task.done():  # Break when hard timeout is reached
-                _logger.warning(
+                logger.warning(
                     f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached"
                 )
                 # Clean up
@@ -246,7 +245,7 @@ async def load_llm_chat(
                 if (
                     soft_timeout_task.done() and not soft_timeout_triggered
                 ):  # Speak when soft timeout is reached
-                    _logger.warning(
+                    logger.warning(
                         f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached"
                     )
                     soft_timeout_triggered = True
@@ -272,11 +271,11 @@ async def load_llm_chat(
             await asyncio.sleep(0.5)
 
     except Exception:
-        _logger.warning("Error loading intelligence", exc_info=True)
+        logger.warning("Error loading intelligence", exc_info=True)
 
     if is_error:  # Error during chat
         if not continue_chat or _iterations_remaining < 1:  # Maximum retries reached
-            _logger.warning("Maximum retries reached, stopping chat")
+            logger.warning("Maximum retries reached, stopping chat")
             content = await CONFIG.prompts.tts.error(call)
             style = MessageStyleEnum.NONE
             await _user_callback(content, style)
@@ -289,7 +288,7 @@ async def load_llm_chat(
             )
 
         else:  # Retry chat after an error
-            _logger.info(f"Retrying chat, {_iterations_remaining - 1} remaining")
+            logger.info(f"Retrying chat, {_iterations_remaining - 1} remaining")
             return await load_llm_chat(
                 background_tasks=background_tasks,
                 call=call,
@@ -299,7 +298,7 @@ async def load_llm_chat(
             )
 
     elif continue_chat:  # Contiue chat
-        _logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
+        logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
         return await load_llm_chat(
             background_tasks=background_tasks,
             call=call,
@@ -333,7 +332,7 @@ async def _execute_llm_chat(
     2. `bool`, should retry chat
     4. `CallStateModel`, the updated model
     """
-    _logger.debug("Running LLM chat")
+    logger.debug("Running LLM chat")
     content_full = ""
 
     async def _tools_callback(text: str, style: MessageStyleEnum) -> None:
@@ -355,8 +354,8 @@ async def _execute_llm_chat(
 
     # Build RAG
     trainings = await call.trainings()
-    _logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
-    _logger.debug(f"Trainings: {trainings}")
+    logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
+    logger.debug(f"Trainings: {trainings}")
 
     # Build system prompts
     system = [
@@ -385,10 +384,10 @@ async def _execute_llm_chat(
 
     tools = []
     if not use_tools:
-        _logger.warning("Tools disabled for this chat")
+        logger.warning("Tools disabled for this chat")
     else:
         tools = await plugins.to_openai(call)
-        _logger.debug(f"Tools: {tools}")
+        logger.debug(f"Tools: {tools}")
 
     # Execute LLM inference
     content_buffer_pointer = 0
@@ -415,7 +414,7 @@ async def _execute_llm_chat(
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _content_callback(sentence, plugins.style)
     except APIError as e:
-        _logger.warning(f"OpenAI API call error: {e}")
+        logger.warning(f"OpenAI API call error: {e}")
         return True, True, call
 
     # Flush the remaining buffer
@@ -430,8 +429,8 @@ async def _execute_llm_chat(
     # Delete action and style from the message as they are in the history and LLM hallucinates them
     _, content_full = extract_message_style(remove_message_action(content_full))
 
-    _logger.debug(f"Chat response: {content_full}")
-    _logger.debug(f"Tool calls: {tool_calls}")
+    logger.debug(f"Chat response: {content_full}")
+    logger.debug(f"Tool calls: {tool_calls}")
 
     # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
     # TODO: Tries to detect this error earlier
@@ -439,12 +438,12 @@ async def _execute_llm_chat(
     if any(
         tool_call.function_name == "multi_tool_use.parallel" for tool_call in tool_calls
     ):
-        _logger.warning(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
+        logger.warning(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
         return True, True, call
 
     # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
     if not content_full and not tool_calls:
-        _logger.warning("Empty content, retrying")
+        logger.warning("Empty content, retrying")
         return True, True, call
 
     # Execute tools

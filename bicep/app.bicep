@@ -289,7 +289,7 @@ resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-01-0
 
 resource communicationServicesQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
   parent: queueService
-  name: 'communication-services'
+  name: 'communication-services-${replace(localConfig.communication_services.phone_number, '+', '')}'
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {

@@ -80,9 +80,8 @@ class ToolModel(BaseModel):
         return self
 
     async def execute_function(self, plugins: object) -> None:
-        from helpers.logging import build_logger, TRACER
+        from helpers.logging import logger, tracer
 
-        logger = build_logger(__name__)
         json_str = self.function_arguments
         name = self.function_name
 
@@ -107,7 +106,7 @@ class ToolModel(BaseModel):
             self.content = f"Bad arguments, available are {ToolModel._available_function_names()}. Please try again."
             return
 
-        with TRACER.start_as_current_span(
+        with tracer.start_as_current_span(
             name="execute_function",
             attributes={
                 "args": json.dumps(args),

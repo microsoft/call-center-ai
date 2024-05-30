@@ -2,7 +2,7 @@ from azure.communication.callautomation import CallAutomationClient
 from helpers.call_utils import ContextEnum as CallContextEnum, handle_recognize_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
-from helpers.logging import build_logger
+from helpers.logging import logger
 from inspect import getmembers, isfunction
 from models.call import CallStateModel
 from models.message import (
@@ -19,7 +19,6 @@ from typing_extensions import TypedDict
 import asyncio
 
 
-_logger = build_logger(__name__)
 _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()
 
@@ -337,7 +336,7 @@ class LlmPlugins:
         """
         await self.user_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
-        _logger.info(
+        logger.info(
             f"Notifying {service}, location {location}, contact {contact}, reason {reason}."
         )
         return f"Notifying {service} for {reason}."

@@ -4,7 +4,7 @@ See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd
 """
 
 import inspect
-from helpers.logging import build_logger
+from helpers.logging import logger
 from typing import (
     Any,
     Callable,
@@ -23,7 +23,6 @@ from textwrap import dedent
 from typing_extensions import Annotated
 
 
-_logger = build_logger(__name__)
 T = TypeVar("T")
 _jinja = Environment(
     autoescape=True,
@@ -63,7 +62,7 @@ async def function_schema(
         unannotated_with_default_s = [
             f"'{k}'" for k in sorted(unannotated_with_default)
         ]
-        _logger.warning(
+        logger.warning(
             f"The following parameters of the function '{f.__name__}' with default values are not annotated: "
             + f"{', '.join(unannotated_with_default_s)}."
         )

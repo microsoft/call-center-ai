@@ -1,13 +1,10 @@
 from collections import OrderedDict
 from helpers.config_models.cache import MemoryModel
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.readiness import ReadinessStatus
 from persistence.icache import ICache
 from typing import Optional, Union
 import hashlib
-
-
-_logger = build_logger(__name__)
 
 
 class MemoryCache(ICache):
@@ -23,7 +20,7 @@ class MemoryCache(ICache):
     _config: MemoryModel
 
     def __init__(self, config: MemoryModel):
-        _logger.warning(
+        logger.warning(
             f"Using memory cache with {config.max_size} size limit, memory usage can be high, prefer an external cache like Redis"
         )
         self._config = config

@@ -4,14 +4,11 @@ from deepeval.metrics.indicator import metric_progress_indicator
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.call import CallStateModel
 from typing import Optional
 import asyncio
 import pytest
-
-
-_logger = build_logger(__name__)
 
 
 class RagRelevancyMetric(BaseMetric):
@@ -150,8 +147,8 @@ async def test_relevancy(
     res_models = await search.training_asearch_all(text=user_message, lang=user_lang)
     res_list = [d.content for d in res_models or []]
 
-    _logger.info(f"Message: {user_message}")
-    _logger.info(f"Data: {res_list}")
+    logger.info(f"Message: {user_message}")
+    logger.info(f"Data: {res_list}")
 
     # Configure LLM tests
     test_case = LLMTestCase(

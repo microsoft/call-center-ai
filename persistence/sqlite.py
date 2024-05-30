@@ -2,7 +2,7 @@ from aiosqlite import connect as sqlite_connect, Connection as SQLiteConnection
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.call import CallStateModel
 from models.readiness import ReadinessStatus
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
@@ -17,16 +17,12 @@ import os
 # Instrument sqlite
 SQLite3Instrumentor().instrument()
 
-_logger = build_logger(__name__)
-
 
 class SqliteStore(IStore):
     _config: SqliteModel
 
     def __init__(self, config: SqliteModel):
-        _logger.info(
-            f"Using SQLite database at {config.path} with table {config.table}"
-        )
+        logger.info(f"Using SQLite database at {config.path} with table {config.table}")
         self._config = config
 
     async def areadiness(self) -> ReadinessStatus:
@@ -40,11 +36,11 @@ class SqliteStore(IStore):
                 await db.execute("SELECT 1")
             return ReadinessStatus.OK
         except Exception as e:
-            _logger.error(f"Error requesting SQLite, {e}")
+            logger.error(f"Error requesting SQLite, {e}")
         return ReadinessStatus.FAIL
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
-        _logger.debug(f"Loading call {call_id}")
+        logger.debug(f"Loading call {call_id}")
         call = None
         async with self._use_db() as db:
             cursor = await db.execute(
@@ -56,13 +52,13 @@ class SqliteStore(IStore):
                 try:
                     call = CallStateModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
         return call
 
     async def call_aset(self, call: CallStateModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
         data = call.model_dump_json(exclude_none=True)
-        _logger.debug(f"Saving call {call.call_id}: {data}")
+        logger.debug(f"Saving call {call.call_id}: {data}")
         async with self._use_db() as db:
             await db.execute(
                 f"INSERT OR REPLACE INTO {self._config.table} VALUES (?, ?)",
@@ -75,7 +71,7 @@ class SqliteStore(IStore):
         return True
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
-        _logger.debug(f"Loading last call for {phone_number}")
+        logger.debug(f"Loading last call for {phone_number}")
         call = None
         async with self._use_db() as db:
             cursor = await db.execute(
@@ -90,7 +86,7 @@ class SqliteStore(IStore):
                 try:
                     call = CallStateModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
         return call
 
     async def call_asearch_all(
@@ -98,7 +94,7 @@ class SqliteStore(IStore):
         count: int,
         phone_number: Optional[str] = None,
     ) -> tuple[Optional[list[CallStateModel]], int]:
-        _logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        logger.debug(f"Searching calls, for {phone_number} and count {count}")
         calls, total = await asyncio.gather(
             self._call_asearch_all_calls_worker(count, phone_number),
             self._call_asearch_all_total_worker(phone_number),
@@ -136,7 +132,7 @@ class SqliteStore(IStore):
                 try:
                     calls.append(CallStateModel.model_validate_json(row[0]))
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
         return calls
 
     async def _call_asearch_all_total_worker(
@@ -169,7 +165,7 @@ class SqliteStore(IStore):
 
         See: https://sqlite.org/cgi/src/doc/wal2/doc/wal2.md
         """
-        _logger.info("First run, init database")
+        logger.info("First run, init database")
         # Optimize performance for concurrent writes
         await db.execute("PRAGMA journal_mode=WAL")
         # Create table

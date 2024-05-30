@@ -9,7 +9,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError, ServiceRequestError
 from helpers.config import CONFIG
 from contextlib import asynccontextmanager
-from helpers.logging import build_logger, TRACER
+from helpers.logging import logger, tracer
 from openai import (
     APIConnectionError,
     APIResponseValidationError,
@@ -58,11 +58,10 @@ environ["TRACELOOP_TRACE_CONTENT"] = str(
 )  # Instrumentation logs prompts, completions, and embeddings to span attributes, set to False to lower monitoring costs or to avoid logging PII
 OpenAIInstrumentor(enrich_token_usage=True).instrument()
 
-_logger = build_logger(__name__)
-_logger.info(
+logger.info(
     f"Using LLM models {CONFIG.llm.selected(False).model} (primary) and {CONFIG.llm.selected(True).model} (backup)"
 )
-_logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
+logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 
 _cache = CONFIG.cache.instance()
 ModelType = TypeVar("ModelType", bound=BaseModel)
@@ -85,7 +84,7 @@ class SafetyCheckError(Exception):
         return self.message
 
 
-@TRACER.start_as_current_span("completion_stream")
+@tracer.start_as_current_span("completion_stream")
 async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
@@ -111,7 +110,7 @@ async def completion_stream(
     except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
-        _logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
+        logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
 
     # Try more times with backup LLM, if it fails again, raise the error
     retryed = AsyncRetrying(
@@ -153,7 +152,7 @@ async def _completion_stream_worker(
                 yield chunck
             return
         except ValidationError as e:
-            _logger.debug(f"Parsing error: {e.errors()}")
+            logger.debug(f"Parsing error: {e.errors()}")
 
     # Try live
     to_cache: list[ChoiceDelta] = []
@@ -225,7 +224,7 @@ async def _completion_stream_worker(
     await _cache.aset(cache_key, TypeAdapter(list[ChoiceDelta]).dump_json(to_cache))
 
 
-@TRACER.start_as_current_span("completion_sync")
+@tracer.start_as_current_span("completion_sync")
 async def completion_sync(
     max_tokens: int,
     system: list[ChatCompletionSystemMessageParam],
@@ -247,7 +246,7 @@ async def completion_sync(
     except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
-        _logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
+        logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
 
     # Try more times with backup LLM, if it fails again, raise the error
     retryed = AsyncRetrying(
@@ -327,7 +326,7 @@ async def _completion_sync_worker(
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
-@TRACER.start_as_current_span("completion_model_sync")
+@tracer.start_as_current_span("completion_model_sync")
 async def completion_model_sync(
     max_tokens: int,
     model: Type[ModelType],
@@ -399,14 +398,14 @@ def _limit_messages(
         selected_messages += openai_message[::-1]
         tokens += new_tokens
 
-    _logger.info(f"Using {counter}/{total} messages ({tokens} tokens) as context")
+    logger.info(f"Using {counter}/{total} messages ({tokens} tokens) as context")
     return [
         *system,
         *selected_messages[::-1],
     ]
 
 
-@TRACER.start_as_current_span("safety_check")
+@tracer.start_as_current_span("safety_check")
 async def safety_check(text: str) -> None:
     """
     Raise `SafetyCheckError` if the text is safe, nothing otherwise.
@@ -419,15 +418,15 @@ async def safety_check(text: str) -> None:
     try:
         res = await _contentsafety_analysis(text)
     except ServiceRequestError as e:
-        _logger.error(f"Request error: {e}")
+        logger.error(f"Request error: {e}")
         return  # Assume safe
     except HttpResponseError as e:
-        _logger.error(f"Response error: {e}")
+        logger.error(f"Response error: {e}")
         return  # Assume safe
 
     # Replace blocklist items with censored text
     for match in res.blocklists_match or []:
-        _logger.debug(f"Matched blocklist item: {match.blocklist_item_text}")
+        logger.debug(f"Matched blocklist item: {match.blocklist_item_text}")
         text = text.replace(
             match.blocklist_item_text, "*" * len(match.blocklist_item_text)
         )
@@ -459,7 +458,7 @@ async def safety_check(text: str) -> None:
 
     # True if all categories are safe
     safety = hate_result and self_harm_result and sexual_result and violence_result
-    _logger.debug(f'Text safety "{safety}" for text: {text}')
+    logger.debug(f'Text safety "{safety}" for text: {text}')
 
     if not safety:
         raise SafetyCheckError(
@@ -504,7 +503,7 @@ def _contentsafety_category_test(
     detection = next((item for item in res if item.category == category), None)
 
     if detection and detection.severity and detection.severity > score:
-        _logger.debug(f"Matched {category} with severity {detection.severity}")
+        logger.debug(f"Matched {category} with severity {detection.severity}")
         return False
     return True
 
@@ -520,7 +519,7 @@ def _count_tokens(content: str, model: str) -> int:
         encoding_name = tiktoken.encoding_name_for_model(model)
     except KeyError:
         encoding_name = tiktoken.encoding_name_for_model("gpt-3.5")
-        _logger.warning(f"Unknown model {model}, using {encoding_name} encoding")
+        logger.warning(f"Unknown model {model}, using {encoding_name} encoding")
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 

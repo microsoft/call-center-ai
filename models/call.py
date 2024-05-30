@@ -112,9 +112,9 @@ class CallStateModel(CallGetModel):
         Is using query expansion from last messages. Then, data is sorted by score.
         """
         from helpers.config import CONFIG
-        from helpers.logging import TRACER
+        from helpers.logging import tracer
 
-        with TRACER.start_as_current_span("trainings"):
+        with tracer.start_as_current_span("trainings"):
             search = CONFIG.ai_search.instance()
             tasks = await asyncio.gather(
                 *[
