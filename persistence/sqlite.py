@@ -112,8 +112,13 @@ class SqliteStore(IStore):
     ) -> Optional[list[CallStateModel]]:
         calls: list[CallStateModel] = []
         async with self._use_db() as db:
+            where_clause = (
+                "WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)"
+                if phone_number
+                else ""
+            )
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""} ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT ?",
+                f"SELECT data FROM {self._config.table} {where_clause} ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT ?",
                 (
                     (
                         phone_number,  # data.initiate.phone_number
@@ -139,8 +144,13 @@ class SqliteStore(IStore):
         phone_number: Optional[str] = None,
     ) -> int:
         async with self._use_db() as db:
+            where_clause = (
+                "WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)"
+                if phone_number
+                else ""
+            )
             cursor = await db.execute(
-                f"SELECT COUNT(*) FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""}",
+                f"SELECT COUNT(*) FROM {self._config.table} {where_clause}",
                 (
                     (
                         phone_number,  # data.initiate.phone_number

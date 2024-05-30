@@ -1,4 +1,4 @@
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from contextlib import asynccontextmanager
 from enum import Enum
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -34,7 +34,8 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel, frozen=True):
         api_key = self.api_key.get_secret_value() if self.api_key else None
         token_func = (
             get_bearer_token_provider(
-                DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+                ManagedIdentityCredential(),
+                "https://cognitiveservices.azure.com/.default",
             )
             if not self.api_key
             else None

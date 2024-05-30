@@ -244,10 +244,7 @@ sequenceDiagram
 
 ## Remote deployment
 
-Container is available on GitHub Actions, at:
-
-- Latest version from a branch: `ghcr.io/clemlesne/call-center-ai:main`
-- Specific tag: `ghcr.io/clemlesne/call-center-ai:0.1.0` (recommended)
+Application is hosted by Azure Functions. Code will be pushed automatically `make deploy`, with after the deployment.
 
 Create a local `config.yaml` file (most of the fields are filled automatically by the deployment script):
 
@@ -373,12 +370,7 @@ For your knowledge, this `resources` folder contains:
 
 ### Run
 
-Finally, in two different terminals, run:
-
-```bash
-# Expose the local server to the internet
-make tunnel
-```
+Finally, run:
 
 ```bash
 # Start the local API server

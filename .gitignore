@@ -1,8 +1,9 @@
 # See: https://github.com/clemlesne/gitops-version
 .version.cache
 
-# Temporary database
+# Temporary files
 *.sqlite*
+.pytest_cache/
 
 # Local app config file
 config*.yaml
@@ -10,8 +11,12 @@ config*.yaml
 # Test reports
 test-reports/
 
-# Created by https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,visualstudiocode,jupyternotebooks
-# Edit at https://www.toptal.com/developers/gitignore?templates=osx,linux,dotenv,eclipse,windows,visualstudio,visualstudiocode,jupyternotebooks
+# Created by https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,jupyternotebooks,visualstudiocode,azurefunctions
+# Edit at https://www.toptal.com/developers/gitignore?templates=osx,linux,dotenv,eclipse,windows,visualstudio,jupyternotebooks,visualstudiocode,azurefunctions
+
+### AzureFunctions ###
+# Azure Functions localsettings file
+local.settings.json
 
 ### dotenv ###
 .env
@@ -573,4 +578,4 @@ FodyWeavers.xsd
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio
 
-# End of https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,visualstudiocode,jupyternotebooks
+# End of https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,jupyternotebooks,visualstudiocode,azurefunctions

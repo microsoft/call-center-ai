@@ -1,4 +1,4 @@
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
 from fastapi import BackgroundTasks
 from helpers.config import CONFIG
@@ -138,7 +138,7 @@ class DeepEvalAzureOpenAI(GPTModel):
             "api_key": platform.api_key.get_secret_value() if platform.api_key else None,  # type: ignore
             "azure_ad_token_provider": (
                 get_bearer_token_provider(
-                    DefaultAzureCredential(),
+                    ManagedIdentityCredential(),
                     "https://cognitiveservices.azure.com/.default",
                 )
                 if not platform.api_key

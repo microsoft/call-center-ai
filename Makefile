@@ -1,6 +1,3 @@
-# Container configuration
-container_name := ghcr.io/clemlesne/call-center-ai
-docker := docker
 # Versioning
 version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
@@ -8,8 +5,9 @@ version_small ?= $(shell $(MAKE) --silent version)
 tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]')
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
-app_location := westeurope
 cognitive_communication_location := westeurope
+default_location := westeurope
+functionapp_location := swedencentral
 openai_location := southcentralus
 search_location := northeurope
 # App configuration
@@ -20,6 +18,7 @@ twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
 app_url ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
 communication_id ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
+function_app_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["functionAppName"].value')
 log_analytics_workspace_customer_id ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["logAnalyticsWorkspaceName"].value')
 
 version:
@@ -29,9 +28,6 @@ version-full:
 	@bash ./cicd/version/version.sh -g . -c -m
 
 install:
-	@echo "➡️ Installing Dev Tunnels CLI..."
-	devtunnel --version || brew install --cask devtunnel
-
 	@echo "➡️ Installing Allure..."
 	allure --version || brew install allure
 
@@ -43,9 +39,6 @@ install:
 
 	@echo "➡️ Installing Python dev dependencies..."
 	python3 -m pip install -r requirements-dev.txt
-
-	@echo "➡️ Testing Docker installation..."
-	$(docker) --version || echo "🚨 Docker is not installed."
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
@@ -96,62 +89,33 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) API__EVENTS_DOMAIN=$(tunnel_url) python3 -m gunicorn main:api \
-		--access-logfile - \
-		--bind 0.0.0.0:8080 \
-		--proxy-protocol \
-		--reload \
-		--reload-extra-file .env \
-		--reload-extra-file config.yaml \
-		--workers 2 \
-		--worker-class uvicorn.workers.UvicornWorker
-
-build:
-	$(docker) build \
-		--build-arg VERSION=$(version_full) \
-		--tag $(container_name):$(version_small) \
-		--tag $(container_name):latest \
-		.
-
-start:
-	@echo "🛠️ Deploying to localhost..."
-	$(docker) run \
-		--env API__EVENTS_DOMAIN=$(tunnel_url) \
-		--env VERSION=$(version_full) \
-		--mount type=bind,source="$(CURDIR)/.env",target="/app/.env" \
-		--mount type=bind,source="$(CURDIR)/config.yaml",target="/app/config.yaml" \
-		--name call-center-ai \
-		--publish 8080:8080 \
-		--rm \
-		$(container_name):$(version_small)
-
-stop:
-	@echo "Stopping container..."
-	$(docker) stop call-center-ai
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) func start \
+		--port 8080
 
 deploy:
 	@echo "👀 Current subscription:"
 	@az account show --query "{subscriptionId:id, subscriptionName:name, tenantId:tenantId}" --output table
 
-	@echo "🛠️ Deploying to Azure..."
+	@echo "🛠️ Deploying resources..."
 	az deployment sub create \
-		--location $(app_location) \
+		--location $(default_location) \
 		--parameters \
 			'cognitiveCommunicationLocation=$(cognitive_communication_location)' \
+			'functionappLocation=$(functionapp_location)' \
 			'openaiLocation=$(openai_location)' \
 			'searchLocation=$(search_location)' \
+			'version=$(version_full)' \
 		--template-file bicep/main.bicep \
 	 	--name $(name)
+
+	@echo "🛠️ Deploying Function App..."
+	func azure functionapp publish $(function_app_name)
 
 	@$(MAKE) post-deploy name=$(name)
 
 post-deploy:
 	@$(MAKE) copy-resources \
 		name=$(blob_storage_public_name)
-
-	@$(MAKE) eventgrid-register \
-		endpoint=$(app_url) \
-		source=$(communication_id)
 
 	@$(MAKE) twilio-register \
 		endpoint=$(app_url)
@@ -170,61 +134,8 @@ destroy:
 	az deployment sub delete --name $(name)
 
 logs:
-	az containerapp logs show \
-		--follow \
-		--format text \
-		--name call-center-ai \
-		--resource-group $(name) \
-		--tail 100
-
-logs-history:
-	az monitor log-analytics query \
-		--analytics-query "ContainerAppConsoleLogs_CL | project TimeGenerated, Log_s | sort by TimeGenerated desc" \
-		--output jsonc \
-		--timespan P1D \
-		--workspace $(log_analytics_workspace_customer_id)
-
-eventgrid-register:
-	@$(MAKE) eventgrid-subscription-delete \
-		event_source=$(source) \
-		event_subscription_name=$(event_subscription_name)
-
-	@$(MAKE) eventgrid-subscription-create \
-		event_filter="data.to.PhoneNumber.Value" \
-		event_phone_number=$(bot_phone_number) \
-		event_source=$(source) \
-		event_subscription_name=$(event_subscription_name) \
-		event_types="Microsoft.Communication.IncomingCall"
-
-	@$(MAKE) eventgrid-subscription-delete \
-		event_source=$(source) \
-		event_subscription_name=$(event_subscription_name)-sms
-
-	@$(MAKE) eventgrid-subscription-create \
-		event_filter="data.to" \
-		event_phone_number=$(bot_phone_number) \
-		event_source=$(source) \
-		event_subscription_name=$(event_subscription_name)-sms \
-		event_types="Microsoft.Communication.SMSReceived"
-
-eventgrid-subscription-create:
-	@echo "⚙️ Registering Event Grid webhook $(event_subscription_name)..."
-	az eventgrid event-subscription create \
-		--advanced-filter $(event_filter) StringBeginsWith $(event_phone_number) \
-		--enable-advanced-filtering-on-arrays true \
-		--endpoint $(endpoint)/eventgrid/event \
-		--event-delivery-schema eventgridschema \
-		--event-ttl 3 \
-		--included-event-types "$(event_types)" \
-		--max-delivery-attempts 8 \
-		--name $(event_subscription_name) \
-		--source-resource-id $(event_source)
-
-eventgrid-subscription-delete:
-	@echo "⚙️ Deleting Event Grid webhook $(event_subscription_name)..."
-	az eventgrid event-subscription delete \
-		--name $(event_subscription_name) \
-		--source-resource-id $(event_source)
+	func azure functionapp logstream $(function_app_name) \
+		--browser
 
 twilio-register:
 	@echo "⚙️ Registering Twilio webhook..."
