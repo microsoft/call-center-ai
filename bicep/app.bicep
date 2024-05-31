@@ -90,7 +90,6 @@ var config = {
     access_key: search.listAdminKeys().primaryKey
     endpoint: 'https://${search.name}.search.windows.net'
     index: 'trainings'
-    semantic_configuration: 'default'
   }
   content_safety: {
     access_key: cognitiveContentsafety.listKeys().key1

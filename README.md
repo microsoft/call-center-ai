@@ -346,7 +346,6 @@ ai_search:
   access_key: xxx
   endpoint: https://xxx.search.windows.net
   index: trainings
-  semantic_configuration: default
 
 content_safety:
   access_key: xxx

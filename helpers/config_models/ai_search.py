@@ -8,7 +8,7 @@ class AiSearchModel(BaseModel, frozen=True):
     endpoint: str
     expansion_k: int = Field(default=5, ge=1)
     index: str
-    semantic_configuration: str
+    semantic_configuration: str = "default"
     top_k: int = Field(default=15, ge=1)
 
     @cache
