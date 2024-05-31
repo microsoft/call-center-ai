@@ -16,7 +16,7 @@ Insurance, IT support, customer service, and more. The bot can be customized in 
 # Ask the bot to call a phone number
 data='{
   "bot_company": "Contoso",
-  "bot_name": "Marion",
+  "bot_name": "Amélie",
   "phone_number": "+11234567890",
   "task": "Assistant will help the customer with their digital workplace. Assistant is working for the IT support department. The objective is to help the customer with their issue and gather information in the claim.",
   "agent_phone_number": "+33612345678",
@@ -140,34 +140,44 @@ graph LR
   user(["User"])
 
   subgraph "Claim AI"
-    ai_search[("RAG\n(AI Search)")]
-    app["App"]
-    communication_service_sms["SMS gateway\n(Communication Services)"]
-    communication_services["Call gateway\n(Communication Services)"]
+    ada["Embedding\n(ADA)"]
+    app["App\n(Functions App)"]
+    communication_services["Call & SMS gateway\n(Communication Services)"]
     constent_safety["Moderation\n(Content Safety)"]
-    db[("Conversations and claims\n(Cosmos DB or SQLite)")]
-    event_grid[("Broker\n(Event Grid)")]
-    gpt["GPT-4 Turbo\n(OpenAI)"]
+    db[("Conversations and claims\n(Cosmos DB / SQLite)")]
+    eventgrid["Broker\n(Event Grid)"]
+    gpt["LLM\n(GPT-4o)"]
+    queues[("Queues\n(Azure Storage)")]
     redis[("Cache\n(Redis)")]
+    search[("RAG\n(AI Search)")]
+    sounds[("Sounds\n(Azure Storage)")]
+    sst["Speech-to-Text\n(Cognitive Services)"]
     translation["Translation\n(Cognitive Services)"]
+    tts["Text-to-Speech\n(Cognitive Services)"]
   end
 
   app -- Answer with text --> communication_services
   app -- Ask for translation --> translation
-  app -- Few-shot training --> ai_search
+  app -- Ask to transfer --> communication_services
+  app -- Few-shot training --> search
   app -- Generate completion --> gpt
   app -- Get cached data --> redis
   app -- Save conversation --> db
-  app -- Send SMS report --> communication_service_sms
+  app -- Send SMS report --> communication_services
   app -- Test for profanity --> constent_safety
-  app -- Transfer to agent --> communication_services
-  app -. Watch .-> event_grid
+  app -. Watch .-> queues
 
-  communication_services -- Notifies --> event_grid
+  communication_services -- Generate voice --> tts
+  communication_services -- Load sound --> sounds
+  communication_services -- Notifies --> eventgrid
+  communication_services -- Send SMS --> user
   communication_services -- Transfer to --> agent
+  communication_services -- Transform voice --> sst
   communication_services -. Send voice .-> user
 
-  communication_service_sms -- Send SMS --> user
+  eventgrid -- Push to --> queues
+
+  search -- Generate embeddings --> ada
 
   user -- Call --> communication_services
 ```
@@ -254,7 +264,7 @@ workflow:
   initiate:
     agent_phone_number: "+33612345678"
     bot_company: Contoso
-    bot_name: Robert
+    bot_name: Amélie
     lang: {}
 
 communication_services:
@@ -302,8 +312,11 @@ workflow:
 
 communication_services:
   access_key: xxx
+  call_queue_name: call-33612345678
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
+  post_queue_name: post-33612345678
+  sms_queue_name: sms-33612345678
 
 cognitive_service:
   # Must be of type "AI services multi-service account"
@@ -623,7 +636,3 @@ prompts:
 ### Why no LLM framework is used?
 
 At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
-
-### What's missing in this project for production deployment?
-
-Mostly decoupling. Today, post-call intelligence is done with the BackgroundTasks implementation from Starlette. But this executes tasks in the worker same thread, after the HTTP reponse made. For production, a message broker like Azure Service Bus should be used (Dapr can ease your life by abstracting it from the code).

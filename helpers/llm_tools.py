@@ -31,21 +31,21 @@ class UpdateClaimDict(TypedDict):
 class LlmPlugins:
     call: CallStateModel
     client: CallAutomationClient
-    post_call_intelligence: Callable[[CallStateModel], None]
+    post_call_callback: Callable[[CallStateModel], None]
     style: MessageStyleEnum = MessageStyleEnum.NONE
-    user_callback: Callable[[str, MessageStyleEnum], Awaitable]
+    tts_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
     def __init__(
         self,
         call: CallStateModel,
         client: CallAutomationClient,
-        post_call_intelligence: Callable[[CallStateModel], None],
-        user_callback: Callable[[str, MessageStyleEnum], Awaitable],
+        post_call_callback: Callable[[CallStateModel], None],
+        tts_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
         self.call = call
         self.client = client
-        self.post_call_intelligence = post_call_intelligence
-        self.user_callback = user_callback
+        self.post_call_callback = post_call_callback
+        self.tts_callback = tts_callback
 
     async def end_call(self) -> str:
         """
@@ -68,7 +68,7 @@ class LlmPlugins:
             client=self.client,
             context=CallContextEnum.GOODBYE,
             text=await CONFIG.prompts.tts.goodbye(self.call),
-            trigger_timeout=False,  # Shouldn't trigger anything, as call is ending
+            timeout_error=False,  # Shouldn't trigger anything, as call is ending
         )
         return "Call ended"
 
@@ -90,9 +90,9 @@ class LlmPlugins:
         - Approval from the customer must be explicitely given (e.g. 'I want to create a new claim')
         - This should be used only when the subject is totally different
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # Launch post-call intelligence for the current call
-        self.post_call_intelligence(self.call)
+        self.post_call_callback(self.call)
         # Store the last message and use it at first message of the new claim
         last_message = self.call.messages[-1]
         call = CallStateModel(
@@ -145,7 +145,7 @@ class LlmPlugins:
         - If a reminder already exists, it will be updated with the new values
         - The due date should be in the future
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
 
         # Check if reminder already exists, if so update it
         for reminder in self.call.reminders:
@@ -215,7 +215,7 @@ class LlmPlugins:
         - For values, it is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now)
         - It is best to update multiple fields at once
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # Update all claim fields
         res = "# Updated fields"
         for field in updates:
@@ -254,8 +254,8 @@ class LlmPlugins:
             call=self.call,
             client=self.client,
             context=CallContextEnum.CONNECT_AGENT,
-            trigger_timeout=False,  # Shouldn't trigger anything, as conversation with Assistant is ending
             text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
+            timeout_error=False,  # Shouldn't trigger anything, as conversation with Assistant is ending
         )
         return "Transferring to human agent"
 
@@ -280,7 +280,7 @@ class LlmPlugins:
         # Searchable topics
         contract, law, regulation, article, procedure, guide
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # Execute in parallel
         tasks = await asyncio.gather(
             *[
@@ -334,7 +334,7 @@ class LlmPlugins:
         - 'I am stuck in a car in fire'
         - 'My neighbor is having a heart attack'
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
         logger.info(
             f"Notifying {service}, location {location}, contact {contact}, reason {reason}."
@@ -360,7 +360,7 @@ class LlmPlugins:
         - Confirm a detail like a reference number, if there is a misunderstanding
         - Send a confirmation, if the customer wants to have a written proof
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         success = await _sms.asend(
             content=message,
             phone_number=self.call.initiate.phone_number,

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 from azure.communication.callautomation import (
     CallAutomationClient,
     DtmfTone,
@@ -28,10 +28,9 @@ from helpers.call_utils import (
     handle_recognize_text,
     handle_transfer,
 )
-from fastapi import BackgroundTasks
-import asyncio
-from models.next import NextModel
 from helpers.call_llm import llm_completion, llm_model, load_llm_chat
+from models.next import NextModel
+import asyncio
 
 
 _sms = CONFIG.sms.instance()
@@ -99,19 +98,23 @@ async def on_call_connected(
 
 @tracer.start_as_current_span("on_call_disconnected")
 async def on_call_disconnected(
-    background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
+    post_call_callback: Callable[[CallStateModel], None],
 ) -> None:
     logger.info("Call disconnected")
-    await _handle_hangup(background_tasks, client, call)
+    await _handle_hangup(
+        call=call,
+        client=client,
+        post_call_callback=post_call_callback,
+    )
 
 
 @tracer.start_as_current_span("on_speech_recognized")
 async def on_speech_recognized(
-    background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
+    post_call_callback: Callable[[CallStateModel], None],
     text: str,
 ) -> None:
     logger.info(f"Voice recognition: {text}")
@@ -120,13 +123,13 @@ async def on_speech_recognized(
         call
     )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
     await handle_clear_queue(
-        call=call, client=client
-    )  # When the user speak, the conversation should continue based on its last message
-    call = await load_llm_chat(
-        background_tasks=background_tasks,
         call=call,
         client=client,
-        post_call_intelligence=_post_call_intelligence,
+    )  # When the user speak, the conversation should continue based on its last message
+    call = await load_llm_chat(
+        call=call,
+        client=client,
+        post_call_callback=post_call_callback,
     )
 
 
@@ -143,10 +146,10 @@ async def on_speech_timeout_error(
     res_context = None
     if call.voice_recognition_retry < 10:
         call.voice_recognition_retry += 1
-        trigger_timeout = True  # Should re-trigger an error or the LLM
+        timeout_error = True  # Should re-trigger an error or the LLM
         text = await CONFIG.prompts.tts.timeout_silence(call)
     else:
-        trigger_timeout = False  # Shouldn't trigger anything, as call is ending
+        timeout_error = False  # Shouldn't trigger anything, as call is ending
         res_context = CallContextEnum.GOODBYE
         text = await CONFIG.prompts.tts.goodbye(call)
 
@@ -156,7 +159,7 @@ async def on_speech_timeout_error(
         context=res_context,
         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
         text=text,
-        trigger_timeout=trigger_timeout,
+        timeout_error=timeout_error,
     )
 
 
@@ -182,10 +185,10 @@ async def on_speech_unknown_error(
 
 @tracer.start_as_current_span("on_play_completed")
 async def on_play_completed(
-    background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: Optional[list[CallContextEnum]],
+    post_call_callback: Callable[[CallStateModel], None],
 ) -> None:
     logger.debug("Play completed")
 
@@ -197,7 +200,11 @@ async def on_play_completed(
         or CallContextEnum.GOODBYE in contexts
     ):  # Call ended
         logger.info("Ending call")
-        await _handle_hangup(background_tasks, client, call)
+        await _handle_hangup(
+            call=call,
+            client=client,
+            post_call_callback=post_call_callback,
+        )
 
     elif CallContextEnum.CONNECT_AGENT in contexts:  # Call transfer
         logger.info("Initiating transfer call initiated")
@@ -228,10 +235,10 @@ async def on_play_error(error_code: int) -> None:
 
 @tracer.start_as_current_span("on_ivr_recognized")
 async def on_ivr_recognized(
-    client: CallAutomationClient,
     call: CallStateModel,
+    client: CallAutomationClient,
     label: str,
-    background_tasks: BackgroundTasks,
+    post_call_callback: Callable[[CallStateModel], None],
 ) -> None:
     try:
         lang = next(
@@ -261,13 +268,12 @@ async def on_ivr_recognized(
             client=client,
             style=MessageStyleEnum.CHEERFUL,
             text=await CONFIG.prompts.tts.welcome_back(call),
-            trigger_timeout=False,  # Do not trigger timeout, as the chat will continue
+            timeout_error=False,  # Do not trigger timeout, as the chat will continue
         )
         call = await load_llm_chat(
-            background_tasks=background_tasks,
             call=call,
             client=client,
-            post_call_intelligence=_post_call_intelligence,
+            post_call_callback=post_call_callback,
         )
 
 
@@ -294,10 +300,10 @@ async def on_transfer_error(
 
 @tracer.start_as_current_span("on_sms_received")
 async def on_sms_received(
-    background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
     message: str,
+    post_call_callback: Callable[[CallStateModel], None],
 ) -> bool:
     logger.info(f"SMS received from {call.initiate.phone_number}: {message}")
     call.messages.append(
@@ -315,18 +321,17 @@ async def on_sms_received(
     else:
         logger.info("Call in progress, answering with voice")
         await load_llm_chat(
-            background_tasks=background_tasks,
             call=call,
             client=client,
-            post_call_intelligence=_post_call_intelligence,
+            post_call_callback=post_call_callback,
         )
     return True
 
 
 async def _handle_hangup(
-    background_tasks: BackgroundTasks,
-    client: CallAutomationClient,
     call: CallStateModel,
+    client: CallAutomationClient,
+    post_call_callback: Callable[[CallStateModel], None],
 ) -> None:
     await handle_hangup(client=client, call=call)
     call.messages.append(
@@ -336,11 +341,11 @@ async def _handle_hangup(
             action=MessageActionEnum.HANGUP,
         )
     )
-    _post_call_intelligence(call, background_tasks)
+    post_call_callback(call)
 
 
-def _post_call_intelligence(
-    call: CallStateModel, background_tasks: BackgroundTasks
+async def on_end_call(
+    call: CallStateModel,
 ) -> None:
     """
     Shortcut to run all post-call intelligence tasks in background.
@@ -355,12 +360,15 @@ def _post_call_intelligence(
             "Call ended before any interaction, skipping post-call intelligence"
         )
         return
-    background_tasks.add_task(_post_call_next, call)
-    background_tasks.add_task(_post_call_sms, call)
-    background_tasks.add_task(_post_call_synthesis, call)
+
+    await asyncio.gather(
+        _intelligence_next(call),
+        _intelligence_sms(call),
+        _intelligence_synthesis(call),
+    )
 
 
-async def _post_call_sms(call: CallStateModel) -> None:
+async def _intelligence_sms(call: CallStateModel) -> None:
     """
     Send an SMS report to the customer.
     """
@@ -401,7 +409,7 @@ async def _post_call_sms(call: CallStateModel) -> None:
         await _db.call_aset(call)
 
 
-async def _post_call_synthesis(call: CallStateModel) -> None:
+async def _intelligence_synthesis(call: CallStateModel) -> None:
     """
     Synthesize the call and store it to the model.
     """
@@ -442,7 +450,7 @@ async def _post_call_synthesis(call: CallStateModel) -> None:
     await _db.call_aset(call)
 
 
-async def _post_call_next(call: CallStateModel) -> None:
+async def _intelligence_next(call: CallStateModel) -> None:
     """
     Generate next action for the call.
     """

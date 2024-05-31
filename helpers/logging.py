@@ -7,9 +7,11 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from os import environ
 
 
+APP_NAME = "call-center-ai"
+
 # Logger
 basicConfig(level=CONFIG.monitoring.logging.sys_level.value)
-logger = getLogger("call-center-ai")
+logger = getLogger(APP_NAME)
 logger.setLevel(CONFIG.monitoring.logging.app_level.value)
 
 # OpenTelemetry
@@ -21,5 +23,5 @@ AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
 HTTPXClientInstrumentor().instrument()  # Instrument httpx
 tracer = trace.get_tracer(
     instrumenting_library_version=CONFIG.version,
-    instrumenting_module_name="com.github.clemlesne.call-center-ai",
+    instrumenting_module_name=f"com.github.clemlesne.{APP_NAME}",
 )  # Create a tracer that will be used in the app

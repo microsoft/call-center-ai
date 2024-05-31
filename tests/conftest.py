@@ -1,13 +1,12 @@
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
-from fastapi import BackgroundTasks
 from helpers.config import CONFIG
 from helpers.logging import logger
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
 from models.call import CallStateModel, CallInitiateModel
 from textwrap import dedent
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Tuple, Union
 import hashlib
 import pytest
 import random
@@ -77,11 +76,6 @@ class CallConnectionClientMock(CallConnectionClient):
         **kwargs,
     ) -> None:
         logger.info("hang_up, ignoring")
-
-
-@pytest.fixture
-def background_tasks() -> BackgroundTasks:
-    return BackgroundTasks()
 
 
 @pytest.fixture

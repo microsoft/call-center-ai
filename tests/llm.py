@@ -7,7 +7,6 @@ from deepeval.metrics import (
 )
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
-from fastapi import BackgroundTasks
 from helpers.call_events import (
     on_speech_recognized,
     on_call_connected,
@@ -146,7 +145,6 @@ from tests.conftest import CallAutomationClientMock
 @pytest.mark.asyncio  # Allow async functions
 @pytest.mark.repeat(3)  # Catch non deterministic issues
 async def test_llm(
-    background_tasks: BackgroundTasks,
     call: CallStateModel,
     claim_tests_excl: list[str],
     claim_tests_incl: list[str],
@@ -182,17 +180,15 @@ async def test_llm(
         call=call,
         client=client,
     )
-    await background_tasks()
 
     # Simulate conversation with speech recognition
     for input in inputs:
         await on_speech_recognized(
-            background_tasks=background_tasks,
             call=call,
             client=client,
+            post_call_callback=lambda _call: None,  # Disable post call
             text=input,
         )
-        await background_tasks()
 
     # Remove newlines for log comparison
     actual_output = _remove_newlines(actual_output)

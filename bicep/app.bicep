@@ -24,6 +24,7 @@ var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 var adaModelFullName = toLower('${adaModel}-${adaVersion}')
 var cosmosContainerName = 'calls-v3'  // Third schema version
 var localConfig = loadYamlContent('../config.yaml')
+var phonenumberSanitized = replace(localConfig.communication_services.phone_number, '+', '')
 var config = {
   public_domain: appUrl
   monitoring: {
@@ -53,9 +54,11 @@ var config = {
   }
   communication_services: {
     access_key: communicationServices.listKeys().primaryKey
+    call_queue_name: callQueue.name
     endpoint: communicationServices.properties.hostName
     phone_number: localConfig.communication_services.phone_number
-    queue_name: communicationServicesQueue.name
+    post_queue_name: postQueue.name
+    sms_queue_name: smsQueue.name
   }
   sms: localConfig.sms
   cognitive_service: {
@@ -208,11 +211,11 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         alwaysReady: [
           {
             instanceCount: 1
-            name: 'function:eventgrid_event_post'
+            name: 'function:communicationservices_event_post'
           }
           {
             instanceCount: 1
-            name: 'function:http_app_func'
+            name: 'function:call_event'
           }
         ]
       }
@@ -287,9 +290,19 @@ resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-01-0
   name: 'default'
 }
 
-resource communicationServicesQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+resource callQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
   parent: queueService
-  name: 'communication-services-${replace(localConfig.communication_services.phone_number, '+', '')}'
+  name: 'call-${phonenumberSanitized}'
+}
+
+resource smsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'sms-${phonenumberSanitized}'
+}
+
+resource postQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'post-${phonenumberSanitized}'
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
@@ -356,7 +369,7 @@ resource assignmentEventgridTopicQueueSender 'Microsoft.Authorization/roleAssign
 
 resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2024-06-01-preview' = {
   parent: eventgridTopic
-  name: '${prefix}-${replace(localConfig.communication_services.phone_number, '+', '')}'
+  name: '${prefix}-${phonenumberSanitized}'
   properties: {
     eventDeliverySchema: 'EventGridSchema'
     deliveryWithResourceIdentity: {
@@ -367,7 +380,7 @@ resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscr
         endpointType: 'StorageQueue'
         properties: {
           queueMessageTimeToLiveInSeconds: 60  // Short lived messages, only new call events
-          queueName: communicationServicesQueue.name
+          queueName: callQueue.name
           resourceId: storageAccount.id
         }
       }
@@ -391,7 +404,7 @@ resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscr
 
 resource eventgridSubscriptionSms 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2024-06-01-preview' = {
   parent: eventgridTopic
-  name: '${prefix}-${replace(localConfig.communication_services.phone_number, '+', '')}-sms'
+  name: '${prefix}-${phonenumberSanitized}-sms'
   properties: {
     eventDeliverySchema: 'EventGridSchema'
     deliveryWithResourceIdentity: {
@@ -402,7 +415,7 @@ resource eventgridSubscriptionSms 'Microsoft.EventGrid/systemTopics/eventSubscri
         endpointType: 'StorageQueue'
         properties: {
           queueMessageTimeToLiveInSeconds: -1  // Infinite persistence, SMS is async
-          queueName: communicationServicesQueue.name
+          queueName: smsQueue.name
           resourceId: storageAccount.id
         }
       }

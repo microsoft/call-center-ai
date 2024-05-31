@@ -68,7 +68,7 @@ async def _handle_recognize_media(
     contexts: Optional[list[ContextEnum]],
     end_silence: Optional[int],
     style: MessageStyleEnum,
-    text: str,
+    text: Optional[str],
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
@@ -82,11 +82,15 @@ async def _handle_recognize_media(
                 input_type=RecognizeInputType.SPEECH,
                 interrupt_prompt=True,
                 operation_context=json.dumps(contexts) if contexts else None,
-                play_prompt=_audio_from_text(
-                    call=call,
-                    style=style,
-                    text=text,
-                ),
+                play_prompt=(
+                    _audio_from_text(
+                        call=call,
+                        style=style,
+                        text=text,
+                    )
+                    if text
+                    else None
+                ),  # If no text is provided, only recognize
                 speech_language=call.lang.short_code,
                 target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
             )
@@ -127,35 +131,46 @@ async def handle_media(
 
 
 async def handle_recognize_text(
-    client: CallAutomationClient,
     call: CallStateModel,
-    text: str,
-    trigger_timeout: bool = True,
+    client: CallAutomationClient,
+    text: Optional[str],
     context: Optional[ContextEnum] = None,
-    style: MessageStyleEnum = MessageStyleEnum.NONE,
     store: bool = True,
+    style: MessageStyleEnum = MessageStyleEnum.NONE,
+    timeout_error: bool = True,
 ) -> None:
     """
     Play a text to a call participant and start recognizing the response.
 
     If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
+    timeout_value = 5  # Wait 5 seconds for the user to speak and end the recognition
     contexts = [context] if context else []
+
+    if not text:  # Only recognize
+        contexts.append(ContextEnum.LAST_CHUNK)
+        await _handle_recognize_media(
+            call=call,
+            client=client,
+            contexts=contexts,
+            end_silence=timeout_value,
+            style=style,
+            text=None,
+        )
+        return
+
     chunks = await _chunk_before_tts(
         call=call,
         store=store,
         style=style,
         text=text,
     )
-
     for i, chunk in enumerate(chunks):
         context = None
         end_silence = None
         if i == len(chunks) - 1:  # Last chunk
-            end_silence = (
-                5  # Wait 5 seconds for the user to speak and end the recognition
-            )
-            if trigger_timeout:
+            end_silence = timeout_value
+            if timeout_error:
                 contexts.append(ContextEnum.LAST_CHUNK)
         await _handle_recognize_media(
             call=call,

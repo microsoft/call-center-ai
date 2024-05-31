@@ -17,7 +17,6 @@ from helpers.call_utils import (
     handle_recognize_text,
     tts_sentence_split,
 )
-from fastapi import BackgroundTasks
 from helpers.llm_tools import LlmPlugins
 import asyncio
 from helpers.llm_worker import (
@@ -110,10 +109,9 @@ def _llm_completion_system(
 
 
 async def load_llm_chat(
-    background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
-    post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
+    post_call_callback: Callable[[CallStateModel], None],
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
     """
@@ -127,7 +125,7 @@ async def load_llm_chat(
 
     should_play_sound = True
 
-    async def _user_callback(text: str, style: MessageStyleEnum) -> None:
+    async def _tts_callback(text: str, style: MessageStyleEnum) -> None:
         """
         Send back the TTS to the user.
         """
@@ -145,7 +143,7 @@ async def load_llm_chat(
             client=client,
             style=style,
             text=text,
-            trigger_timeout=False,  # Voice will continue, don't trigger
+            timeout_error=False,  # Voice will continue, don't trigger
         )
 
         await _db.call_aset(
@@ -165,12 +163,11 @@ async def load_llm_chat(
     # Chat
     chat_task = asyncio.create_task(
         _execute_llm_chat(
-            background_tasks=background_tasks,
             call=call,
             client=client,
-            post_call_intelligence=post_call_intelligence,
+            post_call_callback=post_call_callback,
             use_tools=_iterations_remaining > 0,
-            user_callback=_user_callback,
+            tts_callback=_tts_callback,
         )
     )
 
@@ -252,9 +249,9 @@ async def load_llm_chat(
                     await handle_recognize_text(
                         call=call,
                         client=client,
-                        trigger_timeout=False,  # Voice will continue, don't trigger
                         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
                         text=await CONFIG.prompts.tts.timeout_loading(call),
+                        timeout_error=False,  # Voice will continue, don't trigger
                     )
 
                 elif (
@@ -278,7 +275,7 @@ async def load_llm_chat(
             logger.warning("Maximum retries reached, stopping chat")
             content = await CONFIG.prompts.tts.error(call)
             style = MessageStyleEnum.NONE
-            await _user_callback(content, style)
+            await _tts_callback(content, style)
             call.messages.append(
                 MessageModel(
                     content=content,
@@ -290,33 +287,37 @@ async def load_llm_chat(
         else:  # Retry chat after an error
             logger.info(f"Retrying chat, {_iterations_remaining - 1} remaining")
             return await load_llm_chat(
-                background_tasks=background_tasks,
                 call=call,
                 client=client,
-                post_call_intelligence=post_call_intelligence,
+                post_call_callback=post_call_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
-
-    elif continue_chat:  # Contiue chat
-        logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
-        return await load_llm_chat(
-            background_tasks=background_tasks,
-            call=call,
-            client=client,
-            post_call_intelligence=post_call_intelligence,
-            _iterations_remaining=_iterations_remaining - 1,
-        )
+    else:
+        if continue_chat:  # Contiue chat
+            logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
+            return await load_llm_chat(
+                call=call,
+                client=client,
+                post_call_callback=post_call_callback,
+                _iterations_remaining=_iterations_remaining - 1,
+            )
+        else:
+            await handle_recognize_text(
+                call=call,
+                client=client,
+                style=MessageStyleEnum.NONE,
+                text=None,
+            )  # Trigger an empty text to recognize and generate timeout error if user does not speak
 
     return call
 
 
 async def _execute_llm_chat(
-    background_tasks: BackgroundTasks,
     call: CallStateModel,
     client: CallAutomationClient,
-    post_call_intelligence: Callable[[CallStateModel, BackgroundTasks], None],
+    post_call_callback: Callable[[CallStateModel], None],
+    tts_callback: Callable[[str, MessageStyleEnum], Awaitable],
     use_tools: bool,
-    user_callback: Callable[[str, MessageStyleEnum], Awaitable],
 ) -> Tuple[bool, bool, CallStateModel]:
     """
     Perform the chat with the LLM model.
@@ -335,10 +336,10 @@ async def _execute_llm_chat(
     logger.debug("Running LLM chat")
     content_full = ""
 
-    async def _tools_callback(text: str, style: MessageStyleEnum) -> None:
+    async def _buffer_callback(text: str, style: MessageStyleEnum) -> None:
         nonlocal content_full
         content_full += f" {text}"
-        await user_callback(text, style)
+        await tts_callback(text, style)
 
     async def _content_callback(
         buffer: str, style: MessageStyleEnum
@@ -349,7 +350,7 @@ async def _execute_llm_chat(
         )
         new_style = local_style or style
         if local_content:
-            await user_callback(local_content, new_style)
+            await tts_callback(local_content, new_style)
         return new_style
 
     # Build RAG
@@ -376,10 +377,8 @@ async def _execute_llm_chat(
     plugins = LlmPlugins(
         call=call,
         client=client,
-        post_call_intelligence=lambda call: post_call_intelligence(
-            call, background_tasks
-        ),
-        user_callback=_tools_callback,
+        post_call_callback=post_call_callback,
+        tts_callback=_buffer_callback,
     )
 
     tools = []

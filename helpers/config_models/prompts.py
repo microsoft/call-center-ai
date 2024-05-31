@@ -1,6 +1,5 @@
 from azure.core.exceptions import HttpResponseError
 from datetime import datetime, UTC
-from fastapi.encoders import jsonable_encoder
 from functools import cached_property
 from logging import Logger
 from models.call import CallStateModel
@@ -365,7 +364,7 @@ class LlmModel(BaseModel):
             self.chat_system_tpl,
             actions=", ".join([action.value for action in MessageActionEnum]),
             bot_company=call.initiate.bot_company,
-            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            claim=json.dumps(call.claim),
             default_lang=call.lang.human_name,
             reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders, exclude_none=True)
@@ -380,7 +379,7 @@ class LlmModel(BaseModel):
             self.sms_summary_system_tpl,
             bot_company=call.initiate.bot_company,
             bot_name=call.initiate.bot_name,
-            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            claim=json.dumps(call.claim),
             default_lang=call.lang.human_name,
             messages=TypeAdapter(list[MessageModel])
             .dump_json(call.messages, exclude_none=True)
@@ -394,7 +393,7 @@ class LlmModel(BaseModel):
     def synthesis_short_system(self, call: CallStateModel) -> str:
         return self._return(
             self.synthesis_short_system_tpl,
-            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            claim=json.dumps(call.claim),
             messages=TypeAdapter(list[MessageModel])
             .dump_json(call.messages, exclude_none=True)
             .decode(),
@@ -407,7 +406,7 @@ class LlmModel(BaseModel):
     def synthesis_long_system(self, call: CallStateModel) -> str:
         return self._return(
             self.synthesis_long_system_tpl,
-            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            claim=json.dumps(call.claim),
             messages=TypeAdapter(list[MessageModel])
             .dump_json(call.messages, exclude_none=True)
             .decode(),
@@ -430,7 +429,7 @@ class LlmModel(BaseModel):
 
         return self._return(
             self.citations_system_tpl,
-            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            claim=json.dumps(call.claim),
             reminders=TypeAdapter(list[ReminderModel])
             .dump_json(call.reminders, exclude_none=True)
             .decode(),
@@ -441,7 +440,7 @@ class LlmModel(BaseModel):
         return self._return(
             self.next_system_tpl,
             actions=", ".join([action.value for action in NextActionEnum]),
-            claim=json.dumps(jsonable_encoder(call.claim, exclude_none=True)),
+            claim=json.dumps(call.claim),
             messages=TypeAdapter(list[MessageModel])
             .dump_json(call.messages, exclude_none=True)
             .decode(),
