@@ -186,8 +186,9 @@ async def test_llm(
         await on_speech_recognized(
             call=call,
             client=client,
-            post_call_callback=lambda _call: None,  # Disable post call
+            post_callback=lambda _call: None,  # Disable post call
             text=input,
+            trainings_callback=lambda _call: None,  # Disable training
         )
 
     # Remove newlines for log comparison

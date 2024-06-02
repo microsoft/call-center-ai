@@ -59,6 +59,7 @@ var config = {
     phone_number: localConfig.communication_services.phone_number
     post_queue_name: postQueue.name
     sms_queue_name: smsQueue.name
+    trainings_queue_name: trainingsQueue.name
   }
   sms: localConfig.sms
   cognitive_service: {
@@ -216,6 +217,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
             instanceCount: 1
             name: 'function:call_event'
           }
+          {
+            instanceCount: 1
+            name: 'function:trainings_event'
+          }
         ]
       }
       runtime: {
@@ -302,6 +307,11 @@ resource smsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-0
 resource postQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
   parent: queueService
   name: 'post-${phonenumberSanitized}'
+}
+
+resource trainingsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'trainings-${phonenumberSanitized}'
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {

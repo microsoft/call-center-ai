@@ -111,7 +111,8 @@ def _llm_completion_system(
 async def load_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
+    trainings_callback: Callable[[CallStateModel], None],
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
     """
@@ -138,17 +139,18 @@ async def load_llm_chat(
             return
 
         should_play_sound = False
-        await handle_recognize_text(
-            call=call,
-            client=client,
-            style=style,
-            text=text,
-            timeout_error=False,  # Voice will continue, don't trigger
+        await asyncio.gather(
+            handle_recognize_text(
+                call=call,
+                client=client,
+                style=style,
+                text=text,
+                timeout_error=False,  # Voice will continue, don't trigger
+            ),  # First, recognize the next voice
+            _db.call_aset(
+                call
+            ),  # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
         )
-
-        await _db.call_aset(
-            call
-        )  # Save ASAP in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
 
     # Pointer
     def _pointer_task() -> asyncio.Task:
@@ -165,7 +167,7 @@ async def load_llm_chat(
         _execute_llm_chat(
             call=call,
             client=client,
-            post_call_callback=post_call_callback,
+            post_callback=post_callback,
             use_tools=_iterations_remaining > 0,
             tts_callback=_tts_callback,
         )
@@ -225,6 +227,7 @@ async def load_llm_chat(
                 is_error, continue_chat, call = (
                     chat_task.result()
                 )  # Store updated chat model
+                trainings_callback(call)  # Trigger trainings generation
                 await _db.call_aset(
                     call
                 )  # Save ASAP in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
@@ -289,7 +292,8 @@ async def load_llm_chat(
             return await load_llm_chat(
                 call=call,
                 client=client,
-                post_call_callback=post_call_callback,
+                post_callback=post_callback,
+                trainings_callback=trainings_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
     else:
@@ -298,7 +302,8 @@ async def load_llm_chat(
             return await load_llm_chat(
                 call=call,
                 client=client,
-                post_call_callback=post_call_callback,
+                post_callback=post_callback,
+                trainings_callback=trainings_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
         else:
@@ -315,7 +320,7 @@ async def load_llm_chat(
 async def _execute_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable],
     use_tools: bool,
 ) -> Tuple[bool, bool, CallStateModel]:
@@ -377,7 +382,7 @@ async def _execute_llm_chat(
     plugins = LlmPlugins(
         call=call,
         client=client,
-        post_call_callback=post_call_callback,
+        post_callback=post_callback,
         tts_callback=_buffer_callback,
     )
 

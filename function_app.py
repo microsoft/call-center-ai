@@ -306,13 +306,19 @@ async def call_event(
     queue_name=CONFIG.communication_services.sms_queue_name,
 )
 @app.queue_output(
+    arg_name="trainings",
+    connection="Storage",
+    queue_name=CONFIG.communication_services.trainings_queue_name,
+)
+@app.queue_output(
     arg_name="post",
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
 )
 async def sms_event(
-    sms: func.QueueMessage,
     post: func.Out[str],
+    sms: func.QueueMessage,
+    trainings: func.Out[str],
 ) -> None:
     event = EventGridEvent.from_json(sms.get_body())
     event_type = event.event_type
@@ -332,8 +338,9 @@ async def sms_event(
         call=call,
         client=_automation_client,
         message=message,
-        post_call_callback=lambda _call: _trigger_post_call_event(
-            call=_call, post=post
+        post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
+        trainings_callback=lambda _call: _trigger_trainings_event(
+            call=_call, trainings=trainings
         ),
     )
 
@@ -344,6 +351,11 @@ async def sms_event(
     trigger_arg_name="req",
 )
 @app.queue_output(
+    arg_name="trainings",
+    connection="Storage",
+    queue_name=CONFIG.communication_services.trainings_queue_name,
+)
+@app.queue_output(
     arg_name="post",
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
@@ -351,6 +363,7 @@ async def sms_event(
 async def communicationservices_event_post(
     post: func.Out[str],
     req: func.HttpRequest,
+    trainings: func.Out[str],
 ) -> func.HttpResponse:
     try:
         call_id = UUID(req.route_params["call_id"])
@@ -364,6 +377,7 @@ async def communicationservices_event_post(
                 event_dict=event_dict,
                 post=post,
                 secret=secret,
+                trainings=trainings,
             )
             for event_dict in req.get_json()
         ]
@@ -376,6 +390,7 @@ async def _communicationservices_event_worker(
     event_dict: dict,
     post: func.Out[str],
     secret: str,
+    trainings: func.Out[str],
 ) -> None:
     call = await _db.call_aget(call_id)
     if not call:
@@ -414,9 +429,7 @@ async def _communicationservices_event_worker(
         await on_call_disconnected(
             call=call,
             client=_automation_client,
-            post_call_callback=lambda _call: _trigger_post_call_event(
-                call=_call, post=post
-            ),
+            post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
         )
 
     elif (
@@ -431,8 +444,11 @@ async def _communicationservices_event_worker(
                     call=call,
                     client=_automation_client,
                     text=speech_text,
-                    post_call_callback=lambda _call: _trigger_post_call_event(
+                    post_callback=lambda _call: _trigger_post_event(
                         call=_call, post=post
+                    ),
+                    trainings_callback=lambda _call: _trigger_trainings_event(
+                        call=_call, trainings=trainings
                     ),
                 )
 
@@ -442,8 +458,9 @@ async def _communicationservices_event_worker(
                 call=call,
                 client=_automation_client,
                 label=label_detected,
-                post_call_callback=lambda _call: _trigger_post_call_event(
-                    call=_call, post=post
+                post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
+                trainings_callback=lambda _call: _trigger_trainings_event(
+                    call=_call, trainings=trainings
                 ),
             )
 
@@ -475,9 +492,7 @@ async def _communicationservices_event_worker(
             call=call,
             client=_automation_client,
             contexts=operation_contexts,
-            post_call_callback=lambda _call: _trigger_post_call_event(
-                call=_call, post=post
-            ),
+            post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
         )
 
     elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
@@ -507,6 +522,19 @@ async def _communicationservices_event_worker(
 
 
 @app.queue_trigger(
+    arg_name="trainings",
+    connection="Storage",
+    queue_name=CONFIG.communication_services.trainings_queue_name,
+)
+async def trainings_event(
+    trainings: func.QueueMessage,
+) -> None:
+    call = CallStateModel.model_validate_json(trainings.get_body())
+    logger.debug(f"Trainings event received for call {call}")
+    await call.trainings()  # Get trainings by advance to populate cache
+
+
+@app.queue_trigger(
     arg_name="post",
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
@@ -519,7 +547,17 @@ async def post_event(
     await on_end_call(call)
 
 
-def _trigger_post_call_event(
+def _trigger_trainings_event(
+    call: CallStateModel,
+    trainings: func.Out[str],
+) -> None:
+    """
+    Shortcut to add trainings to the queue.
+    """
+    trainings.set(call.model_dump_json(indent=None))
+
+
+def _trigger_post_event(
     call: CallStateModel,
     post: func.Out[str],
 ) -> None:
@@ -563,6 +601,11 @@ async def _communicationservices_event_url(
     trigger_arg_name="req",
 )
 @app.queue_output(
+    arg_name="trainings",
+    connection="Storage",
+    queue_name=CONFIG.communication_services.trainings_queue_name,
+)
+@app.queue_output(
     arg_name="post",
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
@@ -570,6 +613,7 @@ async def _communicationservices_event_url(
 async def twilio_sms_post(
     post: func.Out[str],
     req: func.HttpRequest,
+    trainings: func.Out[str],
 ) -> func.HttpResponse:
     """
     Handle incoming SMS event from Twilio.
@@ -589,8 +633,9 @@ async def twilio_sms_post(
             call=call,
             message=message,
             client=_automation_client,
-            post_call_callback=lambda _call: _trigger_post_call_event(
-                call=_call, post=post
+            post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
+            trainings_callback=lambda _call: _trigger_trainings_event(
+                call=_call, trainings=trainings
             ),
         )
         if not event_status:

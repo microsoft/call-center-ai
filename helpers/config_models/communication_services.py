@@ -9,3 +9,4 @@ class CommunicationServicesModel(BaseModel):
     phone_number: PhoneNumber
     post_queue_name: str
     sms_queue_name: str
+    trainings_queue_name: str

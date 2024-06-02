@@ -100,13 +100,13 @@ async def on_call_connected(
 async def on_call_disconnected(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
 ) -> None:
     logger.info("Call disconnected")
     await _handle_hangup(
         call=call,
         client=client,
-        post_call_callback=post_call_callback,
+        post_callback=post_callback,
     )
 
 
@@ -114,23 +114,27 @@ async def on_call_disconnected(
 async def on_speech_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
     text: str,
+    trainings_callback: Callable[[CallStateModel], None],
 ) -> None:
     logger.info(f"Voice recognition: {text}")
     call.messages.append(MessageModel(content=text, persona=MessagePersonaEnum.HUMAN))
-    await _db.call_aset(
-        call
-    )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
-    await handle_clear_queue(
-        call=call,
-        client=client,
-    )  # When the user speak, the conversation should continue based on its last message
-    call = await load_llm_chat(
-        call=call,
-        client=client,
-        post_call_callback=post_call_callback,
-    )
+    await asyncio.gather(
+        _db.call_aset(
+            call
+        ),  # First, save ASAP in DB allowing SMS answers to be more "in-sync"
+        handle_clear_queue(
+            call=call,
+            client=client,
+        ),  # Second, when the user speak, the conversation should continue based on its last message
+        load_llm_chat(
+            call=call,
+            client=client,
+            post_callback=post_callback,
+            trainings_callback=trainings_callback,
+        ),  # Third, the LLM should be loaded to continue the conversation
+    )  # All in parallel to lower the answer latency
 
 
 @tracer.start_as_current_span("on_speech_timeout_error")
@@ -188,7 +192,7 @@ async def on_play_completed(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: Optional[list[CallContextEnum]],
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
 ) -> None:
     logger.debug("Play completed")
 
@@ -203,7 +207,7 @@ async def on_play_completed(
         await _handle_hangup(
             call=call,
             client=client,
-            post_call_callback=post_call_callback,
+            post_callback=post_callback,
         )
 
     elif CallContextEnum.CONNECT_AGENT in contexts:  # Call transfer
@@ -238,7 +242,8 @@ async def on_ivr_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
     label: str,
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
+    trainings_callback: Callable[[CallStateModel], None],
 ) -> None:
     try:
         lang = next(
@@ -251,29 +256,34 @@ async def on_ivr_recognized(
 
     logger.info(f"Setting call language to {lang}")
     call.lang = lang.short_code
-    await _db.call_aset(
-        call
-    )  # Persist language change, if the user calls back before the first message, the language will be set
+    persist_coro = _db.call_aset(call)
 
     if len(call.messages) <= 1:  # First call, or only the call action
-        await handle_recognize_text(
-            call=call,
-            client=client,
-            text=await CONFIG.prompts.tts.hello(call),
-        )
+        await asyncio.gather(
+            persist_coro,  # First, persist language change for next messages
+            handle_recognize_text(
+                call=call,
+                client=client,
+                text=await CONFIG.prompts.tts.hello(call),
+            ),  # Second, greet the user
+        )  # All in parallel to lower the answer latency
 
     else:  # Returning call
-        await handle_recognize_text(
-            call=call,
-            client=client,
-            style=MessageStyleEnum.CHEERFUL,
-            text=await CONFIG.prompts.tts.welcome_back(call),
-            timeout_error=False,  # Do not trigger timeout, as the chat will continue
-        )
-        call = await load_llm_chat(
-            call=call,
-            client=client,
-            post_call_callback=post_call_callback,
+        await asyncio.gather(
+            persist_coro,  # First, persist language change for next messages
+            handle_recognize_text(
+                call=call,
+                client=client,
+                style=MessageStyleEnum.CHEERFUL,
+                text=await CONFIG.prompts.tts.welcome_back(call),
+                timeout_error=False,  # Do not trigger timeout, as the chat will continue
+            ),  # Second, welcome back the user
+            load_llm_chat(
+                call=call,
+                client=client,
+                post_callback=post_callback,
+                trainings_callback=trainings_callback,
+            ),  # Third, the LLM should be loaded to continue the conversation
         )
 
 
@@ -303,7 +313,8 @@ async def on_sms_received(
     call: CallStateModel,
     client: CallAutomationClient,
     message: str,
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
+    trainings_callback: Callable[[CallStateModel], None],
 ) -> bool:
     logger.info(f"SMS received from {call.initiate.phone_number}: {message}")
     call.messages.append(
@@ -323,7 +334,8 @@ async def on_sms_received(
         await load_llm_chat(
             call=call,
             client=client,
-            post_call_callback=post_call_callback,
+            post_callback=post_callback,
+            trainings_callback=trainings_callback,
         )
     return True
 
@@ -331,7 +343,7 @@ async def on_sms_received(
 async def _handle_hangup(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_call_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], None],
 ) -> None:
     await handle_hangup(client=client, call=call)
     call.messages.append(
@@ -341,7 +353,7 @@ async def _handle_hangup(
             action=MessageActionEnum.HANGUP,
         )
     )
-    post_call_callback(call)
+    post_callback(call)
 
 
 async def on_end_call(
