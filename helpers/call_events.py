@@ -266,6 +266,12 @@ async def on_ivr_recognized(
                 client=client,
                 text=await CONFIG.prompts.tts.hello(call),
             ),  # Second, greet the user
+            load_llm_chat(
+                call=call,
+                client=client,
+                post_callback=post_callback,
+                trainings_callback=trainings_callback,
+            ),  # Third, the LLM should be loaded to continue the conversation
         )  # All in parallel to lower the answer latency
 
     else:  # Returning call

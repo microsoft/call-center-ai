@@ -496,13 +496,7 @@ class TtsModel(BaseModel):
         "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
     )
     hello_tpl: str = """
-        Hello, I'm {bot_name}, the virtual assistant {bot_company}! I can't work and listen at the same time.
-
-        Here's how I work: while I'm processing your information, you might hear some light background music. As soon as you hear the beep, it's your turn to talk. Feel free to speak to me in a natural way - I'm designed to understand your requests.
-
-        During the conversation, you can also send me text messages. I'll get back to you by phone.
-
-        How can I help you today?
+        Hello, I'm {bot_name}, the virtual assistant {bot_company}! Here's how I work: while I'm processing your information, wou will hear a music. Feel free to speak to me in a natural way - I'm designed to understand your requests. During the conversation, you can also send me text messages.
 """
     timeout_silence_tpl: str = (
         "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
