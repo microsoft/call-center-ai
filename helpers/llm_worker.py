@@ -479,7 +479,7 @@ async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
     Catch errors for a maximum of 3 times (internal + `HttpResponseError`), then raise the error.
     """
     async with _use_contentsafety() as client:
-        return await client.analyze_text(
+        res = await client.analyze_text(
             AnalyzeTextOptions(
                 blocklist_names=CONFIG.content_safety.blocklists,
                 halt_on_blocklist_hit=False,
@@ -487,6 +487,7 @@ async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
                 text=text,
             )
         )
+    return res
 
 
 def _contentsafety_category_test(
