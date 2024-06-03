@@ -316,8 +316,7 @@ async def _completion_sync_worker(
     if not content:
         return None
     if not json_output:
-        await safety_check(content)
-    return content
+        return await safety_check(content)
 
 
 @retry(
@@ -406,23 +405,31 @@ def _limit_messages(
 
 
 @tracer.start_as_current_span("safety_check")
-async def safety_check(text: str) -> None:
+async def safety_check(text: str) -> str:
     """
     Raise `SafetyCheckError` if the text is safe, nothing otherwise.
 
     Text can be returned both safe and censored, before containing unsafe content.
     """
-    if not text:  # Empty text is safe
-        return
+    safe_value = "safe"
+
+    # Try cache
+    cache_key = f"{__name__}-safety_check-{text}"
+    cached = await _cache.aget(cache_key)
+    if cached:
+        decoded = cached.decode()
+        if decoded == safe_value:
+            return text  # Return safe text
+        raise SafetyCheckError(decoded)
 
     try:
         res = await _contentsafety_analysis(text)
     except ServiceRequestError as e:
         logger.error(f"Request error: {e}")
-        return  # Assume safe
+        return text  # Assume safe
     except HttpResponseError as e:
         logger.error(f"Response error: {e}")
-        return  # Assume safe
+        return text  # Assume safe
 
     # Replace blocklist items with censored text
     for match in res.blocklists_match or []:
@@ -461,9 +468,12 @@ async def safety_check(text: str) -> None:
     logger.debug(f'Text safety "{safety}" for text: {text}')
 
     if not safety:
-        raise SafetyCheckError(
-            f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}: {text}"
-        )
+        error_message = f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}: {text}"
+        await _cache.aset(cache_key, error_message)
+        raise SafetyCheckError(error_message)
+
+    await _cache.aset(cache_key, safe_value)
+    return text  # Return updated text
 
 
 @retry(

@@ -133,7 +133,7 @@ async def load_llm_chat(
         nonlocal should_play_sound
 
         try:
-            await safety_check(text)
+            text = await safety_check(text)
         except SafetyCheckError as e:
             logger.warning(f"Unsafe text detected, not playing: {e}")
             return
