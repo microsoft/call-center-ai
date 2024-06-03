@@ -125,7 +125,7 @@ async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code = HTTPStatus.SERVICE_UNAVAILABLE
             break
     return func.HttpResponse(
-        body=readiness.model_dump_json(indent=None),
+        body=readiness.model_dump_json(exclude_none=True),
         mimetype="application/json",
         status_code=status_code,
     )
@@ -246,7 +246,7 @@ async def call_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
-        body=call.model_dump_json(indent=None),
+        body=call.model_dump_json(exclude_none=True),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -276,7 +276,7 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         f"Created call with connection id: {call_connection_properties.call_connection_id}"
     )
     return func.HttpResponse(
-        body=CallGetModel.model_validate(call).model_dump_json(indent=None),
+        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
         mimetype="application/json",
         status_code=HTTPStatus.CREATED,
     )
@@ -578,7 +578,7 @@ def _trigger_trainings_event(
     """
     Shortcut to add trainings to the queue.
     """
-    trainings.set(call.model_dump_json(indent=None))
+    trainings.set(call.model_dump_json(exclude_none=True))
 
 
 def _trigger_post_event(
@@ -588,7 +588,7 @@ def _trigger_post_event(
     """
     Shortcut to add post-call intelligence to the queue.
     """
-    post.set(call.model_dump_json(indent=None))
+    post.set(call.model_dump_json(exclude_none=True))
 
 
 async def _communicationservices_event_url(

@@ -57,7 +57,7 @@ class SqliteStore(IStore):
 
     async def call_aset(self, call: CallStateModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
-        data = call.model_dump_json(indent=None, exclude_none=True)
+        data = call.model_dump_json(exclude_none=True)
         logger.debug(f"Saving call {call.call_id}: {data}")
         async with self._use_db() as db:
             await db.execute(
