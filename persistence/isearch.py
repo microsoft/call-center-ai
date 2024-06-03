@@ -19,7 +19,8 @@ class ISearch(ABC):
     @abstractmethod
     async def training_asearch_all(
         self,
-        text: str,
         lang: str,
+        text: str,
+        cache_only: bool = False,
     ) -> Optional[list[TrainingModel]]:
         pass

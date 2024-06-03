@@ -58,8 +58,9 @@ class AiSearchSearch(ISearch):
     )
     async def training_asearch_all(
         self,
-        text: str,
         lang: str,
+        text: str,
+        cache_only: bool = False,
     ) -> Optional[list[TrainingModel]]:
         logger.debug(f'Searching training data for "{text}"')
         if not text:
@@ -74,6 +75,9 @@ class AiSearchSearch(ISearch):
             except ValidationError:
                 logger.warning(f"Error parsing cached training: {cached}")
                 pass
+
+        if cache_only:
+            return None
 
         # Try live
         trainings: list[TrainingModel] = []

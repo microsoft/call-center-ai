@@ -105,7 +105,7 @@ class CallStateModel(CallGetModel):
     def lang(self, short_code: str) -> None:
         self.lang_short_code = short_code
 
-    async def trainings(self) -> list[TrainingModel]:
+    async def trainings(self, cache_only: bool = False) -> list[TrainingModel]:
         """
         Get the trainings from the last messages.
 
@@ -119,7 +119,9 @@ class CallStateModel(CallGetModel):
             tasks = await asyncio.gather(
                 *[
                     search.training_asearch_all(
-                        text=message.content, lang=self.lang.short_code
+                        cache_only=cache_only,
+                        lang=self.lang.short_code,
+                        text=message.content,
                     )
                     for message in self.messages[-CONFIG.ai_search.expansion_k :]
                 ],

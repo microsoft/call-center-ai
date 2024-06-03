@@ -359,7 +359,7 @@ async def _execute_llm_chat(
         return new_style
 
     # Build RAG
-    trainings = await call.trainings()
+    trainings = await call.trainings(cache_only=True)
     logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
     logger.debug(f"Trainings: {trainings}")
 
