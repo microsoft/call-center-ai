@@ -9,7 +9,7 @@
     "logLevel": {
       "default": "Warning",
       "Function": "Information",
-      "Host.Results": "Information"
+      "Host.Results": "Warning"
     }
   },
   "extensions": {

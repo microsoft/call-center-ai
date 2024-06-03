@@ -37,7 +37,9 @@ class RootModel(BaseSettings):
     content_safety: ContentSafetyModel
     database: DatabaseModel = DatabaseModel()  # Object is fully defined by default
     llm: LlmModel
-    monitoring: MonitoringModel
+    monitoring: MonitoringModel = (
+        MonitoringModel()
+    )  # Object is fully defined by default
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel
     sms: SmsModel = SmsModel()  # Object is fully defined by default

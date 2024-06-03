@@ -21,6 +21,7 @@ opentelemetry-instrumentation-httpx==0.45b0
 opentelemetry-instrumentation-openai==0.21.0
 opentelemetry-instrumentation-redis==0.45b0
 opentelemetry-instrumentation-sqlite3==0.45b0
+opentelemetry-semantic-conventions==0.45b0
 phonenumbers==8.13.37  # Required for pydantic-extra-types
 pydantic-extra-types==2.7.0  # Required for pydantic
 pydantic-settings==2.2.1

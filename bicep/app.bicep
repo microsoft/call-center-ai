@@ -27,11 +27,6 @@ var localConfig = loadYamlContent('../config.yaml')
 var phonenumberSanitized = replace(localConfig.communication_services.phone_number, '+', '')
 var config = {
   public_domain: appUrl
-  monitoring: {
-    application_insights: {
-      connection_string: applicationInsights.properties.ConnectionString
-    }
-  }
   database: {
     mode: 'cosmos_db'
     cosmos_db: {
@@ -174,16 +169,15 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'AzureWebJobsStorage__accountName'
           value: storageAccount.name
         }
-        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#appinsights_instrumentationkey
+        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#applicationinsights_connection_string
         {
-          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
-          value: applicationInsights.properties.InstrumentationKey
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: applicationInsights.properties.ConnectionString
         }
-        // Threadpool for async tasks
-        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#python_threadpool_thread_count
+        // See: https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration?tabs=python#enable-sampling
         {
-          name: 'PYTHON_THREADPOOL_THREAD_COUNT'
-          value: '4'
+          name: 'OTEL_TRACES_SAMPLER_ARG'
+          value: '0.5'
         }
         {
           name: 'CONFIG_JSON'

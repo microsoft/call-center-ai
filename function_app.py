@@ -1,5 +1,5 @@
 # First imports, to make sure the following logs are first
-from helpers.logging import logger, APP_NAME
+from helpers.logging import logger, APP_NAME, trace
 from helpers.config import CONFIG
 
 
@@ -46,6 +46,8 @@ from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatu
 from pydantic import TypeAdapter, ValidationError
 import azure.functions as func
 import json
+from os import getenv
+from opentelemetry.semconv.trace import SpanAttributes
 
 
 # Jinja configuration
@@ -153,7 +155,9 @@ async def report_get(req: func.HttpRequest) -> func.HttpResponse:
     )
     template = _jinja.get_template("list.html.jinja")
     render = await template.render_async(
-        application_insights_connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
+        applicationinsights_connection_string=getenv(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        ),
         calls=calls or [],
         count=count,
         phone_number=phone_number,
@@ -187,7 +191,9 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
         )
     template = _jinja.get_template("single.html.jinja")
     render = await template.render_async(
-        application_insights_connection_string=CONFIG.monitoring.application_insights.connection_string.get_secret_value(),
+        applicationinsights_connection_string=getenv(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        ),
         bot_company=call.initiate.bot_company,
         bot_name=call.initiate.bot_name,
         call=call,
@@ -257,6 +263,9 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         return _validation_error(e)
     url, call = await _communicationservices_event_url(initiate.phone_number, initiate)
+    trace.get_current_span().set_attribute(
+        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
+    )
     call_connection_properties = _automation_client.create_call(
         callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
@@ -291,7 +300,10 @@ async def call_event(
 
     call_context: str = event.data["incomingCallContext"]
     phone_number = PhoneNumber(event.data["from"]["phoneNumber"]["value"])
-    url, _ = await _communicationservices_event_url(phone_number)
+    url, _call = await _communicationservices_event_url(phone_number)
+    trace.get_current_span().set_attribute(
+        SpanAttributes.ENDUSER_ID, _call.initiate.phone_number
+    )
     await on_new_call(
         callback_url=url,
         client=_automation_client,
@@ -334,6 +346,9 @@ async def sms_event(
     if not call:
         logger.warning(f"Call for phone number {phone_number} not found")
         return
+    trace.get_current_span().set_attribute(
+        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
+    )
     await on_sms_received(
         call=call,
         client=_automation_client,
@@ -400,6 +415,9 @@ async def _communicationservices_event_worker(
         logger.warning(f"Secret for call {call_id} does not match")
         return
 
+    trace.get_current_span().set_attribute(
+        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
+    )
     event = CloudEvent.from_dict(event_dict)
     assert isinstance(event.data, dict)
 
@@ -531,6 +549,9 @@ async def trainings_event(
 ) -> None:
     call = CallStateModel.model_validate_json(trainings.get_body())
     logger.debug(f"Trainings event received for call {call}")
+    trace.get_current_span().set_attribute(
+        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
+    )
     await call.trainings()  # Get trainings by advance to populate cache
 
 
@@ -544,6 +565,9 @@ async def post_event(
 ) -> None:
     call = CallStateModel.model_validate_json(post.get_body())
     logger.debug(f"Post event received for call {call}")
+    trace.get_current_span().set_attribute(
+        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
+    )
     await on_end_call(call)
 
 
@@ -629,6 +653,9 @@ async def twilio_sms_post(
     if not call:
         logger.warning(f"Call for phone number {phone_number} not found")
     else:
+        trace.get_current_span().set_attribute(
+            SpanAttributes.ENDUSER_ID, call.initiate.phone_number
+        )
         event_status = await on_sms_received(
             call=call,
             message=message,

@@ -297,10 +297,6 @@ Place a file called `config.yaml` in the root of the project with the following 
 
 ```yaml
 # config.yaml
-monitoring:
-  application_insights:
-    connection_string: xxx
-
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
