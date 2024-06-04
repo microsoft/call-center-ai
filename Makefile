@@ -64,12 +64,12 @@ test:
 		.
 
 	@echo "➡️ Running Pytest..."
-	pytest \
+	PUBLIC_DOMAIN=dummy pytest \
 		--alluredir test-reports \
 		--maxprocesses 4 \
 		-n logical \
 		-ra \
-		tests/*
+		tests/*.py
 
 test-serve:
 	allure serve test-reports

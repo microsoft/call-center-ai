@@ -19,6 +19,9 @@ from azure.communication.callautomation import (
     SsmlSource,
     TextSource,
 )
+from _pytest.mark.structures import MarkDecorator
+from pydantic import BaseModel, ValidationError
+import yaml
 
 
 class CallAutomationClientMock(CallAutomationClient):
@@ -46,7 +49,7 @@ class CallConnectionClientMock(CallConnectionClient):
         *args,
         **kwargs,
     ) -> None:
-        logger.info("start_recognizing_media, ignoring")
+        pass
 
     def play_media(
         self,
@@ -57,48 +60,31 @@ class CallConnectionClientMock(CallConnectionClient):
         if isinstance(play_source, TextSource):
             self._play_media_callback(play_source.text.strip())
         elif isinstance(play_source, SsmlSource):
+            # deepcode ignore InsecureXmlParser/test: SSML is internally generated
             for text in ET.fromstring(play_source.ssml_text).itertext():
                 if text.strip():
                     self._play_media_callback(text.strip())
-        else:
-            logger.warning("play_media, ignoring")
 
     def transfer_call_to_participant(
         self,
         *args,
         **kwargs,
     ) -> None:
-        logger.info("transfer_call_to_participant, ignoring")
+        pass
 
     def hang_up(
         self,
         *args,
         **kwargs,
     ) -> None:
-        logger.info("hang_up, ignoring")
+        pass
 
-
-@pytest.fixture
-def random_text() -> str:
-    text = "".join(random.choice(string.printable) for _ in range(100))
-    return text
-
-
-@pytest.fixture
-def call() -> CallStateModel:
-    call = CallStateModel(
-        initiate=CallInitiateModel(
-            **CONFIG.workflow.initiate.model_dump(),
-            phone_number="+33612345678",  # type: ignore
-        ),
-        voice_id="dummy",
-    )
-    return call
-
-
-@pytest.fixture
-def deepeval_model(cache: pytest.Cache) -> GPTModel:
-    return DeepEvalAzureOpenAI(cache)
+    def cancel_all_media_operations(
+        self,
+        *args,
+        **kwargs,
+    ) -> None:
+        pass
 
 
 class DeepEvalAzureOpenAI(GPTModel):
@@ -170,3 +156,59 @@ class DeepEvalAzureOpenAI(GPTModel):
         llm_string = self._model._get_llm_string(input=prompt)
         llm_hash = hashlib.sha256(llm_string.encode(), usedforsecurity=False).digest()
         return f"call-center-ai/{llm_hash}"
+
+
+class Conversation(BaseModel):
+    claim_tests_excl: list[str] = []
+    claim_tests_incl: list[str] = []
+    expected_output: str
+    id: str
+    inputs: list[str]
+    lang: str
+
+
+def with_conversations(fn=None) -> MarkDecorator:
+    with open("tests/conversations.yaml", encoding="utf-8") as f:
+        file: dict = yaml.safe_load(f)
+    conversations: list[Conversation] = []
+    for conv in file.get("conversations", []):
+        try:
+            conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            logger.error(f"Failed to parse conversation: {e.errors()}")
+    print(f"Loaded {len(conversations)} conversations")
+    keys = sorted(Conversation.model_fields.keys() - {"id"})
+    values = [
+        pytest.param(
+            *[conversation.model_dump()[key] for key in keys],
+            id=conversation.id,
+        )
+        for conversation in conversations
+    ]
+    decorator = pytest.mark.parametrize(keys, values)
+    if fn:
+        return decorator(fn)
+    return decorator
+
+
+@pytest.fixture
+def random_text() -> str:
+    text = "".join(random.choice(string.printable) for _ in range(100))
+    return text
+
+
+@pytest.fixture
+def call() -> CallStateModel:
+    call = CallStateModel(
+        initiate=CallInitiateModel(
+            **CONFIG.workflow.initiate.model_dump(),
+            phone_number="+33612345678",  # type: ignore
+        ),
+        voice_id="dummy",
+    )
+    return call
+
+
+@pytest.fixture
+def deepeval_model(cache: pytest.Cache) -> GPTModel:
+    return DeepEvalAzureOpenAI(cache)
