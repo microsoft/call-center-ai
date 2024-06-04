@@ -270,6 +270,7 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
+        # deepcode ignore AttributeLoadOnNone: Phone number is validated with Pydantic
         target_participant=PhoneNumberIdentifier(initiate.phone_number),  # type: ignore
     )
     logger.info(
