@@ -16,12 +16,11 @@ jinja2==3.1.4
 json-repair==0.20.1
 mistune==3.0.2
 openai==1.30.3
-opentelemetry-instrumentation-aiohttp-client==0.45b0
-opentelemetry-instrumentation-httpx==0.45b0
-opentelemetry-instrumentation-openai==0.21.0
-opentelemetry-instrumentation-redis==0.45b0
-opentelemetry-instrumentation-sqlite3==0.45b0
-opentelemetry-semantic-conventions==0.45b0
+opentelemetry-instrumentation-aiohttp-client==0.46b0
+opentelemetry-instrumentation-openai==0.21.4
+opentelemetry-instrumentation-redis==0.46b0
+opentelemetry-instrumentation-sqlite3==0.46b0
+opentelemetry-semantic-conventions==0.46b0
 phonenumbers==8.13.37  # Required for pydantic-extra-types
 pydantic-extra-types==2.7.0  # Required for pydantic
 pydantic-settings==2.2.1
@@ -30,7 +29,7 @@ python-dotenv==1.0.1
 pytz==2024.1
 pyyaml==6.0.1
 redis==5.0.4
-tenacity==8.3.0
+tenacity==8.2.3
 tiktoken==0.7.0
 twilio==9.1.0
 typing-extensions==4.12.0
