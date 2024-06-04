@@ -123,12 +123,19 @@ class CallStateModel(CallGetModel):
                         lang=self.lang.short_code,
                         text=message.content,
                     )
-                    for message in self.messages[-CONFIG.ai_search.expansion_k :]
+                    for message in self.messages[
+                        -CONFIG.ai_search.expansion_n_messages :
+                    ]
                 ],
             )  # Get trainings from last messages
             trainings = sorted(
-                set(training for trainings in tasks for training in trainings or [])
-            )  # Flatten, remove duplicates, and sort by score
+                set(
+                    training
+                    for trainings in tasks
+                    for training in trainings or []
+                    if training.score >= CONFIG.ai_search.strictness
+                )
+            )  # Flatten, remove duplicates, sort by score, filter by strictness
             return trainings
 
     def tz(self) -> tzinfo:
