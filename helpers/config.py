@@ -33,7 +33,7 @@ else:
     if not path:
         raise ConfigNotFound(f'Cannot find config file "{_CONFIG_FILE}"')
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             CONFIG = RootModel.model_validate(yaml.safe_load(f))
     except ValidationError as e:
         raise ConfigBadFormat(f"Config values are not valid: {e.errors()}")

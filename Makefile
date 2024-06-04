@@ -60,7 +60,7 @@ test:
 	@echo "➡️ Running deptry..."
 	python3 -m deptry \
 		--ignore-notebooks \
-		--per-rule-ignores "DEP002=aiohttp|gunicorn|uvicorn" \
+		--per-rule-ignores "DEP002=aiohttp" \
 		.
 
 	@echo "➡️ Running Pytest..."
