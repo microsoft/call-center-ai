@@ -139,7 +139,7 @@ async def test_relevancy(
         )
 
     # Get trainings
-    trainings = await call.trainings()
+    trainings = await call.trainings(cache_only=False)
 
     logger.info(f"Messages: {call.messages}")
     logger.info(f"Trainings: {trainings}")

@@ -105,7 +105,7 @@ class CallStateModel(CallGetModel):
     def lang(self, short_code: str) -> None:
         self.lang_short_code = short_code
 
-    async def trainings(self, cache_only: bool = False) -> list[TrainingModel]:
+    async def trainings(self, cache_only: bool = True) -> list[TrainingModel]:
         """
         Get the trainings from the last messages.
 

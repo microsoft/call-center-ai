@@ -553,7 +553,7 @@ async def trainings_event(
     trace.get_current_span().set_attribute(
         SpanAttributes.ENDUSER_ID, call.initiate.phone_number
     )
-    await call.trainings()  # Get trainings by advance to populate cache
+    await call.trainings(cache_only=False)  # Get trainings by advance to populate cache
 
 
 @app.queue_trigger(
