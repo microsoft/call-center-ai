@@ -17,6 +17,7 @@ json-repair==0.20.1
 mistune==3.0.2
 openai==1.30.3
 opentelemetry-instrumentation-aiohttp-client==0.46b0
+opentelemetry-instrumentation-httpx==0.46b0
 opentelemetry-instrumentation-openai==0.21.4
 opentelemetry-instrumentation-redis==0.46b0
 opentelemetry-instrumentation-sqlite3==0.46b0

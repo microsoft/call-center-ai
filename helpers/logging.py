@@ -3,6 +3,7 @@ from helpers.config import CONFIG
 from logging import getLogger, basicConfig
 from opentelemetry import trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from os import getenv
 
 
@@ -18,6 +19,7 @@ configure_azure_monitor(
     connection_string=getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
 )  # Configure Azure Application Insights exporter
 AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
+HTTPXClientInstrumentor().instrument()  # Instrument httpx
 tracer = trace.get_tracer(
     instrumenting_library_version=CONFIG.version,
     instrumenting_module_name=f"com.github.clemlesne.{APP_NAME}",
