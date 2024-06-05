@@ -77,7 +77,7 @@ async def on_call_connected(
     client: CallAutomationClient,
 ) -> None:
     logger.info("Call connected, asking for language")
-    call.voice_recognition_retry = 0  # Reset recognition retry counter
+    call.recognition_retry = 0  # Reset recognition retry counter
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.CALL,
@@ -119,6 +119,7 @@ async def on_speech_recognized(
 ) -> None:
     logger.info(f"Voice recognition: {text}")
     call.messages.append(MessageModel(content=text, persona=MessagePersonaEnum.HUMAN))
+    call.recognition_retry = 0  # Reset recognition retry counter
     await asyncio.gather(
         handle_clear_queue(
             call=call,
@@ -145,10 +146,10 @@ async def on_recognize_timeout_error(
     if (
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
     ):  # Retry IVR recognition
-        if call.voice_recognition_retry < CONFIG.workflow.max_voice_recognition_retry:
-            call.voice_recognition_retry += 1
+        if call.recognition_retry < CONFIG.workflow.max_voice_recognition_retry:
+            call.recognition_retry += 1
             logger.info(
-                f"Timeout, retrying language selection ({call.voice_recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
+                f"Timeout, retrying language selection ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
             )
             await _handle_ivr_language(call=call, client=client)
         else:  # IVR retries are exhausted, end call
@@ -166,11 +167,11 @@ async def on_recognize_timeout_error(
         return
 
     if (
-        call.voice_recognition_retry < CONFIG.workflow.max_voice_recognition_retry
+        call.recognition_retry < CONFIG.workflow.max_voice_recognition_retry
     ):  # Retry voice recognition
-        call.voice_recognition_retry += 1
+        call.recognition_retry += 1
         logger.info(
-            f"Timeout, retrying voice recognition ({call.voice_recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
+            f"Timeout, retrying voice recognition ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
         )
         await handle_recognize_text(
             call=call,
@@ -280,6 +281,7 @@ async def on_ivr_recognized(
     post_callback: Callable[[CallStateModel], None],
     trainings_callback: Callable[[CallStateModel], None],
 ) -> None:
+    call.recognition_retry = 0  # Reset recognition retry counter
     try:
         lang = next(
             (x for x in call.initiate.lang.availables if x.short_code == label),

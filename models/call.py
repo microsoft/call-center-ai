@@ -78,10 +78,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
     )
     # Editable fields
     lang_short_code: Optional[str] = None
-    voice_recognition_retry: int = Field(
-        default=0,
-        serialization_alias="recognition_retry",  # Compatibility with v1
-    )
+    recognition_retry: int = 0
 
     @computed_field
     @property
