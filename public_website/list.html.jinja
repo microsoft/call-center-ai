@@ -7,6 +7,7 @@ History for {{ phone_number or 'all numbers' }}
 {% block content %}
 <!-- Call me button -->
 {% include "templates/call_me.html.jinja" %}
+
 <!-- Search bar for phone number -->
 <div class="p-4 -mb-4 col-span-full sticky top-0 lg:px-0 lg:grid lg:grid-cols-6">
   <div class="lg:col-start-2 lg:col-end-6">
@@ -19,12 +20,13 @@ History for {{ phone_number or 'all numbers' }}
     </form>
   </div>
 </div>
+
 <!-- History of calls -->
 <div class="col-span-full rounded-md overflow-hidden lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
   <div class="grid grid-cols-4 border-b border-neutral-200/60 dark:border-neutral-700/60 text-neutral-600 dark:text-neutral-400">
-    <div class="p-4 truncate">📞 Phone used</div>
-    <div class="p-4 truncate">📅 Local date</div>
-    <div class="p-4 truncate col-span-2">📝 Short summary</div>
+    <div class="p-4 truncate">📞&nbsp;&nbsp;Phone used</div>
+    <div class="p-4 truncate">📅&nbsp;&nbsp;Local date</div>
+    <div class="p-4 truncate col-span-2">📝&nbsp;&nbsp;Short summary</div>
   </div>
   {% for call in calls %}
   <a href="/report/{{ call.call_id }}" title="Call from {{ call.initiate.phone_number }} the {{ call.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M (%Z)') }}" class="grid grid-cols-4 hover:bg-neutral-100/60 dark:hover:bg-neutral-800/60 {% if not loop.last %}border-b border-neutral-200/60 dark:border-neutral-700/60{% endif %}">
@@ -34,6 +36,8 @@ History for {{ phone_number or 'all numbers' }}
   </a>
   {% endfor %}
 </div>
+
+<!-- Pagination -->
 <div class="col-span-full px-4 text-neutral-600 dark:text-neutral-400">
   {% if total < count %}
   All {{ total }} results are displayed.
