@@ -75,8 +75,10 @@ async def _handle_recognize_media(
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
+
+    If `context` is provided, it will be used to track the operation.
     """
-    logger.debug(f"Recognizing media")
+    logger.debug(f"Recognizing voice with text: {text}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -99,6 +101,39 @@ async def _handle_recognize_media(
             )
     except ResourceNotFoundError:
         logger.debug(f"Call hung up before recognizing")
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            logger.debug(f"Call hung up before playing")
+        else:
+            raise e
+
+
+async def _handle_play_text(
+    call: CallStateModel,
+    client: CallAutomationClient,
+    text: str,
+    context: Optional[ContextEnum] = None,
+    style: MessageStyleEnum = MessageStyleEnum.NONE,
+) -> None:
+    """
+    Play a text to a call participant.
+
+    If `context` is provided, it will be used to track the operation.
+    """
+    logger.debug(f"Playing text: {text}")
+    try:
+        assert call.voice_id, "Voice ID is required for playing text"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            await call_client.play_media(
+                operation_context=json.dumps([context]) if context else None,
+                play_source=_audio_from_text(
+                    call=call,
+                    style=style,
+                    text=text,
+                ),
+            )
+    except ResourceNotFoundError:
+        logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
             logger.debug(f"Call hung up before playing")
@@ -169,7 +204,6 @@ async def handle_recognize_text(
         text=text,
     )
     for i, chunk in enumerate(chunks):
-        context = None
         end_silence = None
         if i == len(chunks) - 1:  # Last chunk
             end_silence = timeout_value
@@ -180,6 +214,35 @@ async def handle_recognize_text(
             client=client,
             contexts=contexts,
             end_silence=end_silence,
+            style=style,
+            text=chunk,
+        )
+
+
+async def handle_play_text(
+    call: CallStateModel,
+    client: CallAutomationClient,
+    text: str,
+    context: Optional[ContextEnum] = None,
+    store: bool = True,
+    style: MessageStyleEnum = MessageStyleEnum.NONE,
+) -> None:
+    """
+    Play a text to a call participant.
+
+    If `store` is `True`, the text will be stored in the call messages.
+    """
+    chunks = await _chunk_before_tts(
+        call=call,
+        store=store,
+        style=style,
+        text=text,
+    )
+    for chunk in chunks:
+        await _handle_play_text(
+            call=call,
+            client=client,
+            context=context,
             style=style,
             text=chunk,
         )
