@@ -531,7 +531,7 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   name: gptModelFullName
   tags: tags
   sku: {
-    capacity: 20  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
+    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -551,7 +551,7 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
   name: gptBackupModelFullName
   tags: tags
   sku: {
-    capacity: 20  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
+    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -631,7 +631,7 @@ resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
   name: adaModelFullName
   tags: tags
   sku: {
-    capacity: 150
+    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
