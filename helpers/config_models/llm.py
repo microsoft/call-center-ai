@@ -1,7 +1,7 @@
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from enum import Enum
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from pydantic import field_validator, SecretStr, BaseModel, ValidationInfo
+from pydantic import field_validator, SecretStr, BaseModel, ValidationInfo, Field
 from typing import Any, Optional, Tuple, Union
 
 
@@ -102,11 +102,15 @@ class SelectedPlatformModel(BaseModel):
 
 
 class LlmModel(BaseModel):
-    backup: SelectedPlatformModel
-    primary: SelectedPlatformModel
+    fast: SelectedPlatformModel = Field(
+        serialization_alias="backup",  # Backwards compatibility with v6
+    )
+    slow: SelectedPlatformModel = Field(
+        serialization_alias="primary",  # Backwards compatibility with v6
+    )
 
     def selected(
-        self, is_backup: bool
+        self, is_fast: bool
     ) -> Union[AzureOpenaiPlatformModel, OpenaiPlatformModel]:
-        platform = self.backup if is_backup else self.primary
+        platform = self.fast if is_fast else self.slow
         return platform.selected()

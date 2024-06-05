@@ -23,6 +23,7 @@ from helpers.llm_worker import (
     completion_model_sync,
     completion_stream,
     completion_sync,
+    MaximumTokensReachedError,
     ModelType,
     safety_check,
     SafetyCheckError,
@@ -386,11 +387,12 @@ async def _execute_llm_chat(
         logger.debug(f"Tools: {tools}")
 
     # Execute LLM inference
+    maximum_tokens_reached = False
     content_buffer_pointer = 0
     tool_calls_buffer: dict[int, MessageToolModel] = {}
     try:
         async for delta in completion_stream(
-            max_tokens=350,
+            max_tokens=107,  # Lowest possible value for 90% of the cases, if not sufficient, retry will be triggered, 100 tokens ~= 75 words, 20 words ~= 1 sentence, 3 sentences ~= 107 tokens
             messages=call.messages,
             system=system,
             tools=tools,
@@ -409,9 +411,12 @@ async def _execute_llm_chat(
                 ):
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _content_callback(sentence, plugins.style)
+    except MaximumTokensReachedError:
+        logger.warning("Maximum tokens reached for this completion, retry asked")
+        maximum_tokens_reached = True
     except APIError as e:
         logger.warning(f"OpenAI API call error: {e}")
-        return True, True, call
+        return True, True, call  # Error, retry
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
@@ -435,12 +440,12 @@ async def _execute_llm_chat(
         tool_call.function_name == "multi_tool_use.parallel" for tool_call in tool_calls
     ):
         logger.warning(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
-        return True, True, call
+        return True, True, call  # Error, retry
 
     # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits
     if not content_full and not tool_calls:
         logger.warning("Empty content, retrying")
-        return True, True, call
+        return True, True, call  # Error, retry
 
     # Execute tools
     tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
@@ -462,8 +467,10 @@ async def _execute_llm_chat(
         )
         call.messages.append(message)
 
-    # Recusive call if needed
-    if tool_calls:
+    if tool_calls:  # Recusive call if needed
         return False, True, call
 
-    return False, False, call
+    if maximum_tokens_reached:  # Retry if maximum tokens reached
+        return False, True, call  # TODO: Should we notify an error?
+
+    return False, False, call  # No error, no retry

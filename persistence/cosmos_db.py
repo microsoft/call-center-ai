@@ -131,8 +131,16 @@ class CosmosDbStore(IStore):
 
         # Update cache
         if res:
-            cache_key = self._cache_key_call_id(call.call_id)
-            await self._cache.aset(cache_key, call.model_dump_json())
+            cache_key_id = self._cache_key_call_id(call.call_id)
+            await self._cache.aset(
+                cache_key_id, call.model_dump_json()
+            )  # Update for ID
+            cache_key_phone_number = self._cache_key_phone_number(
+                call.initiate.phone_number
+            )
+            await self._cache.adel(
+                cache_key_phone_number
+            )  # Invalidate for phone number because we don't know if it's the same call
 
         return res
 

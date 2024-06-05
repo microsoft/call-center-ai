@@ -26,7 +26,7 @@ class CosmosDbModel(BaseModel, frozen=True):
 
 class SqliteModel(BaseModel, frozen=True):
     path: str = ".local"
-    schema_version: int = Field(default=3)
+    schema_version: int = 3
     table: str = "calls"
 
     def full_path(self) -> str:

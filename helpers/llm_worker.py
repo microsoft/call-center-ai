@@ -59,7 +59,7 @@ environ["TRACELOOP_TRACE_CONTENT"] = str(
 OpenAIInstrumentor(enrich_token_usage=True).instrument()
 
 logger.info(
-    f"Using LLM models {CONFIG.llm.selected(False).model} (primary) and {CONFIG.llm.selected(True).model} (backup)"
+    f"Using LLM models {CONFIG.llm.selected(False).model} (slow) and {CONFIG.llm.selected(True).model} (fast)"
 )
 logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 
@@ -69,14 +69,11 @@ _contentsafety_client: Optional[ContentSafetyClient] = None
 
 
 class SafetyCheckError(Exception):
-    message: str
+    pass
 
-    def __init__(self, message: str) -> None:
-        self.message = message
-        super().__init__(message)
 
-    def __str__(self) -> str:
-        return self.message
+class MaximumTokensReachedError(Exception):
+    pass
 
 
 _retried_exceptions = [
@@ -98,47 +95,52 @@ async def completion_stream(
     """
     Returns a stream of completions.
 
-    Catch errors for a maximum of 3 times (internal + `RateLimitError`). If the error persists, try with the backup LLM. If it fails again, raise the error.
+    Completion is first made with the fast LLM, then the slow LLM if the previous fails. Catch errors for a maximum of 3 times (internal + `RateLimitError`). If it fails again, raise the error.
     """
-    # Try a first time with primary LLM
+    # Try a three time with fast LLM
     try:
-        async for chunck in _completion_stream_worker(
-            is_backup=False,
-            max_tokens=max_tokens,
-            messages=messages,
-            system=system,
-            tools=tools,
-        ):
-            yield chunck
-        return
+        retryed = AsyncRetrying(
+            reraise=True,
+            retry=retry_any(
+                *[
+                    retry_if_exception_type(exception)
+                    for exception in _retried_exceptions
+                ]
+            ),
+            stop=stop_after_attempt(
+                3
+            ),  # Usage is short-lived, so stop after 3 attempts
+            wait=wait_random_exponential(multiplier=0.5, max=30),
+        )
+        async for attempt in retryed:
+            with attempt:
+                async for chunck in _completion_stream_worker(
+                    is_fast=True,
+                    max_tokens=max_tokens,
+                    messages=messages,
+                    system=system,
+                    tools=tools,
+                ):
+                    yield chunck
+                return
     except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
-        logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
+        logger.warning(f"{e.__class__.__name__} error, trying with slow LLM")
 
-    # Try more times with backup LLM, if it fails again, raise the error
-    retryed = AsyncRetrying(
-        reraise=True,
-        retry=retry_any(
-            *[retry_if_exception_type(exception) for exception in _retried_exceptions]
-        ),
-        stop=stop_after_attempt(3),  # Usage is short-lived, so stop after 3 attempts
-        wait=wait_random_exponential(multiplier=0.5, max=30),
-    )
-    async for attempt in retryed:
-        with attempt:
-            async for chunck in _completion_stream_worker(
-                is_backup=True,
-                max_tokens=max_tokens,
-                messages=messages,
-                system=system,
-                tools=tools,
-            ):
-                yield chunck
+    # Try a last time with slow LLM, if it fails again, raise the error
+    async for chunck in _completion_stream_worker(
+        is_fast=False,
+        max_tokens=max_tokens,
+        messages=messages,
+        system=system,
+        tools=tools,
+    ):
+        yield chunck
 
 
 async def _completion_stream_worker(
-    is_backup: bool,
+    is_fast: bool,
     max_tokens: int,
     messages: list[MessageModel],
     system: list[ChatCompletionSystemMessageParam],
@@ -147,20 +149,7 @@ async def _completion_stream_worker(
     """
     Returns a stream of completions.
     """
-    # Try cache
-    cache_key = f"{__name__}-completion_stream-{_llm_key(is_backup)}-{system}-{tools}-{messages}-{max_tokens}"
-    cached = await _cache.aget(cache_key)
-    if cached:
-        try:
-            for chunck in TypeAdapter(list[ChoiceDelta]).validate_json(cached):
-                yield chunck
-            return
-        except ValidationError as e:
-            logger.debug(f"Parsing error: {e.errors()}")
-
-    # Try live
-    to_cache: list[ChoiceDelta] = []
-    client, platform = _use_llm(is_backup)
+    client, platform = _use_llm(is_fast)
     extra = {}
     if tools:
         extra["tools"] = tools  # Add tools if any
@@ -182,6 +171,7 @@ async def _completion_stream_worker(
         "temperature": 0,  # Most focused and deterministic
         **extra,
     }  # Shared kwargs for both streaming and non-streaming
+    maximum_tokens_reached = False
 
     if platform.streaming:  # Streaming
         stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
@@ -199,9 +189,9 @@ async def _completion_stream_worker(
                 )
             if choice.finish_reason == "length":
                 logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+                maximum_tokens_reached = True
             delta = choice.delta
             yield delta
-            to_cache.append(delta)
 
     else:  # Non-streaming, emulate streaming with a single completion
         completion: ChatCompletion = await client.chat.completions.create(**chat_kwargs)
@@ -212,6 +202,7 @@ async def _completion_stream_worker(
             )
         if choice.finish_reason == "length":
             logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+            maximum_tokens_reached = True
         message = choice.message
         delta = ChoiceDelta(
             content=message.content,
@@ -230,10 +221,9 @@ async def _completion_stream_worker(
             ],
         )
         yield delta
-        to_cache.append(delta)
 
-    # Update cache
-    await _cache.aset(cache_key, TypeAdapter(list[ChoiceDelta]).dump_json(to_cache))
+    if maximum_tokens_reached:
+        raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
 
 
 @tracer.start_as_current_span("completion_sync")
@@ -245,12 +235,12 @@ async def completion_sync(
     """
     Returns a completion.
 
-    Catch errors for a maximum of 10 times (internal + `RateLimitError`). If the error persists, try with the backup LLM. If it fails again, raise the error.
+    Catch errors for a maximum of 10 times (internal + `RateLimitError`). If the error persists, try with the fast LLM. If it fails again, raise the error.
     """
-    # Try a first time with primary LLM
+    # Try a first time with slow LLM
     try:
         return await _completion_sync_worker(
-            is_backup=False,
+            is_fast=False,
             max_tokens=max_tokens,
             system=system,
             json_output=json_output,
@@ -258,9 +248,9 @@ async def completion_sync(
     except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
-        logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
+        logger.warning(f"{e.__class__.__name__} error, trying with fast LLM")
 
-    # Try more times with backup LLM, if it fails again, raise the error
+    # Try more times with fast LLM, if it fails again, raise the error
     retryed = AsyncRetrying(
         reraise=True,
         retry=retry_any(
@@ -274,7 +264,7 @@ async def completion_sync(
     async for attempt in retryed:
         with attempt:
             return await _completion_sync_worker(
-                is_backup=True,
+                is_fast=True,
                 max_tokens=max_tokens,
                 system=system,
                 json_output=json_output,
@@ -282,7 +272,7 @@ async def completion_sync(
 
 
 async def _completion_sync_worker(
-    is_backup: bool,
+    is_fast: bool,
     max_tokens: int,
     system: list[ChatCompletionSystemMessageParam],
     json_output: bool = False,
@@ -290,15 +280,8 @@ async def _completion_sync_worker(
     """
     Returns a completion.
     """
-    # Try cache
-    cache_key = f"{__name__}-completion_sync-{system}-{max_tokens}"
-    cached = await _cache.aget(cache_key)
-    if cached:
-        return cached.decode()
-
-    # Try live
     content = None
-    client, platform = _use_llm(is_backup)
+    client, platform = _use_llm(is_fast)
     extra = {}
     if json_output:
         extra["response_format"] = {"type": "json_object"}
@@ -325,12 +308,8 @@ async def _completion_sync_worker(
             f"Content filter detected for text: {choice.message.content}"
         )
     if choice.finish_reason == "length":
-        logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+        raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
     content = choice.message.content
-
-    # Update cache
-    if content:
-        await _cache.aset(cache_key, content.encode())
 
     if not content:
         return None
@@ -553,20 +532,20 @@ def _count_tokens(content: str, model: str) -> int:
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 
-def _llm_key(is_backup: bool) -> str:
-    platform = CONFIG.llm.selected(is_backup)
+def _llm_key(is_fast: bool) -> str:
+    platform = CONFIG.llm.selected(is_fast)
     return f"{platform.model}-{platform.context}"
 
 
 def _use_llm(
-    is_backup: bool,
+    is_fast: bool,
 ) -> Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel]:
     """
     Returns an LLM client and platform model.
 
     The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
     """
-    return CONFIG.llm.selected(is_backup).instance()
+    return CONFIG.llm.selected(is_fast).instance()
 
 
 async def _use_contentsafety() -> ContentSafetyClient:

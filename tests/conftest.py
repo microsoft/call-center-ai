@@ -99,7 +99,7 @@ class DeepEvalAzureOpenAI(GPTModel):
         cache: pytest.Cache,
         **kwargs,
     ):
-        platform = CONFIG.llm.backup.azure_openai
+        platform = CONFIG.llm.fast.azure_openai
         assert platform
 
         _langchain_kwargs = {

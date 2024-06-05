@@ -76,8 +76,8 @@ async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
 ) -> None:
-    logger.info("Call connected")
-    call.voice_recognition_retry = 0  # Reset recognition retry counter
+    logger.info("Call connected, asking for language")
+    call.recognition_retry = 0  # Reset recognition retry counter
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.CALL,
@@ -119,6 +119,7 @@ async def on_speech_recognized(
 ) -> None:
     logger.info(f"Voice recognition: {text}")
     call.messages.append(MessageModel(content=text, persona=MessagePersonaEnum.HUMAN))
+    call.recognition_retry = 0  # Reset recognition retry counter
     await asyncio.gather(
         handle_clear_queue(
             call=call,
@@ -136,38 +137,74 @@ async def on_speech_recognized(
     )  # All in parallel to lower the answer latency
 
 
-@tracer.start_as_current_span("on_speech_timeout_error")
-async def on_speech_timeout_error(
+@tracer.start_as_current_span("on_recognize_timeout_error")
+async def on_recognize_timeout_error(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: Optional[list[CallContextEnum]],
 ) -> None:
-    if not (contexts and CallContextEnum.LAST_CHUNK in contexts):
+    if (
+        contexts and CallContextEnum.IVR_LANG_SELECT in contexts
+    ):  # Retry IVR recognition
+        if call.recognition_retry < CONFIG.workflow.max_voice_recognition_retry:
+            call.recognition_retry += 1
+            logger.info(
+                f"Timeout, retrying language selection ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
+            )
+            await _handle_ivr_language(call=call, client=client)
+        else:  # IVR retries are exhausted, end call
+            logger.info("Timeout, ending call")
+            await _handle_goodbye(
+                call=call,
+                client=client,
+            )
+        return
+
+    if not (
+        contexts and CallContextEnum.LAST_CHUNK in contexts
+    ):  # Not the last chunk, ignore
         logger.debug("Ignoring timeout if bot is still speaking")
         return
 
-    res_context = None
-    if call.voice_recognition_retry < 10:
-        call.voice_recognition_retry += 1
-        timeout_error = True  # Should re-trigger an error or the LLM
-        text = await CONFIG.prompts.tts.timeout_silence(call)
-    else:
-        timeout_error = False  # Shouldn't trigger anything, as call is ending
-        res_context = CallContextEnum.GOODBYE
-        text = await CONFIG.prompts.tts.goodbye(call)
+    if (
+        call.recognition_retry < CONFIG.workflow.max_voice_recognition_retry
+    ):  # Retry voice recognition
+        call.recognition_retry += 1
+        logger.info(
+            f"Timeout, retrying voice recognition ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
+        )
+        await handle_recognize_text(
+            call=call,
+            client=client,
+            store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+            text=await CONFIG.prompts.tts.timeout_silence(call),
+            timeout_error=True,  # Should re-trigger an error or the LLM
+        )
 
+    else:  # Voice retries are exhausted, end call
+        logger.info("Timeout, ending call")
+        await _handle_goodbye(
+            call=call,
+            client=client,
+        )
+
+
+async def _handle_goodbye(
+    call: CallStateModel,
+    client: CallAutomationClient,
+) -> None:
     await handle_recognize_text(
         call=call,
         client=client,
-        context=res_context,
+        context=CallContextEnum.GOODBYE,
         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
-        text=text,
-        timeout_error=timeout_error,
+        text=await CONFIG.prompts.tts.goodbye(call),
+        timeout_error=False,
     )
 
 
-@tracer.start_as_current_span("on_speech_unknown_error")
-async def on_speech_unknown_error(
+@tracer.start_as_current_span("on_recognize_unknown_error")
+async def on_recognize_unknown_error(
     call: CallStateModel,
     client: CallAutomationClient,
     error_code: int,
@@ -244,6 +281,7 @@ async def on_ivr_recognized(
     post_callback: Callable[[CallStateModel], None],
     trainings_callback: Callable[[CallStateModel], None],
 ) -> None:
+    call.recognition_retry = 0  # Reset recognition retry counter
     try:
         lang = next(
             (x for x in call.initiate.lang.availables if x.short_code == label),
@@ -512,7 +550,8 @@ async def _handle_ivr_language(
         )
     await handle_recognize_ivr(
         call=call,
-        client=client,
         choices=choices,
+        client=client,
+        context=CallContextEnum.IVR_LANG_SELECT,
         text=await CONFIG.prompts.tts.ivr_language(call),
     )
