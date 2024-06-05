@@ -319,7 +319,7 @@ cognitive_service:
   endpoint: https://xxx.cognitiveservices.azure.com
 
 llm:
-  backup:
+  fast:
     mode: azure_openai
     azure_openai:
       api_key: xxx
@@ -328,7 +328,7 @@ llm:
       endpoint: https://xxx.openai.azure.com
       model: gpt-35-turbo
       streaming: true
-  primary:
+  slow:
     mode: azure_openai
     azure_openai:
       api_key: xxx
@@ -525,7 +525,7 @@ Then, add the following in the `config.yaml` file:
 [...]
 
 llm:
-  backup:
+  fast:
     mode: openai
     openai:
       api_key: xxx
@@ -533,7 +533,7 @@ llm:
       endpoint: https://api.openai.com
       model: gpt-35-turbo
       streaming: true
-  primary:
+  slow:
     mode: openai
     openai:
       api_key: xxx

@@ -1,13 +1,16 @@
-param adaModel string
-param adaVersion string
 param cognitiveCommunicationLocation string
+param embeddingModel string
+param embeddingQuota int
+param embeddingVersion string
 param functionappLocation string
-param gptBackupContext int
-param gptBackupModel string
-param gptBackupVersion string
-param gptContext int
-param gptModel string
-param gptVersion string
+param llmFastContext int
+param llmFastModel string
+param llmFastQuota int
+param llmFastVersion string
+param llmSlowContext int
+param llmSlowModel string
+param llmSlowQuota int
+param llmSlowVersion string
 param location string
 param moderationBlocklists array
 param openaiLocation string
@@ -19,9 +22,9 @@ var appName = 'call-center-ai'
 var prefix = deployment().name
 var functionAppName = '${prefix}-${appName}'
 var appUrl = 'https://${functionAppName}.azurewebsites.net'
-var gptBackupModelFullName = toLower('${gptBackupModel}-${gptBackupVersion}')
-var gptModelFullName = toLower('${gptModel}-${gptVersion}')
-var adaModelFullName = toLower('${adaModel}-${adaVersion}')
+var llmFastModelFullName = toLower('${llmFastModel}-${llmFastVersion}')
+var llmSlowModelFullName = toLower('${llmSlowModel}-${llmSlowVersion}')
+var embeddingModelFullName = toLower('${embeddingModel}-${embeddingVersion}')
 var cosmosContainerName = 'calls-v3'  // Third schema version
 var localConfig = loadYamlContent('../config.yaml')
 var phonenumberSanitized = replace(localConfig.communication_services.phone_number, '+', '')
@@ -61,23 +64,23 @@ var config = {
     endpoint: cognitiveCommunication.properties.endpoint
   }
   llm: {
-    backup: {
+    fast: {
       mode: 'azure_openai'
       azure_openai: {
-        context: gptBackupContext
-        deployment: gptBackup.name
+        context: llmFastContext
+        deployment: llmFast.name
         endpoint: cognitiveOpenai.properties.endpoint
-        model: gptBackupModel
+        model: llmFastModel
         streaming: true
       }
     }
-    primary: {
+    slow: {
       mode: 'azure_openai'
       azure_openai: {
-        context: gptContext
-        deployment: gpt.name
+        context: llmSlowContext
+        deployment: llmSlow.name
         endpoint: cognitiveOpenai.properties.endpoint
-        model: gptModel
+        model: llmSlowModel
         streaming: true
       }
     }
@@ -526,12 +529,12 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-previe
   }
 }
 
-resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
-  name: gptModelFullName
+  name: llmSlowModelFullName
   tags: tags
   sku: {
-    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
+    capacity: llmSlowQuota
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -540,18 +543,18 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
-      name: gptModel
-      version: gptVersion
+      name: llmSlowModel
+      version: llmSlowVersion
     }
   }
 }
 
-resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
-  name: gptBackupModelFullName
+  name: llmFastModelFullName
   tags: tags
   sku: {
-    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
+    capacity: llmFastQuota
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -560,8 +563,8 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
-      name: gptBackupModel
-      version: gptBackupVersion
+      name: llmFastModel
+      version: llmFastVersion
     }
   }
 }
@@ -628,10 +631,10 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
 
 resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
-  name: adaModelFullName
+  name: embeddingModelFullName
   tags: tags
   sku: {
-    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
+    capacity: embeddingQuota
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -640,8 +643,8 @@ resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
-      name: adaModel
-      version: adaVersion
+      name: embeddingModel
+      version: embeddingVersion
     }
   }
 }
