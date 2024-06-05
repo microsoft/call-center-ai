@@ -15,7 +15,7 @@ django-htmlmin==0.11.0
 jinja2==3.1.4
 json-repair==0.20.1
 mistune==3.0.2
-openai==1.30.3
+openai==1.31.1
 opentelemetry-instrumentation-aiohttp-client==0.46b0
 opentelemetry-instrumentation-httpx==0.46b0
 opentelemetry-instrumentation-openai==0.21.4
