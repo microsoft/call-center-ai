@@ -85,12 +85,14 @@ async def on_call_connected(
             persona=MessagePersonaEnum.HUMAN,
         )
     )
-    await _db.call_aset(
-        call
-    )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
-    await _handle_ivr_language(
-        call=call, client=client
-    )  # Every time a call is answered, confirm the language
+    await asyncio.gather(
+        _handle_ivr_language(
+            call=call, client=client
+        ),  # First, every time a call is answered, confirm the language
+        _db.call_aset(
+            call
+        ),  # save in DB allowing SMS answers to be more "in-sync", should be quick enough to be in sync with the next message
+    )
 
 
 @tracer.start_as_current_span("on_call_disconnected")
@@ -118,19 +120,19 @@ async def on_speech_recognized(
     logger.info(f"Voice recognition: {text}")
     call.messages.append(MessageModel(content=text, persona=MessagePersonaEnum.HUMAN))
     await asyncio.gather(
-        _db.call_aset(
-            call
-        ),  # First, save ASAP in DB allowing SMS answers to be more "in-sync"
         handle_clear_queue(
             call=call,
             client=client,
-        ),  # Second, when the user speak, the conversation should continue based on its last message
+        ),  # First, when the user speak, the conversation should continue based on its last message
         load_llm_chat(
             call=call,
             client=client,
             post_callback=post_callback,
             trainings_callback=trainings_callback,
-        ),  # Third, the LLM should be loaded to continue the conversation
+        ),  # Second, the LLM should be loaded to continue the conversation
+        _db.call_aset(
+            call
+        ),  # Third, save in DB allowing SMS answers to be more "in-sync" if they are sent during the generation
     )  # All in parallel to lower the answer latency
 
 
@@ -257,12 +259,12 @@ async def on_ivr_recognized(
 
     if len(call.messages) <= 1:  # First call, or only the call action
         await asyncio.gather(
-            persist_coro,  # First, persist language change for next messages
             handle_recognize_text(
                 call=call,
                 client=client,
                 text=await CONFIG.prompts.tts.hello(call),
-            ),  # Second, greet the user
+            ),  # First, greet the user
+            persist_coro,  # Second, persist language change for next messages, should be quick enough to be in sync with the next message
             load_llm_chat(
                 call=call,
                 client=client,
@@ -273,14 +275,14 @@ async def on_ivr_recognized(
 
     else:  # Returning call
         await asyncio.gather(
-            persist_coro,  # First, persist language change for next messages
             handle_recognize_text(
                 call=call,
                 client=client,
                 style=MessageStyleEnum.CHEERFUL,
                 text=await CONFIG.prompts.tts.welcome_back(call),
                 timeout_error=False,  # Do not trigger timeout, as the chat will continue
-            ),  # Second, welcome back the user
+            ),  # First, welcome back the user
+            persist_coro,  # Second, persist language change for next messages, should be quick enough to be in sync with the next message
             load_llm_chat(
                 call=call,
                 client=client,
@@ -329,7 +331,7 @@ async def on_sms_received(
     )
     await _db.call_aset(
         call
-    )  # Save ASAP in DB allowing SMS answers to be more "in-sync"
+    )  # save in DB allowing SMS answers to be more "in-sync"
     if not call.in_progress:
         logger.info("Call not in progress, answering with SMS")
     else:
