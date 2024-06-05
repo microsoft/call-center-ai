@@ -153,14 +153,9 @@ async def load_llm_chat(
         )
 
     # Pointer
-    def _pointer_task() -> asyncio.Task:
-        return asyncio.create_task(asyncio.sleep(pointer_timer))
-
-    pointer_timer = 1  # Fetch pointer every seconds
     pointer_cache_key = f"{__name__}-load_llm_chat-pointer-{call.call_id}"
     pointer_current = time.time()  # Get system current time
     await _cache.aset(pointer_cache_key, str(pointer_current))
-    pointer_task = _pointer_task()
 
     # Chat
     chat_task = asyncio.create_task(
@@ -207,18 +202,15 @@ async def load_llm_chat(
         while True:
             logger.debug(f"Chat task status: {chat_task.done()}")
 
-            if pointer_task.done():  # Test if another chat is running
-                if pointer_current == float(
-                    (await _cache.aget(pointer_cache_key) or b"0").decode()
-                ):  # Pointer not updated
-                    pointer_task = _pointer_task()
-                else:  # Pointer updated by another instance
-                    logger.warning("Another chat is running, stopping this one")
-                    # Clean up Communication Services queue
-                    await handle_clear_queue(call=call, client=client)
-                    # Clean up tasks
-                    _clear_tasks()
-                    break
+            if pointer_current < float(
+                (await _cache.aget(pointer_cache_key) or b"0").decode()
+            ):  # Test if pointer updated by another instance
+                logger.warning("Another chat is running, stopping this one")
+                # Clean up Communication Services queue
+                await handle_clear_queue(call=call, client=client)
+                # Clean up tasks
+                _clear_tasks()
+                break
 
             if chat_task.done():  # Break when chat coroutine is done
                 # Clean up
@@ -268,7 +260,7 @@ async def load_llm_chat(
                     )  # Play loading sound
 
             # Wait to not block the event loop for other requests
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
 
     except Exception:
         logger.warning("Error loading intelligence", exc_info=True)
