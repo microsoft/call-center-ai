@@ -80,7 +80,7 @@ class CallStateModel(CallGetModel):
     lang_short_code: Optional[str] = Field(default=None)
     voice_recognition_retry: int = Field(
         default=0,
-        validation_alias="recognition_retry",  # Compatibility with v1
+        serialization_alias="recognition_retry",  # Compatibility with v1
     )
 
     @computed_field

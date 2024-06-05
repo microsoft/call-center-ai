@@ -131,6 +131,7 @@ class WorkflowModel(BaseModel):
     initiate: WorkflowInitiateModel
     intelligence_hard_timeout_sec: int = 180  # 3 minutes
     intelligence_soft_timeout_sec: int = 30  # 30 seconds
+    max_voice_recognition_retry: int = 3
 
 
 def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseModel]:

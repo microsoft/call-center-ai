@@ -30,10 +30,10 @@ from helpers.call_events import (
     on_new_call,
     on_play_completed,
     on_play_error,
+    on_recognize_timeout_error,
+    on_recognize_unknown_error,
     on_sms_received,
     on_speech_recognized,
-    on_speech_timeout_error,
-    on_speech_unknown_error,
     on_transfer_completed,
     on_transfer_error,
 )
@@ -487,19 +487,22 @@ async def _communicationservices_event_worker(
     ):  # Speech recognition failed
         result_information = event.data["resultInformation"]
         error_code: int = result_information["subCode"]
-
+        error_message: str = result_information["message"]
+        logger.debug(
+            f"Speech recognition failed with error code {error_code}: {error_message}"
+        )
         # Error codes:
         # 8510 = Action failed, initial silence timeout reached
         # 8532 = Action failed, inter-digit silence timeout reached
         # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
         if error_code in (8510, 8532):  # Timeout retry
-            await on_speech_timeout_error(
+            await on_recognize_timeout_error(
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
             )
         else:  # Unknown error
-            await on_speech_unknown_error(
+            await on_recognize_unknown_error(
                 call=call,
                 client=automation_client,
                 error_code=error_code,

@@ -41,6 +41,7 @@ class ContextEnum(str, Enum):
 
     CONNECT_AGENT = "connect_agent"  # Transfer to agent
     GOODBYE = "goodbye"  # Hang up
+    IVR_LANG_SELECT = "ivr_lang_select"  # IVR language selection
     LAST_CHUNK = "last_chunk"  # Last chunk of text
     TRANSFER_FAILED = "transfer_failed"  # Transfer failed
 
@@ -277,10 +278,11 @@ def _audio_from_text(
 
 
 async def handle_recognize_ivr(
-    client: CallAutomationClient,
     call: CallStateModel,
-    text: str,
     choices: list[RecognitionChoice],
+    client: CallAutomationClient,
+    text: str,
+    context: Optional[ContextEnum] = None,
 ) -> None:
     """
     Recognize an IVR response after playing a text.
@@ -294,9 +296,9 @@ async def handle_recognize_ivr(
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.start_recognizing_media(
                 choices=choices,
-                end_silence_timeout=20,
                 input_type=RecognizeInputType.CHOICES,
                 interrupt_prompt=True,
+                operation_context=json.dumps([context]) if context else None,
                 play_prompt=_audio_from_text(
                     call=call,
                     style=MessageStyleEnum.NONE,
