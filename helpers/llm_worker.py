@@ -69,14 +69,11 @@ _contentsafety_client: Optional[ContentSafetyClient] = None
 
 
 class SafetyCheckError(Exception):
-    message: str
+    pass
 
-    def __init__(self, message: str) -> None:
-        self.message = message
-        super().__init__(message)
 
-    def __str__(self) -> str:
-        return self.message
+class MaximumTokensReachedError(Exception):
+    pass
 
 
 _retried_exceptions = [
@@ -152,19 +149,6 @@ async def _completion_stream_worker(
     """
     Returns a stream of completions.
     """
-    # Try cache
-    cache_key = f"{__name__}-completion_stream-{_llm_key(is_fast)}-{system}-{tools}-{messages}-{max_tokens}"
-    cached = await _cache.aget(cache_key)
-    if cached:
-        try:
-            for chunck in TypeAdapter(list[ChoiceDelta]).validate_json(cached):
-                yield chunck
-            return
-        except ValidationError as e:
-            logger.debug(f"Parsing error: {e.errors()}")
-
-    # Try live
-    to_cache: list[ChoiceDelta] = []
     client, platform = _use_llm(is_fast)
     extra = {}
     if tools:
@@ -187,6 +171,7 @@ async def _completion_stream_worker(
         "temperature": 0,  # Most focused and deterministic
         **extra,
     }  # Shared kwargs for both streaming and non-streaming
+    maximum_tokens_reached = False
 
     if platform.streaming:  # Streaming
         stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
@@ -204,9 +189,9 @@ async def _completion_stream_worker(
                 )
             if choice.finish_reason == "length":
                 logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+                maximum_tokens_reached = True
             delta = choice.delta
             yield delta
-            to_cache.append(delta)
 
     else:  # Non-streaming, emulate streaming with a single completion
         completion: ChatCompletion = await client.chat.completions.create(**chat_kwargs)
@@ -217,6 +202,7 @@ async def _completion_stream_worker(
             )
         if choice.finish_reason == "length":
             logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+            maximum_tokens_reached = True
         message = choice.message
         delta = ChoiceDelta(
             content=message.content,
@@ -235,10 +221,9 @@ async def _completion_stream_worker(
             ],
         )
         yield delta
-        to_cache.append(delta)
 
-    # Update cache
-    await _cache.aset(cache_key, TypeAdapter(list[ChoiceDelta]).dump_json(to_cache))
+    if maximum_tokens_reached:
+        raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
 
 
 @tracer.start_as_current_span("completion_sync")
@@ -295,13 +280,6 @@ async def _completion_sync_worker(
     """
     Returns a completion.
     """
-    # Try cache
-    cache_key = f"{__name__}-completion_sync-{system}-{max_tokens}"
-    cached = await _cache.aget(cache_key)
-    if cached:
-        return cached.decode()
-
-    # Try live
     content = None
     client, platform = _use_llm(is_fast)
     extra = {}
@@ -330,12 +308,8 @@ async def _completion_sync_worker(
             f"Content filter detected for text: {choice.message.content}"
         )
     if choice.finish_reason == "length":
-        logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+        raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
     content = choice.message.content
-
-    # Update cache
-    if content:
-        await _cache.aset(cache_key, content.encode())
 
     if not content:
         return None
