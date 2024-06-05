@@ -109,7 +109,7 @@ async def handle_media(
     client: CallAutomationClient,
     call: CallStateModel,
     sound_url: str,
-    context: Optional[str] = None,
+    context: Optional[ContextEnum] = None,
 ) -> None:
     """
     Play a media to a call participant.
@@ -331,7 +331,7 @@ async def handle_transfer(
     client: CallAutomationClient,
     call: CallStateModel,
     target: str,
-    context: Optional[str] = None,
+    context: Optional[ContextEnum] = None,
 ) -> None:
     logger.debug(f"Transferring call to {target}")
     try:
