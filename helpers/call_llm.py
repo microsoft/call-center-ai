@@ -305,7 +305,7 @@ async def load_llm_chat(
                 post_callback=post_callback,
                 trainings_callback=trainings_callback,
                 _iterations_remaining=_iterations_remaining - 1,
-            )
+            )  # Recursive chat (like for for retry or tools)
         else:
             await handle_recognize_text(
                 call=call,
