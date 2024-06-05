@@ -78,9 +78,8 @@ class AiSearchSearch(ISearch):
         if cached:
             try:
                 return TypeAdapter(list[TrainingModel]).validate_json(cached)
-            except ValidationError:
-                logger.warning(f"Error parsing cached training: {cached}")
-                pass
+            except ValidationError as e:
+                logger.debug(f"Parsing error: {e.errors()}")
 
         if cache_only:
             return None
@@ -137,14 +136,10 @@ class AiSearchSearch(ISearch):
             logger.error(f"Error connecting to AI Search, {e}")
 
         # Update cache
-        await self._cache.aset(
-            cache_key,
-            (
-                TypeAdapter(list[TrainingModel]).dump_json(trainings)
-                if trainings
-                else None
-            ),
-        )
+        if trainings:
+            await self._cache.aset(
+                cache_key, TypeAdapter(list[TrainingModel]).dump_json(trainings)
+            )
 
         return trainings or None
 
