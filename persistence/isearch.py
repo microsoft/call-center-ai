@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from models.call import CallStateModel
 from models.readiness import ReadinessStatus
 from models.training import TrainingModel
 from persistence.icache import ICache
