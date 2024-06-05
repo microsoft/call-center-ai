@@ -25,8 +25,8 @@ class CallGetModel(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     # Editable fields
     initiate: CallInitiateModel = Field(frozen=True)
-    claim: dict[str, Any] = Field(
-        default={}
+    claim: dict[str, Any] = (
+        {}
     )  # Place after "initiate" as it depends on it for validation
     messages: list[MessageModel] = []
     next: Optional[NextModel] = None
@@ -77,7 +77,7 @@ class CallStateModel(CallGetModel):
         frozen=True,
     )
     # Editable fields
-    lang_short_code: Optional[str] = Field(default=None)
+    lang_short_code: Optional[str] = None
     voice_recognition_retry: int = Field(
         default=0,
         serialization_alias="recognition_retry",  # Compatibility with v1
