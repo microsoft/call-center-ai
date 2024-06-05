@@ -65,12 +65,6 @@ logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 
 _cache = CONFIG.cache.instance()
 ModelType = TypeVar("ModelType", bound=BaseModel)
-_retried_exceptions = [
-    APIConnectionError,
-    APIResponseValidationError,
-    InternalServerError,
-    RateLimitError,
-]
 _contentsafety_client: Optional[ContentSafetyClient] = None
 
 
@@ -83,6 +77,15 @@ class SafetyCheckError(Exception):
 
     def __str__(self) -> str:
         return self.message
+
+
+_retried_exceptions = [
+    APIConnectionError,
+    APIResponseValidationError,
+    InternalServerError,
+    RateLimitError,
+    SafetyCheckError,
+]
 
 
 @tracer.start_as_current_span("completion_stream")
@@ -189,13 +192,27 @@ async def _completion_stream_worker(
             choices = chunck.choices
             if not choices:  # Skip empty choices, happens sometimes with GPT-4 Turbo
                 continue
-            delta = choices[0].delta
+            choice = choices[0]
+            if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+                raise SafetyCheckError(
+                    f"Content filter detected for text: {choice.delta.content}"
+                )
+            if choice.finish_reason == "length":
+                logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+            delta = choice.delta
             yield delta
             to_cache.append(delta)
 
     else:  # Non-streaming, emulate streaming with a single completion
         completion: ChatCompletion = await client.chat.completions.create(**chat_kwargs)
-        message = completion.choices[0].message
+        choice = completion.choices[0]
+        if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+            raise SafetyCheckError(
+                f"Content filter detected for text: {choice.message.content}"
+            )
+        if choice.finish_reason == "length":
+            logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+        message = choice.message
         delta = ChoiceDelta(
             content=message.content,
             role=message.role,
@@ -302,7 +319,14 @@ async def _completion_sync_worker(
         temperature=0,  # Most focused and deterministic
         **extra,
     )
-    content = res.choices[0].message.content
+    choice = res.choices[0]
+    if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+        raise SafetyCheckError(
+            f"Content filter detected for text: {choice.message.content}"
+        )
+    if choice.finish_reason == "length":
+        logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+    content = choice.message.content
 
     # Update cache
     if content:
