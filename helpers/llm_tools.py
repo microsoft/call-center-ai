@@ -76,7 +76,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the creation of a new claim. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a new claim for a car accident.', 'A new claim for a stolen watch is being created.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'A new claim for a stolen watch is being created.'
+            - 'I am creating a new claim for a car accident.'
+            - 'Please wait while I create your new folder about the fire.'
+            """,
         ],
     ) -> str:
         """
@@ -114,7 +125,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call you back.', 'A todo for next week is planned.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'A todo for next week is planned.'
+            - 'I am creating a reminder for next week to call you back.'
+            - 'The rendez-vous is scheduled for tomorrow.'
+            """,
         ],
         description: Annotated[
             str,
@@ -175,7 +197,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'Both your name and the incident date are updated.'
+            - 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'
+            - 'The incident date is now set to yesterday at 18h.'
+            """,
         ],
         updates: Annotated[
             list[UpdateClaimDict],
@@ -263,7 +296,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the search, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am searching for the document about the car accident.', 'I am looking for the contract details.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'I am looking for the article about the new law on cyber security.'
+            - 'I am looking in our database for your car insurance contract.'
+            - 'I am searching for the procedure to declare a stolen luxury watch.'
+            """,
         ],
         queries: Annotated[
             list[str],
@@ -300,7 +344,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the action. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am notifying the emergency services.', 'Police number is confirmed.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'I am calling the firefighters to help you with the fire.'
+            - 'I am contacting the police for the accident with your neighbor.'
+            - 'I am notifying the emergency services right now.'
+            """,
         ],
         reason: Annotated[
             str,
@@ -345,7 +400,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the action. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am sending a SMS to your phone number.', 'SMS with the details is sent.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'I am sending a SMS to your phone number.'
+            - 'I am texting you the information right now.'
+            - 'SMS with the details is sent.'
+            """,
         ],
         message: Annotated[
             str,
