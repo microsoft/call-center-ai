@@ -151,6 +151,7 @@ async def report_get(req: func.HttpRequest) -> func.HttpResponse:
         applicationinsights_connection_string=getenv(
             "APPLICATIONINSIGHTS_CONNECTION_STRING"
         ),
+        bot_phone_number=CONFIG.communication_services.phone_number,
         calls=calls or [],
         count=count,
         phone_number=phone_number,
@@ -189,6 +190,7 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
         ),
         bot_company=call.initiate.bot_company,
         bot_name=call.initiate.bot_name,
+        bot_phone_number=CONFIG.communication_services.phone_number,
         call=call,
         next_actions=[action for action in NextActionEnum],
         version=CONFIG.version,
