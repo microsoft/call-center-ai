@@ -68,7 +68,7 @@ class CallGetModel(BaseModel):
         )
 
 
-class CallStateModel(CallGetModel):
+class CallStateModel(CallGetModel, extra="ignore"):
     # Immutable fields
     callback_secret: str = Field(
         default="".join(
