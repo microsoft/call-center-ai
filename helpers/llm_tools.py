@@ -1,4 +1,4 @@
-from azure.communication.callautomation import CallAutomationClient
+from azure.communication.callautomation.aio import CallAutomationClient
 from helpers.call_utils import ContextEnum as CallContextEnum, handle_recognize_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema

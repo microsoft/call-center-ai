@@ -61,13 +61,12 @@ test:
 	python3 -m deptry \
 		--ignore-notebooks \
 		--per-rule-ignores "DEP002=aiohttp" \
+		--per-rule-ignores "DEP003=aiohttp_retry" \
 		.
 
 	@echo "➡️ Running Pytest..."
 	PUBLIC_DOMAIN=dummy pytest \
 		--alluredir test-reports \
-		--maxprocesses 4 \
-		-n logical \
 		-ra \
 		tests/*.py
 

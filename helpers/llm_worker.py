@@ -8,7 +8,6 @@ from azure.ai.contentsafety.models import (
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError, ServiceRequestError
 from helpers.config import CONFIG
-from contextlib import asynccontextmanager
 from helpers.logging import logger, tracer
 from openai import (
     APIConnectionError,
@@ -50,6 +49,7 @@ from os import environ
 from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
 import json
 import tiktoken
+from helpers.http import azure_transport
 
 
 # Instrument OpenAI
@@ -71,6 +71,7 @@ _retried_exceptions = [
     InternalServerError,
     RateLimitError,
 ]
+_contentsafety_client: Optional[ContentSafetyClient] = None
 
 
 class SafetyCheckError(Exception):
@@ -156,69 +157,63 @@ async def _completion_stream_worker(
 
     # Try live
     to_cache: list[ChoiceDelta] = []
-    async with _use_llm(is_backup) as (client, platform):
-        extra = {}
-        if tools:
-            extra["tools"] = tools  # Add tools if any
+    client, platform = _use_llm(is_backup)
+    extra = {}
+    if tools:
+        extra["tools"] = tools  # Add tools if any
 
-        prompt = _limit_messages(
-            context_window=platform.context,
-            max_messages=20,  # Quick response
-            max_tokens=max_tokens,
-            messages=messages,
-            model=platform.model,
-            system=system,
-            tools=tools,
-        )  # Limit to 20 messages for quick response and avoid hallucinations
-        chat_kwargs = {
-            "max_tokens": max_tokens,
-            "messages": prompt,
-            "model": platform.model,
-            "seed": 42,  # Reproducible results
-            "temperature": 0,  # Most focused and deterministic
-            **extra,
-        }  # Shared kwargs for both streaming and non-streaming
+    prompt = _limit_messages(
+        context_window=platform.context,
+        max_messages=20,  # Quick response
+        max_tokens=max_tokens,
+        messages=messages,
+        model=platform.model,
+        system=system,
+        tools=tools,
+    )  # Limit to 20 messages for quick response and avoid hallucinations
+    chat_kwargs = {
+        "max_tokens": max_tokens,
+        "messages": prompt,
+        "model": platform.model,
+        "seed": 42,  # Reproducible results
+        "temperature": 0,  # Most focused and deterministic
+        **extra,
+    }  # Shared kwargs for both streaming and non-streaming
 
-        if platform.streaming:  # Streaming
-            stream: AsyncStream[ChatCompletionChunk] = (
-                await client.chat.completions.create(
-                    **chat_kwargs,
-                    stream=True,
-                )
-            )
-            async for chunck in stream:
-                choices = chunck.choices
-                if (
-                    not choices
-                ):  # Skip empty choices, happens sometimes with GPT-4 Turbo
-                    continue
-                delta = choices[0].delta
-                yield delta
-                to_cache.append(delta)
-
-        else:  # Non-streaming, emulate streaming with a single completion
-            completion: ChatCompletion = await client.chat.completions.create(
-                **chat_kwargs
-            )
-            message = completion.choices[0].message
-            delta = ChoiceDelta(
-                content=message.content,
-                role=message.role,
-                tool_calls=[
-                    ChoiceDeltaToolCall(
-                        id=tool.id,
-                        index=0,
-                        type=tool.type,
-                        function=ChoiceDeltaToolCallFunction(
-                            arguments=tool.function.arguments,
-                            name=tool.function.name,
-                        ),
-                    )
-                    for tool in message.tool_calls or []
-                ],
-            )
+    if platform.streaming:  # Streaming
+        stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
+            **chat_kwargs,
+            stream=True,
+        )
+        async for chunck in stream:
+            choices = chunck.choices
+            if not choices:  # Skip empty choices, happens sometimes with GPT-4 Turbo
+                continue
+            delta = choices[0].delta
             yield delta
             to_cache.append(delta)
+
+    else:  # Non-streaming, emulate streaming with a single completion
+        completion: ChatCompletion = await client.chat.completions.create(**chat_kwargs)
+        message = completion.choices[0].message
+        delta = ChoiceDelta(
+            content=message.content,
+            role=message.role,
+            tool_calls=[
+                ChoiceDeltaToolCall(
+                    id=tool.id,
+                    index=0,
+                    type=tool.type,
+                    function=ChoiceDeltaToolCallFunction(
+                        arguments=tool.function.arguments,
+                        name=tool.function.name,
+                    ),
+                )
+                for tool in message.tool_calls or []
+            ],
+        )
+        yield delta
+        to_cache.append(delta)
 
     # Update cache
     await _cache.aset(cache_key, TypeAdapter(list[ChoiceDelta]).dump_json(to_cache))
@@ -286,28 +281,28 @@ async def _completion_sync_worker(
 
     # Try live
     content = None
-    async with _use_llm(is_backup) as (client, platform):
-        extra = {}
-        if json_output:
-            extra["response_format"] = {"type": "json_object"}
+    client, platform = _use_llm(is_backup)
+    extra = {}
+    if json_output:
+        extra["response_format"] = {"type": "json_object"}
 
-        prompt = _limit_messages(
-            context_window=platform.context,
-            max_tokens=max_tokens,
-            messages=[],
-            model=platform.model,
-            system=system,
-        )
+    prompt = _limit_messages(
+        context_window=platform.context,
+        max_tokens=max_tokens,
+        messages=[],
+        model=platform.model,
+        system=system,
+    )
 
-        res = await client.chat.completions.create(
-            max_tokens=max_tokens,
-            messages=prompt,
-            model=platform.model,
-            seed=42,  # Reproducible results
-            temperature=0,  # Most focused and deterministic
-            **extra,
-        )
-        content = res.choices[0].message.content
+    res = await client.chat.completions.create(
+        max_tokens=max_tokens,
+        messages=prompt,
+        model=platform.model,
+        seed=42,  # Reproducible results
+        temperature=0,  # Most focused and deterministic
+        **extra,
+    )
+    content = res.choices[0].message.content
 
     # Update cache
     if content:
@@ -488,15 +483,15 @@ async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
 
     Catch errors for a maximum of 3 times (internal + `HttpResponseError`), then raise the error.
     """
-    async with _use_contentsafety() as client:
-        res = await client.analyze_text(
-            AnalyzeTextOptions(
-                blocklist_names=CONFIG.content_safety.blocklists,
-                halt_on_blocklist_hit=False,
-                output_type="EightSeverityLevels",
-                text=text,
-            )
+    client = await _use_contentsafety()
+    res = await client.analyze_text(
+        AnalyzeTextOptions(
+            blocklist_names=CONFIG.content_safety.blocklists,
+            halt_on_blocklist_hit=False,
+            output_type="EightSeverityLevels",
+            text=text,
         )
+    )
     return res
 
 
@@ -539,36 +534,31 @@ def _llm_key(is_backup: bool) -> str:
     return f"{platform.model}-{platform.context}"
 
 
-@asynccontextmanager
-async def _use_llm(
+def _use_llm(
     is_backup: bool,
-) -> AsyncGenerator[
-    Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel], None
-]:
+) -> Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel]:
     """
     Returns an LLM client and platform model.
 
     The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
     """
-    async with CONFIG.llm.selected(is_backup).instance() as (client, platform):
-        yield client, platform
+    return CONFIG.llm.selected(is_backup).instance()
 
 
-@asynccontextmanager
-async def _use_contentsafety() -> AsyncGenerator[ContentSafetyClient, None]:
+async def _use_contentsafety() -> ContentSafetyClient:
     """
     Returns a Content Safety client.
     """
-    client = ContentSafetyClient(
-        # Azure deployment
-        endpoint=CONFIG.content_safety.endpoint,
-        # Authentication with API key
-        credential=AzureKeyCredential(
-            CONFIG.content_safety.access_key.get_secret_value()
-        ),
-    )
-
-    try:
-        yield client
-    finally:
-        await client.close()
+    global _contentsafety_client
+    if not isinstance(_contentsafety_client, ContentSafetyClient):
+        _contentsafety_client = ContentSafetyClient(
+            # Azure deployment
+            endpoint=CONFIG.content_safety.endpoint,
+            # Performance
+            transport=await azure_transport(),
+            # Authentication
+            credential=AzureKeyCredential(
+                CONFIG.content_safety.access_key.get_secret_value()
+            ),
+        )
+    return _contentsafety_client

@@ -6,13 +6,15 @@ from models.call import CallStateModel
 from models.message import StyleEnum as MessageStyleEnum
 from typing import AsyncGenerator, Generator, Optional
 from azure.communication.callautomation import (
-    CallAutomationClient,
-    CallConnectionClient,
     FileSource,
     PhoneNumberIdentifier,
     RecognitionChoice,
     RecognizeInputType,
     SsmlSource,
+)
+from azure.communication.callautomation.aio import (
+    CallAutomationClient,
+    CallConnectionClient,
 )
 from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
 from models.message import (
@@ -77,7 +79,7 @@ async def _handle_recognize_media(
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
-            call_client.start_recognizing_media(
+            await call_client.start_recognizing_media(
                 end_silence_timeout=end_silence,
                 input_type=RecognizeInputType.SPEECH,
                 interrupt_prompt=True,
@@ -117,7 +119,7 @@ async def handle_media(
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
-            call_client.play_media(
+            await call_client.play_media(
                 operation_context=json.dumps([context]) if context else None,
                 play_source=FileSource(url=sound_url),
             )
@@ -192,7 +194,7 @@ async def handle_clear_queue(
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
-            call_client.cancel_all_media_operations()
+            await call_client.cancel_all_media_operations()
     except ResourceNotFoundError:
         logger.debug(f"Call hung up before playing")
     except HttpResponseError as e:
@@ -290,7 +292,7 @@ async def handle_recognize_ivr(
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
-            call_client.start_recognizing_media(
+            await call_client.start_recognizing_media(
                 choices=choices,
                 end_silence_timeout=20,
                 input_type=RecognizeInputType.CHOICES,
@@ -315,7 +317,7 @@ async def handle_hangup(
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
-            call_client.hang_up(is_for_everyone=True)
+            await call_client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
         logger.debug("Call already hung up")
     except HttpResponseError as e:
@@ -335,7 +337,7 @@ async def handle_transfer(
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
-            call_client.transfer_call_to_participant(
+            await call_client.transfer_call_to_participant(
                 operation_context=json.dumps([context]) if context else None,
                 target_participant=PhoneNumberIdentifier(target),
             )

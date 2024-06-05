@@ -12,7 +12,7 @@ from azure.search.documents.models import (
     SearchMode,
     VectorizableTextQuery,
 )
-from contextlib import asynccontextmanager
+from helpers.http import azure_transport
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.logging import logger
 from models.readiness import ReadinessStatus
@@ -21,7 +21,7 @@ from persistence.icache import ICache
 from persistence.isearch import ISearch
 from pydantic import TypeAdapter
 from pydantic import ValidationError
-from typing import AsyncGenerator, Optional
+from typing import Optional
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -31,23 +31,24 @@ from tenacity import (
 
 
 class AiSearchSearch(ISearch):
+    _client: Optional[SearchClient] = None
     _config: AiSearchModel
 
     def __init__(self, cache: ICache, config: AiSearchModel):
+        super().__init__(cache)
         logger.info(f"Using AI Search {config.endpoint} with index {config.index}")
         logger.info(
             f"Note: At ~300 chars /doc, each LLM call will use approx {300 * config.top_n_documents * config.expansion_n_messages / 4} tokens (without tools)"
         )
         self._config = config
-        super().__init__(cache)
 
     async def areadiness(self) -> ReadinessStatus:
         """
         Check the readiness of the AI Search service.
         """
         try:
-            async with self._use_db() as db:
-                await db.get_document_count()
+            async with await self._use_client() as client:
+                await client.get_document_count()
             return ReadinessStatus.OK
         except HttpResponseError as e:
             logger.error(f"Error requesting AI Search, {e}")
@@ -87,8 +88,8 @@ class AiSearchSearch(ISearch):
         # Try live
         trainings: list[TrainingModel] = []
         try:
-            async with self._use_db() as db:
-                results = await db.search(
+            async with await self._use_client() as client:
+                results = await client.search(
                     # Full text search
                     query_language=QueryLanguage(lang.lower()),
                     query_type=QueryType.SEMANTIC,
@@ -147,17 +148,17 @@ class AiSearchSearch(ISearch):
 
         return trainings or None
 
-    @asynccontextmanager
-    async def _use_db(self) -> AsyncGenerator[SearchClient, None]:
-        """
-        Generate the AI Search client and close it after use.
-        """
-        db = SearchClient(
-            credential=AzureKeyCredential(self._config.access_key.get_secret_value()),
-            endpoint=self._config.endpoint,
-            index_name=self._config.index,
-        )
-        try:
-            yield db
-        finally:
-            await db.close()
+    async def _use_client(self) -> SearchClient:
+        if not self._client:
+            self._client = SearchClient(
+                # Azure deployment
+                endpoint=self._config.endpoint,
+                index_name=self._config.index,
+                # Performance
+                transport=await azure_transport(),
+                # Authentication
+                credential=AzureKeyCredential(
+                    self._config.access_key.get_secret_value()
+                ),
+            )
+        return self._client

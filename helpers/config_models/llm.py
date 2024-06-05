@@ -1,9 +1,8 @@
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
-from contextlib import asynccontextmanager
 from enum import Enum
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import field_validator, SecretStr, BaseModel, ValidationInfo
-from typing import Any, AsyncGenerator, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 
 class ModeEnum(str, Enum):
@@ -11,7 +10,7 @@ class ModeEnum(str, Enum):
     OPENAI = "openai"
 
 
-class AbstractPlatformModel(BaseModel, frozen=True):
+class AbstractPlatformModel(BaseModel):
     _client_kwargs: dict[str, Any] = {
         # Reliability
         "max_retries": 0,  # Retries are managed manually
@@ -22,59 +21,51 @@ class AbstractPlatformModel(BaseModel, frozen=True):
     streaming: bool
 
 
-class AzureOpenaiPlatformModel(AbstractPlatformModel, frozen=True):
+class AzureOpenaiPlatformModel(AbstractPlatformModel):
+    _client: Optional[AsyncAzureOpenAI] = None
     api_key: Optional[SecretStr] = None
     deployment: str
     endpoint: str
 
-    @asynccontextmanager
-    async def instance(
-        self,
-    ) -> AsyncGenerator[Tuple[AsyncAzureOpenAI, AbstractPlatformModel], None]:
-        api_key = self.api_key.get_secret_value() if self.api_key else None
-        token_func = (
-            get_bearer_token_provider(
-                ManagedIdentityCredential(),
-                "https://cognitiveservices.azure.com/.default",
+    def instance(self) -> Tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
+        if not self._client:
+            api_key = self.api_key.get_secret_value() if self.api_key else None
+            token_func = (
+                get_bearer_token_provider(
+                    ManagedIdentityCredential(),
+                    "https://cognitiveservices.azure.com/.default",
+                )
+                if not self.api_key
+                else None
             )
-            if not self.api_key
-            else None
-        )
-        client = AsyncAzureOpenAI(
-            **self._client_kwargs,
-            # Azure deployment
-            api_version="2023-12-01-preview",
-            azure_deployment=self.deployment,
-            azure_endpoint=self.endpoint,
-            # Authentication, either RBAC or API key
-            api_key=api_key,
-            azure_ad_token_provider=token_func,
-        )
-        try:
-            yield client, self
-        finally:
-            await client.close()
+            self._client = AsyncAzureOpenAI(
+                **self._client_kwargs,
+                # Azure deployment
+                api_version="2023-12-01-preview",
+                azure_deployment=self.deployment,
+                azure_endpoint=self.endpoint,
+                # Authentication
+                api_key=api_key,
+                azure_ad_token_provider=token_func,
+            )
+        return self._client, self
 
 
-class OpenaiPlatformModel(AbstractPlatformModel, frozen=True):
+class OpenaiPlatformModel(AbstractPlatformModel):
+    _client: Optional[AsyncOpenAI] = None
     api_key: SecretStr
     endpoint: str
 
-    @asynccontextmanager
-    async def instance(
-        self,
-    ) -> AsyncGenerator[Tuple[AsyncOpenAI, AbstractPlatformModel], None]:
-        client = AsyncOpenAI(
-            **self._client_kwargs,
-            # OpenAI deployment
-            base_url=self.endpoint,
-            # Authentication, either API key or no auth
-            api_key=self.api_key.get_secret_value(),
-        )
-        try:
-            yield client, self
-        finally:
-            await client.close()
+    def instance(self) -> Tuple[AsyncOpenAI, AbstractPlatformModel]:
+        if not self._client:
+            self._client = AsyncOpenAI(
+                **self._client_kwargs,
+                # API root URL
+                base_url=self.endpoint,
+                # Authentication
+                api_key=self.api_key.get_secret_value(),
+            )
+        return self._client, self
 
 
 class SelectedPlatformModel(BaseModel):

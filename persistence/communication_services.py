@@ -1,16 +1,17 @@
 from azure.communication.sms import SmsSendResult
 from azure.communication.sms.aio import SmsClient
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
-from contextlib import asynccontextmanager
+from helpers.http import azure_transport
 from helpers.config_models.communication_services import CommunicationServicesModel
 from helpers.logging import logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessStatus
 from persistence.isms import ISms
-from typing import AsyncGenerator
+from typing import Optional
 
 
 class CommunicationServicesSms(ISms):
+    _client: Optional[SmsClient] = None
     _config: CommunicationServicesModel
 
     def __init__(self, config: CommunicationServicesModel):
@@ -29,7 +30,7 @@ class CommunicationServicesSms(ISms):
         success = False
         logger.info(f"SMS content: {content}")
         try:
-            async with self._use_client() as client:
+            async with await self._use_client() as client:
                 responses: list[SmsSendResult] = await client.send(
                     from_=str(self._config.phone_number),
                     message=content,
@@ -53,13 +54,14 @@ class CommunicationServicesSms(ISms):
             logger.warning(f"Failed SMS to {phone_number}", exc_info=True)
         return success
 
-    @asynccontextmanager
-    async def _use_client(self) -> AsyncGenerator[SmsClient, None]:
-        client = SmsClient(
-            credential=self._config.access_key.get_secret_value(),
-            endpoint=self._config.endpoint,
-        )
-        try:
-            yield client
-        finally:
-            await client.close()
+    async def _use_client(self) -> SmsClient:
+        if not self._client:
+            self._client = SmsClient(
+                # Azure deployment
+                endpoint=self._config.endpoint,
+                # Performance
+                transport=await azure_transport(),
+                # Authentication
+                credential=self._config.access_key.get_secret_value(),
+            )
+        return self._client

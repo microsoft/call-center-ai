@@ -1,5 +1,5 @@
 from typing import Awaitable, Callable, Optional, Tuple, Type
-from azure.communication.callautomation import CallAutomationClient
+from azure.communication.callautomation.aio import CallAutomationClient
 from helpers.config import CONFIG
 from helpers.logging import logger
 from models.call import CallStateModel
@@ -359,7 +359,7 @@ async def _execute_llm_chat(
         return new_style
 
     # Build RAG
-    trainings = await call.trainings(cache_only=True)
+    trainings = await call.trainings()
     logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
     logger.debug(f"Trainings: {trainings}")
 

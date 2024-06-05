@@ -7,11 +7,8 @@ logger.info(f"{APP_NAME} v{CONFIG.version}")
 
 
 # General imports
-from typing import Any, Optional
-from azure.communication.callautomation import (
-    CallAutomationClient,
-    PhoneNumberIdentifier,
-)
+from azure.communication.callautomation import PhoneNumberIdentifier
+from azure.communication.callautomation.aio import CallAutomationClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
@@ -20,6 +17,7 @@ from jinja2 import Environment, FileSystemLoader
 from models.call import CallStateModel, CallGetModel, CallInitiateModel
 from models.next import ActionEnum as NextActionEnum
 from twilio.twiml.messaging_response import MessagingResponse
+from typing import Any, Optional
 from urllib.parse import quote_plus, urljoin
 from uuid import UUID
 import asyncio
@@ -39,15 +37,16 @@ from helpers.call_events import (
     on_transfer_completed,
     on_transfer_error,
 )
+from helpers.http import azure_transport
 from helpers.call_utils import ContextEnum as CallContextEnum
 from htmlmin.minify import html_minify
 from http import HTTPStatus
 from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
+from opentelemetry.semconv.trace import SpanAttributes
+from os import getenv
 from pydantic import TypeAdapter, ValidationError
 import azure.functions as func
 import json
-from os import getenv
-from opentelemetry.semconv.trace import SpanAttributes
 
 
 # Jinja configuration
@@ -62,15 +61,9 @@ _jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
 _jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
 
 # Azure Communication Services
+_automation_client: Optional[CallAutomationClient] = None
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
 logger.info(f"Using phone number {str(CONFIG.communication_services.phone_number)}")
-# Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
-_automation_client = CallAutomationClient(
-    endpoint=CONFIG.communication_services.endpoint,
-    credential=AzureKeyCredential(
-        CONFIG.communication_services.access_key.get_secret_value()
-    ),
-)
 
 # Persistences
 _cache = CONFIG.cache.instance()
@@ -266,7 +259,8 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
     trace.get_current_span().set_attribute(
         SpanAttributes.ENDUSER_ID, call.initiate.phone_number
     )
-    call_connection_properties = _automation_client.create_call(
+    automation_client = await _use_automation_client()
+    call_connection_properties = await automation_client.create_call(
         callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
@@ -307,7 +301,7 @@ async def call_event(
     )
     await on_new_call(
         callback_url=url,
-        client=_automation_client,
+        client=await _use_automation_client(),
         incoming_context=call_context,
         phone_number=phone_number,
     )
@@ -352,7 +346,7 @@ async def sms_event(
     )
     await on_sms_received(
         call=call,
-        client=_automation_client,
+        client=await _use_automation_client(),
         message=message,
         post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
         trainings_callback=lambda _call: _trigger_trainings_event(
@@ -416,12 +410,13 @@ async def _communicationservices_event_worker(
         logger.warning(f"Secret for call {call_id} does not match")
         return
 
+    # OpenTelemetry
     trace.get_current_span().set_attribute(
         SpanAttributes.ENDUSER_ID, call.initiate.phone_number
     )
+    # Event parsing
     event = CloudEvent.from_dict(event_dict)
     assert isinstance(event.data, dict)
-
     # Store connection ID
     connection_id = event.data["callConnectionId"]
     call.voice_id = connection_id
@@ -434,6 +429,8 @@ async def _communicationservices_event_worker(
         if operation_context
         else None
     )
+    # Client SDK
+    automation_client = await _use_automation_client()
 
     logger.debug(f"Call event received {event_type} for call {call}")
     logger.debug(event.data)
@@ -441,13 +438,13 @@ async def _communicationservices_event_worker(
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
         await on_call_connected(
             call=call,
-            client=_automation_client,
+            client=automation_client,
         )
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
         await on_call_disconnected(
             call=call,
-            client=_automation_client,
+            client=automation_client,
             post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
         )
 
@@ -461,7 +458,7 @@ async def _communicationservices_event_worker(
             if speech_text:
                 await on_speech_recognized(
                     call=call,
-                    client=_automation_client,
+                    client=automation_client,
                     text=speech_text,
                     post_callback=lambda _call: _trigger_post_event(
                         call=_call, post=post
@@ -475,7 +472,7 @@ async def _communicationservices_event_worker(
             label_detected: str = event.data["choiceResult"]["label"]
             await on_ivr_recognized(
                 call=call,
-                client=_automation_client,
+                client=automation_client,
                 label=label_detected,
                 post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
                 trainings_callback=lambda _call: _trigger_trainings_event(
@@ -496,20 +493,20 @@ async def _communicationservices_event_worker(
         if error_code in (8510, 8532):  # Timeout retry
             await on_speech_timeout_error(
                 call=call,
-                client=_automation_client,
+                client=automation_client,
                 contexts=operation_contexts,
             )
         else:  # Unknown error
             await on_speech_unknown_error(
                 call=call,
-                client=_automation_client,
+                client=automation_client,
                 error_code=error_code,
             )
 
     elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
         await on_play_completed(
             call=call,
-            client=_automation_client,
+            client=automation_client,
             contexts=operation_contexts,
             post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
         )
@@ -531,7 +528,7 @@ async def _communicationservices_event_worker(
         sub_code: int = result_information["subCode"]
         await on_transfer_error(
             call=call,
-            client=_automation_client,
+            client=automation_client,
             error_code=sub_code,
         )
 
@@ -660,7 +657,7 @@ async def twilio_sms_post(
         event_status = await on_sms_received(
             call=call,
             message=message,
-            client=_automation_client,
+            client=await _use_automation_client(),
             post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
             trainings_callback=lambda _call: _trigger_trainings_event(
                 call=_call, trainings=trainings
@@ -697,3 +694,19 @@ def _validation_error(
         mimetype="application/json",
         status_code=HTTPStatus.BAD_REQUEST,
     )
+
+
+async def _use_automation_client() -> CallAutomationClient:
+    global _automation_client
+    if not isinstance(_automation_client, CallAutomationClient):
+        _automation_client = CallAutomationClient(
+            # Azure deployment
+            endpoint=CONFIG.communication_services.endpoint,
+            # Performance
+            transport=await azure_transport(),
+            # Authentication
+            credential=AzureKeyCredential(
+                CONFIG.communication_services.access_key.get_secret_value()
+            ),  # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
+        )
+    return _automation_client

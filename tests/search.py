@@ -108,7 +108,7 @@ class RagRelevancyMetric(BaseMetric):
 
 
 @with_conversations
-@pytest.mark.asyncio  # Allow async functions
+@pytest.mark.asyncio(scope="session")
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_relevancy(
     call: CallStateModel,

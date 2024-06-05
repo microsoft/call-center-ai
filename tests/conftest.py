@@ -13,11 +13,13 @@ import random
 import string
 import xml.etree.ElementTree as ET
 from azure.communication.callautomation import (
-    CallAutomationClient,
-    CallConnectionClient,
     FileSource,
     SsmlSource,
     TextSource,
+)
+from azure.communication.callautomation.aio import (
+    CallAutomationClient,
+    CallConnectionClient,
 )
 from _pytest.mark.structures import MarkDecorator
 from pydantic import BaseModel, ValidationError
@@ -44,14 +46,14 @@ class CallConnectionClientMock(CallConnectionClient):
     def __init__(self, play_media_callback: Callable[[str], None]) -> None:
         self._play_media_callback = play_media_callback
 
-    def start_recognizing_media(
+    async def start_recognizing_media(
         self,
         *args,
         **kwargs,
     ) -> None:
         pass
 
-    def play_media(
+    async def play_media(
         self,
         play_source: Union[FileSource, TextSource, SsmlSource],
         *args,
@@ -65,21 +67,21 @@ class CallConnectionClientMock(CallConnectionClient):
                 if text.strip():
                     self._play_media_callback(text.strip())
 
-    def transfer_call_to_participant(
+    async def transfer_call_to_participant(
         self,
         *args,
         **kwargs,
     ) -> None:
         pass
 
-    def hang_up(
+    async def hang_up(
         self,
         *args,
         **kwargs,
     ) -> None:
         pass
 
-    def cancel_all_media_operations(
+    async def cancel_all_media_operations(
         self,
         *args,
         **kwargs,

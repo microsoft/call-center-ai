@@ -1,4 +1,4 @@
-from aiosqlite import connect as sqlite_connect, Connection as SQLiteConnection
+from aiosqlite import connect as sqlite_connect, Connection
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
@@ -19,11 +19,23 @@ SQLite3Instrumentor().instrument()
 
 
 class SqliteStore(IStore):
+    _client: Connection
     _config: SqliteModel
+    _first_run_done: bool = False
 
     def __init__(self, config: SqliteModel):
         logger.info(f"Using SQLite database at {config.path} with table {config.table}")
         self._config = config
+
+        # Create folder if does not exist
+        db_path = self._config.full_path()
+        if not os.path.isfile(db_path):
+            db_folder = db_path[: db_path.rfind("/")]
+            os.makedirs(name=db_folder, exist_ok=True)
+            self._first_run_done = True
+
+        # Init client
+        self._client = sqlite_connect(database=db_path)
 
     async def areadiness(self) -> ReadinessStatus:
         """
@@ -159,7 +171,7 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
         return int(row[0]) if row else 0
 
-    async def _init_db(self, db: SQLiteConnection):
+    async def _init_db(self, db: Connection):
         """
         Initialize the database.
 
@@ -187,20 +199,11 @@ class SqliteStore(IStore):
         await db.commit()
 
     @asynccontextmanager
-    async def _use_db(self) -> AsyncGenerator[SQLiteConnection, None]:
+    async def _use_db(self) -> AsyncGenerator[Connection, None]:
         """
         Generate the SQLite client and close it after use.
         """
-        # Create folder
-        db_path = self._config.full_path()
-        first_run = False
-        if not os.path.isfile(db_path):
-            db_folder = db_path[: db_path.rfind("/")]
-            os.makedirs(name=db_folder, exist_ok=True)
-            first_run = True
-
-        # Connect to DB
-        async with sqlite_connect(database=db_path) as db:
-            if first_run:
-                await self._init_db(db)
-            yield db
+        async with self._client as client:
+            if self._first_run_done:
+                await self._init_db(client)
+            yield client

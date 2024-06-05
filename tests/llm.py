@@ -23,7 +23,7 @@ import pytest
 
 
 @with_conversations
-@pytest.mark.asyncio  # Allow async functions
+@pytest.mark.asyncio(scope="session")
 @pytest.mark.repeat(3)  # Catch non deterministic issues
 async def test_llm(
     call: CallStateModel,

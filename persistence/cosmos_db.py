@@ -1,8 +1,8 @@
-import asyncio
-from azure.core.exceptions import ServiceResponseError
+from azure.cosmos import ConsistencyLevel
 from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from contextlib import asynccontextmanager
+from helpers.http import azure_transport
 from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
 from helpers.logging import logger
@@ -12,9 +12,11 @@ from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
 from uuid import UUID, uuid4
+import asyncio
 
 
 class CosmosDbStore(IStore):
+    _client: Optional[CosmosClient] = None
     _config: CosmosDbModel
 
     def __init__(self, config: CosmosDbModel):
@@ -40,7 +42,7 @@ class CosmosDbStore(IStore):
             # Test the item does not exist
             if await self._item_exists(test_id, test_partition):
                 return ReadinessStatus.FAIL
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 # Create a new item
                 await db.upsert_item(body=test_dict)
                 # Test the item is the same
@@ -64,7 +66,7 @@ class CosmosDbStore(IStore):
 
     async def _item_exists(self, test_id: str, partition_key: str) -> bool:
         exist = False
-        async with self._use_db() as db:
+        async with self._use_client() as db:
             try:
                 await db.read_item(item=test_id, partition_key=partition_key)
                 exist = True
@@ -78,7 +80,7 @@ class CosmosDbStore(IStore):
         logger.debug(f"Loading call {call_id}")
         call = None
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 items = db.query_items(
                     query="SELECT * FROM c WHERE STRINGEQUALS(c.id, @id)",
                     parameters=[{"name": "@id", "value": str(call_id)}],
@@ -99,7 +101,7 @@ class CosmosDbStore(IStore):
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
         logger.debug(f"Saving call {call.call_id}: {data}")
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 await db.upsert_item(body=data)
             return True
         except CosmosHttpResponseError as e:
@@ -110,7 +112,7 @@ class CosmosDbStore(IStore):
         logger.debug(f"Loading last call for {phone_number}")
         call = None
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 items = db.query_items(
                     max_item_count=1,
                     query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.workflow.conversation_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
@@ -151,7 +153,7 @@ class CosmosDbStore(IStore):
     ) -> Optional[list[CallStateModel]]:
         calls: list[CallStateModel] = []
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 where_clause = (
                     "WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)"
                     if phone_number
@@ -186,7 +188,7 @@ class CosmosDbStore(IStore):
         phone_number: Optional[str] = None,
     ) -> int:
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 where_clause = (
                     "WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)"
                     if phone_number
@@ -207,23 +209,26 @@ class CosmosDbStore(IStore):
         return total if total else 0
 
     @asynccontextmanager
-    async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
+    async def _use_client(self) -> AsyncGenerator[ContainerProxy, None]:
         """
         Generate the Cosmos DB client and close it after use.
         """
-        client = CosmosClient(
-            # Reliability
-            connection_timeout=10,
-            retry_backoff_factor=0.5,
-            retry_backoff_max=30,
-            retry_total=3,
-            # Azure deployment
-            url=self._config.endpoint,
-            # Authentication with API key
-            credential=self._config.access_key.get_secret_value(),
-        )
-        try:
+        if not self._client:
+            self._client = CosmosClient(
+                # Usage
+                consistency_level=ConsistencyLevel.Eventual,
+                # Reliability
+                connection_timeout=10,
+                retry_backoff_factor=0.5,
+                retry_backoff_max=30,
+                retry_total=3,
+                # Performance
+                transport=await azure_transport(),
+                # Azure deployment
+                url=self._config.endpoint,
+                # Authentication
+                credential=self._config.access_key.get_secret_value(),
+            )
+        async with self._client as client:
             database = client.get_database_client(self._config.database)
             yield database.get_container_client(self._config.container)
-        finally:
-            await client.close()

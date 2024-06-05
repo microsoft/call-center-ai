@@ -1,11 +1,8 @@
-from typing import Callable, Optional
-from azure.communication.callautomation import (
-    CallAutomationClient,
-    DtmfTone,
-    RecognitionChoice,
-)
+from azure.communication.callautomation import DtmfTone, RecognitionChoice
+from azure.communication.callautomation.aio import CallAutomationClient
 from helpers.config import CONFIG
 from helpers.logging import logger, tracer
+from typing import Callable, Optional
 from azure.core.exceptions import (
     ClientAuthenticationError,
     HttpResponseError,
@@ -47,7 +44,7 @@ async def on_new_call(
     logger.debug(f"Incoming call handler caller ID: {phone_number}")
 
     try:
-        answer_call_result = client.answer_call(
+        answer_call_result = await client.answer_call(
             callback_url=callback_url,
             cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
             incoming_call_context=incoming_context,
