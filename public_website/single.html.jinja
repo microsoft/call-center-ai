@@ -5,15 +5,18 @@ Claim ({{ call.initiate.phone_number }})
 {% endblock %}
 
 {% block content %}
+<!-- Call me button -->
+{% include "templates/call_me.html.jinja" %}
+
 <!-- Top introduction -->
 <header class="col-span-full mx-4 mb-4">
   <div class="my-4 text-neutral-600 dark:text-neutral-400">
     <a class="hover:underline" href="/report?phone_number={{ call.initiate.phone_number | quote_plus }}">
-      ⬅ Go back to your call history
+      ⬅&nbsp;&nbsp;Go back to your call history
     </a>
   </div>
 
-  <h1>Hello {{ (call.claim.policyholder_name | title) if call.claim.policyholder_name else '' }} 👋🏻</h1>
+  <h1>Hello {{ (call.claim.policyholder_name | title) if call.claim.policyholder_name else '' }}&nbsp;&nbsp;👋🏻</h1>
   <p class="text-2xl">Your claim {{ ('about ' ~ call.synthesis.short | lower) if call.synthesis.short }} is being processed.</p>
 </header>
 
@@ -34,7 +37,7 @@ Claim ({{ call.initiate.phone_number }})
 <!-- Conversation -->
 <div class="col-start-1 col-end-5 order-last lg:order-none">
   <div class="p-4 space-y-4 rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
-    <h2 class="text-lg">💬 Conversation</h2>
+    <h2 class="text-lg">💬&nbsp;&nbsp;Conversation</h2>
 
     <!-- Agent and customer -->
     <div class="overflow-hidden space-y-6">
@@ -96,7 +99,7 @@ Claim ({{ call.initiate.phone_number }})
 <div class="col-start-5 col-end-7 space-y-4">
   <!-- Reminders -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
-    <h2 class="text-lg">⏰ Reminders</h2>
+    <h2 class="text-lg">⏰&nbsp;&nbsp;Reminders</h2>
 
     {% if not call.reminders %}
     <p class="text-neutral-600 dark:text-neutral-400">No reminder yet.</p>
@@ -116,7 +119,7 @@ Claim ({{ call.initiate.phone_number }})
 
   <!-- Next actions -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
-    <h2 class="text-lg">📥 Next action</h2>
+    <h2 class="text-lg">📥&nbsp;&nbsp;Next action</h2>
 
     {% if not call.next %}
     <p class="text-neutral-600 dark:text-neutral-400">No further action for the moment.</p>
@@ -142,7 +145,7 @@ Claim ({{ call.initiate.phone_number }})
 
   <!-- Details -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
-    <h2 class="text-lg px-4 pt-4">📁 Details</h2>
+    <h2 class="text-lg px-4 pt-4">📁&nbsp;&nbsp;Details</h2>
     <table class="table-auto w-full">
       <tbody>
         {%
@@ -182,7 +185,7 @@ Claim ({{ call.initiate.phone_number }})
 
   <!-- Task -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
-    <h2 class="text-lg">🫡 Task</h2>
+    <h2 class="text-lg">🫡&nbsp;&nbsp;Task</h2>
     <p class="text-neutral-600 dark:text-neutral-400">
       {{ call.initiate.task }}
     </p>
