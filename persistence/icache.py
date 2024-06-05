@@ -16,3 +16,7 @@ class ICache(ABC):
     @abstractmethod
     async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
         pass
+
+    @abstractmethod
+    async def adel(self, key: str) -> bool:
+        pass

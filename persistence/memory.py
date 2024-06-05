@@ -56,6 +56,15 @@ class MemoryCache(ICache):
         self._cache.move_to_end(sha_key, last=False)
         return True
 
+    async def adel(self, key: str) -> bool:
+        """
+        Delete a value from the cache.
+        """
+        sha_key = self._key_to_hash(key)
+        if sha_key in self._cache:
+            self._cache.pop(sha_key)
+        return True
+
     @staticmethod
     def _key_to_hash(key: str) -> str:
         """

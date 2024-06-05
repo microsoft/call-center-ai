@@ -100,6 +100,20 @@ class RedisCache(ICache):
             return False
         return True
 
+    async def adel(self, key: str) -> bool:
+        """
+        Delete a value from the cache.
+
+        Catch errors for a maximum of 3 times, then raise the error.
+        """
+        sha_key = self._key_to_hash(key)
+        try:
+            await self._client.delete(sha_key)
+        except RedisError as e:
+            logger.error(f"Error deleting value, {e}")
+            return False
+        return True
+
     @staticmethod
     def _key_to_hash(key: str) -> bytes:
         """

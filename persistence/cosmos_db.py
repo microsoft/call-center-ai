@@ -2,12 +2,13 @@ from azure.cosmos import ConsistencyLevel
 from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from contextlib import asynccontextmanager
-from helpers.http import azure_transport
 from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
+from helpers.http import azure_transport
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.readiness import ReadinessStatus
+from persistence.icache import ICache
 from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
@@ -19,7 +20,8 @@ class CosmosDbStore(IStore):
     _client: Optional[CosmosClient] = None
     _config: CosmosDbModel
 
-    def __init__(self, config: CosmosDbModel):
+    def __init__(self, cache: ICache, config: CosmosDbModel):
+        super().__init__(cache)
         logger.info(f"Using Cosmos DB {config.database}/{config.container}")
         self._config = config
 
@@ -78,6 +80,17 @@ class CosmosDbStore(IStore):
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
         logger.debug(f"Loading call {call_id}")
+
+        # Try cache
+        cache_key = self._cache_key_call_id(call_id)
+        cached = await self._cache.aget(cache_key)
+        if cached:
+            try:
+                return CallStateModel.model_validate_json(cached)
+            except ValidationError as e:
+                logger.debug(f"Parsing error: {e.errors()}")
+
+        # Try live
         call = None
         try:
             async with self._use_client() as db:
@@ -94,22 +107,48 @@ class CosmosDbStore(IStore):
             pass
         except CosmosHttpResponseError as e:
             logger.error(f"Error accessing CosmosDB, {e}")
+
+        # Update cache
+        if call:
+            await self._cache.aset(cache_key, call.model_dump_json())
+
         return call
 
     async def call_aset(self, call: CallStateModel) -> bool:
+        logger.debug(f"Saving call {call.call_id}")
+
+        # Update live
         data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
         logger.debug(f"Saving call {call.call_id}: {data}")
+        res = False
         try:
             async with self._use_client() as db:
                 await db.upsert_item(body=data)
-            return True
+            res = True
         except CosmosHttpResponseError as e:
             logger.error(f"Error accessing CosmosDB: {e}")
-            return False
+
+        # Update cache
+        if res:
+            cache_key = self._cache_key_call_id(call.call_id)
+            await self._cache.aset(cache_key, call.model_dump_json())
+
+        return res
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
         logger.debug(f"Loading last call for {phone_number}")
+
+        # Try cache
+        cache_key = self._cache_key_phone_number(phone_number)
+        cached = await self._cache.aget(cache_key)
+        if cached:
+            try:
+                return CallStateModel.model_validate_json(cached)
+            except ValidationError as e:
+                logger.debug(f"Parsing error: {e.errors()}")
+
+        # Try live
         call = None
         try:
             async with self._use_client() as db:
@@ -132,6 +171,11 @@ class CosmosDbStore(IStore):
             pass
         except CosmosHttpResponseError as e:
             logger.error(f"Error accessing CosmosDB: {e}")
+
+        # Update cache
+        if call:
+            await self._cache.aset(cache_key, call.model_dump_json())
+
         return call
 
     async def call_asearch_all(
@@ -140,6 +184,7 @@ class CosmosDbStore(IStore):
         phone_number: Optional[str] = None,
     ) -> tuple[Optional[list[CallStateModel]], int]:
         logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        # TODO: Cache results
         calls, total = await asyncio.gather(
             self._call_asearch_all_calls_worker(count, phone_number),
             self._call_asearch_all_total_worker(phone_number),
