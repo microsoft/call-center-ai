@@ -105,28 +105,37 @@ class CallStateModel(CallGetModel):
     def lang(self, short_code: str) -> None:
         self.lang_short_code = short_code
 
-    async def trainings(self) -> list[TrainingModel]:
+    async def trainings(self, cache_only: bool = True) -> list[TrainingModel]:
         """
         Get the trainings from the last messages.
 
         Is using query expansion from last messages. Then, data is sorted by score.
         """
         from helpers.config import CONFIG
-        from helpers.logging import TRACER
+        from helpers.logging import tracer
 
-        with TRACER.start_as_current_span("trainings"):
+        with tracer.start_as_current_span("trainings"):
             search = CONFIG.ai_search.instance()
             tasks = await asyncio.gather(
                 *[
                     search.training_asearch_all(
-                        text=message.content, lang=self.lang.short_code
+                        cache_only=cache_only,
+                        lang=self.lang.short_code,
+                        text=message.content,
                     )
-                    for message in self.messages[-CONFIG.ai_search.expansion_k :]
+                    for message in self.messages[
+                        -CONFIG.ai_search.expansion_n_messages :
+                    ]
                 ],
             )  # Get trainings from last messages
             trainings = sorted(
-                set(training for trainings in tasks for training in trainings or [])
-            )  # Flatten, remove duplicates, and sort by score
+                set(
+                    training
+                    for trainings in tasks
+                    for training in trainings or []
+                    if training.score >= CONFIG.ai_search.strictness
+                )
+            )  # Flatten, remove duplicates, sort by score, filter by strictness
             return trainings
 
     def tz(self) -> tzinfo:

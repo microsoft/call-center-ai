@@ -1,0 +1,28 @@
+{
+  "version": "2.0",
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle",
+    "version": "[4.0.0, 5.0.0)"
+  },
+  "functionTimeout": "00:03:00",
+  "logging": {
+    "logLevel": {
+      "default": "Warning",
+      "Function": "Information",
+      "Host.Results": "Warning"
+    }
+  },
+  "extensions": {
+    "http": {
+      "maxConcurrentRequests": 16,
+      "maxOutstandingRequests": 4,
+      "routePrefix": ""
+    },
+    "queues": {
+      "batchSize": 16,
+      "maxDequeueCount": 3,
+      "maxPollingInterval": "00:00:02",
+      "visibilityTimeout": "00:00:01"
+    }
+  }
+}

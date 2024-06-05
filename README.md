@@ -16,7 +16,7 @@ Insurance, IT support, customer service, and more. The bot can be customized in 
 # Ask the bot to call a phone number
 data='{
   "bot_company": "Contoso",
-  "bot_name": "Marion",
+  "bot_name": "Amélie",
   "phone_number": "+11234567890",
   "task": "Assistant will help the customer with their digital workplace. Assistant is working for the IT support department. The objective is to help the customer with their issue and gather information in the claim.",
   "agent_phone_number": "+33612345678",
@@ -140,36 +140,46 @@ graph LR
   user(["User"])
 
   subgraph "Claim AI"
-    ai_search[("RAG\n(AI Search)")]
-    app["App"]
-    communication_service_sms["SMS gateway\n(Communication Services)"]
-    communication_service["Call gateway\n(Communication Services)"]
+    ada["Embedding\n(ADA)"]
+    app["App\n(Functions App)"]
+    communication_services["Call & SMS gateway\n(Communication Services)"]
     constent_safety["Moderation\n(Content Safety)"]
-    db[("Conversations and claims\n(Cosmos DB or SQLite)")]
-    event_grid[("Broker\n(Event Grid)")]
-    gpt["GPT-4 Turbo\n(OpenAI)"]
+    db[("Conversations and claims\n(Cosmos DB / SQLite)")]
+    eventgrid["Broker\n(Event Grid)"]
+    gpt["LLM\n(GPT-4o)"]
+    queues[("Queues\n(Azure Storage)")]
     redis[("Cache\n(Redis)")]
+    search[("RAG\n(AI Search)")]
+    sounds[("Sounds\n(Azure Storage)")]
+    sst["Speech-to-Text\n(Cognitive Services)"]
     translation["Translation\n(Cognitive Services)"]
+    tts["Text-to-Speech\n(Cognitive Services)"]
   end
 
-  app -- Answer with text --> communication_service
+  app -- Answer with text --> communication_services
   app -- Ask for translation --> translation
-  app -- Few-shot training --> ai_search
+  app -- Ask to transfer --> communication_services
+  app -- Few-shot training --> search
   app -- Generate completion --> gpt
   app -- Get cached data --> redis
   app -- Save conversation --> db
-  app -- Send SMS report --> communication_service_sms
+  app -- Send SMS report --> communication_services
   app -- Test for profanity --> constent_safety
-  app -- Transfer to agent --> communication_service
-  app -. Watch .-> event_grid
+  app -. Watch .-> queues
 
-  communication_service -- Notifies --> event_grid
-  communication_service -- Transfer to --> agent
-  communication_service -. Send voice .-> user
+  communication_services -- Generate voice --> tts
+  communication_services -- Load sound --> sounds
+  communication_services -- Notifies --> eventgrid
+  communication_services -- Send SMS --> user
+  communication_services -- Transfer to --> agent
+  communication_services -- Transform voice --> sst
+  communication_services -. Send voice .-> user
 
-  communication_service_sms -- Send SMS --> user
+  eventgrid -- Push to --> queues
 
-  user -- Call --> communication_service
+  search -- Generate embeddings --> ada
+
+  user -- Call --> communication_services
 ```
 
 ### Sequence diagram
@@ -244,10 +254,7 @@ sequenceDiagram
 
 ## Remote deployment
 
-Container is available on GitHub Actions, at:
-
-- Latest version from a branch: `ghcr.io/clemlesne/call-center-ai:main`
-- Specific tag: `ghcr.io/clemlesne/call-center-ai:0.1.0` (recommended)
+Application is hosted by Azure Functions. Code will be pushed automatically `make deploy`, with after the deployment.
 
 Create a local `config.yaml` file (most of the fields are filled automatically by the deployment script):
 
@@ -257,10 +264,10 @@ workflow:
   initiate:
     agent_phone_number: "+33612345678"
     bot_company: Contoso
-    bot_name: Robert
+    bot_name: Amélie
     lang: {}
 
-communication_service:
+communication_services:
   phone_number: "+33612345678"
 
 sms: {}
@@ -278,7 +285,7 @@ Steps to deploy:
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish (if it fails for a `'null' not found` error, retry the command)
 6. Link the AI multi-service account named `[my-instance]-communication` to the Communication Services resource
-7. Create a AI Search index named `trainings`
+7. Create a AI Search index named `trainings` plus a semantic search configuration named `default` on the index
 
 Get the logs with `make logs name=my-instance`.
 
@@ -290,10 +297,6 @@ Place a file called `config.yaml` in the root of the project with the following 
 
 ```yaml
 # config.yaml
-monitoring:
-  application_insights:
-    connection_string: xxx
-
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
@@ -303,10 +306,13 @@ workflow:
     bot_company: Contoso
     bot_name: Robert
 
-communication_service:
+communication_services:
   access_key: xxx
+  call_queue_name: call-33612345678
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
+  post_queue_name: post-33612345678
+  sms_queue_name: sms-33612345678
 
 cognitive_service:
   # Must be of type "AI services multi-service account"
@@ -336,9 +342,12 @@ ai_search:
   access_key: xxx
   endpoint: https://xxx.search.windows.net
   index: trainings
-  semantic_configuration: default
 
 content_safety:
+  access_key: xxx
+  endpoint: https://xxx.cognitiveservices.azure.com
+
+ai_translation:
   access_key: xxx
   endpoint: https://xxx.cognitiveservices.azure.com
 ```
@@ -373,12 +382,7 @@ For your knowledge, this `resources` folder contains:
 
 ### Run
 
-Finally, in two different terminals, run:
-
-```bash
-# Expose the local server to the internet
-make tunnel
-```
+Finally, run:
 
 ```bash
 # Start the local API server
@@ -399,7 +403,7 @@ Required index schema:
 | **content** | `Edm.String` | Yes | Yes | | |
 | **source_uri** | `Edm.String` | Yes | No | | |
 | **title** | `Edm.String` | Yes | Yes| | |
-| **vectors** | `Collection(Edm.Single)` | No | No | 1536 | *OpenAI ADA* |
+| **vectors** | `Collection(Edm.Single)` | No | Yes | 1536 | *OpenAI ADA* |
 
 An exampe is [available at `examples/import-training.ipynb`](examples/import-training.ipynb). It shows how to import training data from a PDF files dataset.
 
@@ -627,7 +631,3 @@ prompts:
 ### Why no LLM framework is used?
 
 At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
-
-### What's missing in this project for production deployment?
-
-Mostly decoupling. Today, post-call intelligence is done with the BackgroundTasks implementation from Starlette. But this executes tasks in the worker same thread, after the HTTP reponse made. For production, a message broker like Azure Service Bus should be used (Dapr can ease your life by abstracting it from the code).

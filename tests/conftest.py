@@ -1,28 +1,29 @@
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
-from fastapi import BackgroundTasks
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
 from models.call import CallStateModel, CallInitiateModel
 from textwrap import dedent
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Tuple, Union
 import hashlib
 import pytest
 import random
 import string
 import xml.etree.ElementTree as ET
 from azure.communication.callautomation import (
-    CallAutomationClient,
-    CallConnectionClient,
     FileSource,
     SsmlSource,
     TextSource,
 )
-
-
-_logger = build_logger(__name__)
+from azure.communication.callautomation.aio import (
+    CallAutomationClient,
+    CallConnectionClient,
+)
+from _pytest.mark.structures import MarkDecorator
+from pydantic import BaseModel, ValidationError
+import yaml
 
 
 class CallAutomationClientMock(CallAutomationClient):
@@ -45,14 +46,14 @@ class CallConnectionClientMock(CallConnectionClient):
     def __init__(self, play_media_callback: Callable[[str], None]) -> None:
         self._play_media_callback = play_media_callback
 
-    def start_recognizing_media(
+    async def start_recognizing_media(
         self,
         *args,
         **kwargs,
     ) -> None:
-        _logger.info("start_recognizing_media, ignoring")
+        pass
 
-    def play_media(
+    async def play_media(
         self,
         play_source: Union[FileSource, TextSource, SsmlSource],
         *args,
@@ -61,53 +62,31 @@ class CallConnectionClientMock(CallConnectionClient):
         if isinstance(play_source, TextSource):
             self._play_media_callback(play_source.text.strip())
         elif isinstance(play_source, SsmlSource):
+            # deepcode ignore InsecureXmlParser/test: SSML is internally generated
             for text in ET.fromstring(play_source.ssml_text).itertext():
                 if text.strip():
                     self._play_media_callback(text.strip())
-        else:
-            _logger.warning("play_media, ignoring")
 
-    def transfer_call_to_participant(
+    async def transfer_call_to_participant(
         self,
         *args,
         **kwargs,
     ) -> None:
-        _logger.info("transfer_call_to_participant, ignoring")
+        pass
 
-    def hang_up(
+    async def hang_up(
         self,
         *args,
         **kwargs,
     ) -> None:
-        _logger.info("hang_up, ignoring")
+        pass
 
-
-@pytest.fixture
-def background_tasks() -> BackgroundTasks:
-    return BackgroundTasks()
-
-
-@pytest.fixture
-def random_text() -> str:
-    text = "".join(random.choice(string.printable) for _ in range(100))
-    return text
-
-
-@pytest.fixture
-def call() -> CallStateModel:
-    call = CallStateModel(
-        initiate=CallInitiateModel(
-            **CONFIG.workflow.initiate.model_dump(),
-            phone_number="+33612345678",  # type: ignore
-        ),
-        voice_id="dummy",
-    )
-    return call
-
-
-@pytest.fixture
-def deepeval_model(cache: pytest.Cache) -> GPTModel:
-    return DeepEvalAzureOpenAI(cache)
+    async def cancel_all_media_operations(
+        self,
+        *args,
+        **kwargs,
+    ) -> None:
+        pass
 
 
 class DeepEvalAzureOpenAI(GPTModel):
@@ -138,7 +117,7 @@ class DeepEvalAzureOpenAI(GPTModel):
             "api_key": platform.api_key.get_secret_value() if platform.api_key else None,  # type: ignore
             "azure_ad_token_provider": (
                 get_bearer_token_provider(
-                    DefaultAzureCredential(),
+                    ManagedIdentityCredential(),
                     "https://cognitiveservices.azure.com/.default",
                 )
                 if not platform.api_key
@@ -179,3 +158,59 @@ class DeepEvalAzureOpenAI(GPTModel):
         llm_string = self._model._get_llm_string(input=prompt)
         llm_hash = hashlib.sha256(llm_string.encode(), usedforsecurity=False).digest()
         return f"call-center-ai/{llm_hash}"
+
+
+class Conversation(BaseModel):
+    claim_tests_excl: list[str] = []
+    claim_tests_incl: list[str] = []
+    expected_output: str
+    id: str
+    inputs: list[str]
+    lang: str
+
+
+def with_conversations(fn=None) -> MarkDecorator:
+    with open("tests/conversations.yaml", encoding="utf-8") as f:
+        file: dict = yaml.safe_load(f)
+    conversations: list[Conversation] = []
+    for conv in file.get("conversations", []):
+        try:
+            conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            logger.error(f"Failed to parse conversation: {e.errors()}")
+    print(f"Loaded {len(conversations)} conversations")
+    keys = sorted(Conversation.model_fields.keys() - {"id"})
+    values = [
+        pytest.param(
+            *[conversation.model_dump()[key] for key in keys],
+            id=conversation.id,
+        )
+        for conversation in conversations
+    ]
+    decorator = pytest.mark.parametrize(keys, values)
+    if fn:
+        return decorator(fn)
+    return decorator
+
+
+@pytest.fixture
+def random_text() -> str:
+    text = "".join(random.choice(string.printable) for _ in range(100))
+    return text
+
+
+@pytest.fixture
+def call() -> CallStateModel:
+    call = CallStateModel(
+        initiate=CallInitiateModel(
+            **CONFIG.workflow.initiate.model_dump(),
+            phone_number="+33612345678",  # type: ignore
+        ),
+        voice_id="dummy",
+    )
+    return call
+
+
+@pytest.fixture
+def deepeval_model(cache: pytest.Cache) -> GPTModel:
+    return DeepEvalAzureOpenAI(cache)

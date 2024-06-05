@@ -1,17 +1,18 @@
 from deepeval import assert_test
 from deepeval.metrics import BaseMetric
-from deepeval.metrics.indicator import metric_progress_indicator
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from helpers.config import CONFIG
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.call import CallStateModel
+from models.message import MessageModel, PersonaEnum as MessagePersonaEnum
+from models.training import TrainingModel
+from pydantic import TypeAdapter
+from pytest import assume
+from tests.conftest import with_conversations
 from typing import Optional
 import asyncio
 import pytest
-
-
-_logger = build_logger(__name__)
 
 
 class RagRelevancyMetric(BaseMetric):
@@ -28,26 +29,30 @@ class RagRelevancyMetric(BaseMetric):
         self.threshold = threshold
         self.model = model
 
-    async def a_measure(self, test_case: LLMTestCase) -> float:
+    async def a_measure(
+        self,
+        test_case: LLMTestCase,
+        *args,
+        **kwargs,
+    ) -> float:
         assert test_case.input
         assert test_case.retrieval_context
         # Measure each document in parallel
-        with metric_progress_indicator(self, async_mode=True):
-            scores = await asyncio.gather(
-                *[
-                    self._measure_single(test_case.input, document)
-                    for document in test_case.retrieval_context
-                ]
-            )
-            # Res 1 is weighted 1, res 2 is weighted 0.5, res 3 is weighted 0.33, ...
-            weights = [score / i for i, score in enumerate(scores, start=1)]
-            # Score is the weighted average, top 1 result should be the most important
-            self.score = sum(x * y for x, y in zip(scores, weights)) / sum(weights)
+        scores = await asyncio.gather(
+            *[
+                self._measure_single(message=test_case.input, document=document)
+                for document in test_case.retrieval_context
+            ]
+        )
+        # Res 1 is weighted 1, res 2 is weighted 0.5, res 3 is weighted 0.33, ...
+        weights = [score / i for i, score in enumerate(scores, start=1)]
+        # Score is the weighted average, top 1 result should be the most important
+        self.score = sum(x * y for x, y in zip(scores, weights)) / sum(weights)
         # Test against the threshold
         self.success = self.score >= self.threshold
         return self.score
 
-    async def _measure_single(self, message: str, document: str) -> float:
+    async def _measure_single(self, document: str, message: str) -> float:
         score = 0
         llm_res, _ = await self.model.a_generate(
             f"""
@@ -102,37 +107,17 @@ class RagRelevancyMetric(BaseMetric):
         return "RAG Relevancy"
 
 
-@pytest.mark.parametrize(
-    "user_message, user_lang",
-    [
-        pytest.param(
-            "accident de voiture sur autoroute",
-            "fr-FR",
-            id="car_fr",
-        ),
-        pytest.param(
-            "cyber-attaque par DDOS sur mon entreprise",
-            "fr-FR",
-            id="cyberattack_fr",
-        ),
-        pytest.param(
-            "refus passage expert souhaite contre-expertise",
-            "fr-FR",
-            id="expertise_fr",
-        ),
-        pytest.param(
-            "grêlons champ réculte tomates perdue indemnisation",
-            "fr-FR",
-            id="hail_fr",
-        ),
-    ],
-)
-@pytest.mark.asyncio  # Allow async functions
+@with_conversations
+@pytest.mark.asyncio(scope="session")
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_relevancy(
+    call: CallStateModel,
+    claim_tests_excl: list[str],
+    claim_tests_incl: list[str],
     deepeval_model: GPTModel,
-    user_lang: str,
-    user_message: str,
+    expected_output: str,
+    inputs: list[str],
+    lang: str,
 ) -> None:
     """
     Test the relevancy of the Message to the training data.
@@ -144,20 +129,53 @@ async def test_relevancy(
 
     Test is repeated 10 times to catch multi-threading and concurrency issues.
     """
-    search = CONFIG.ai_search.instance()
+    # Set call language
+    call.lang = lang
 
-    # Init data
-    res_models = await search.training_asearch_all(text=user_message, lang=user_lang)
-    res_list = [d.content for d in res_models or []]
+    # Fill call with messages
+    for input in inputs:
+        call.messages.append(
+            MessageModel(content=input, persona=MessagePersonaEnum.HUMAN)
+        )
 
-    _logger.info(f"Message: {user_message}")
-    _logger.info(f"Data: {res_list}")
+    # Get trainings
+    trainings = await call.trainings(cache_only=False)
+
+    logger.info(f"Messages: {call.messages}")
+    logger.info(f"Trainings: {trainings}")
+
+    if not trainings:
+        logger.warning("No training data found, please add objects in AI Search")
+        return
+
+    # Confirm top N config is respected
+    len_trainings = len(trainings)
+    max_documents = (
+        CONFIG.ai_search.top_n_documents * CONFIG.ai_search.expansion_n_messages
+    )
+    assume(
+        len_trainings <= max_documents,
+        f"Data is too large, should be max {max_documents}, actual is {len_trainings}",
+    )
+
+    # Confirm strictness config is respected
+    min_score = CONFIG.ai_search.strictness
+    for training in trainings or []:
+        actual_score = training.score
+        assume(
+            actual_score >= min_score,
+            f"Model score is too low, should be min {min_score}, actual is {actual_score}",
+        )
 
     # Configure LLM tests
+    full_input = " ".join([message.content for message in call.messages])
     test_case = LLMTestCase(
         actual_output="",  # Not used
-        input=user_message,
-        retrieval_context=res_list,
+        input=full_input,
+        retrieval_context=[
+            TypeAdapter(TrainingModel).dump_json(training).decode()
+            for training in trainings
+        ],
     )
 
     # Define LLM metrics

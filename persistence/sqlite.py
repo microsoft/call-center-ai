@@ -1,11 +1,12 @@
-from aiosqlite import connect as sqlite_connect, Connection as SQLiteConnection
+from aiosqlite import connect as sqlite_connect, Connection
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.call import CallStateModel
 from models.readiness import ReadinessStatus
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
+from persistence.icache import ICache
 from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
@@ -17,17 +18,26 @@ import os
 # Instrument sqlite
 SQLite3Instrumentor().instrument()
 
-_logger = build_logger(__name__)
-
 
 class SqliteStore(IStore):
+    _client: Connection
     _config: SqliteModel
+    _first_run_done: bool = False
 
-    def __init__(self, config: SqliteModel):
-        _logger.info(
-            f"Using SQLite database at {config.path} with table {config.table}"
-        )
+    def __init__(self, cache: ICache, config: SqliteModel):
+        super().__init__(cache)
+        logger.info(f"Using SQLite database at {config.path} with table {config.table}")
         self._config = config
+
+        # Create folder if does not exist
+        db_path = self._config.full_path()
+        if not os.path.isfile(db_path):
+            db_folder = db_path[: db_path.rfind("/")]
+            os.makedirs(name=db_folder, exist_ok=True)
+            self._first_run_done = True
+
+        # Init client
+        self._client = sqlite_connect(database=db_path)
 
     async def areadiness(self) -> ReadinessStatus:
         """
@@ -40,11 +50,22 @@ class SqliteStore(IStore):
                 await db.execute("SELECT 1")
             return ReadinessStatus.OK
         except Exception as e:
-            _logger.error(f"Error requesting SQLite, {e}")
+            logger.error(f"Error requesting SQLite, {e}")
         return ReadinessStatus.FAIL
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
-        _logger.debug(f"Loading call {call_id}")
+        logger.debug(f"Loading call {call_id}")
+
+        # Try cache
+        cache_key = self._cache_key_call_id(call_id)
+        call = await self._cache.aget(cache_key)
+        if call:
+            try:
+                return CallStateModel.model_validate_json(call)
+            except ValidationError as e:
+                logger.debug(f"Parsing error: {e.errors()}")
+
+        # Try live
         call = None
         async with self._use_db() as db:
             cursor = await db.execute(
@@ -56,13 +77,20 @@ class SqliteStore(IStore):
                 try:
                     call = CallStateModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
+
+        # Update cache
+        if call:
+            await self._cache.aset(cache_key, call.model_dump_json())
+
         return call
 
     async def call_aset(self, call: CallStateModel) -> bool:
         # TODO: Catch exceptions and return False if something goes wrong
+
+        # Update live
         data = call.model_dump_json(exclude_none=True)
-        _logger.debug(f"Saving call {call.call_id}: {data}")
+        logger.debug(f"Saving call {call.call_id}: {data}")
         async with self._use_db() as db:
             await db.execute(
                 f"INSERT OR REPLACE INTO {self._config.table} VALUES (?, ?)",
@@ -72,10 +100,26 @@ class SqliteStore(IStore):
                 ),
             )
             await db.commit()
+
+        # Update cache
+        cache_key = self._cache_key_call_id(call.call_id)
+        await self._cache.aset(cache_key, data)
+
         return True
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
-        _logger.debug(f"Loading last call for {phone_number}")
+        logger.debug(f"Loading last call for {phone_number}")
+
+        # Try cache
+        cache_key = self._cache_key_phone_number(phone_number)
+        call = await self._cache.aget(cache_key)
+        if call:
+            try:
+                return CallStateModel.model_validate_json(call)
+            except ValidationError as e:
+                logger.debug(f"Parsing error: {e.errors()}")
+
+        # Try live
         call = None
         async with self._use_db() as db:
             cursor = await db.execute(
@@ -90,7 +134,12 @@ class SqliteStore(IStore):
                 try:
                     call = CallStateModel.model_validate_json(row[0])
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
+
+        # Update cache
+        if call:
+            await self._cache.aset(cache_key, call.model_dump_json())
+
         return call
 
     async def call_asearch_all(
@@ -98,7 +147,8 @@ class SqliteStore(IStore):
         count: int,
         phone_number: Optional[str] = None,
     ) -> tuple[Optional[list[CallStateModel]], int]:
-        _logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        # TODO: Cache results
         calls, total = await asyncio.gather(
             self._call_asearch_all_calls_worker(count, phone_number),
             self._call_asearch_all_total_worker(phone_number),
@@ -112,8 +162,13 @@ class SqliteStore(IStore):
     ) -> Optional[list[CallStateModel]]:
         calls: list[CallStateModel] = []
         async with self._use_db() as db:
+            where_clause = (
+                "WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)"
+                if phone_number
+                else ""
+            )
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""} ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT ?",
+                f"SELECT data FROM {self._config.table} {where_clause} ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT ?",
                 (
                     (
                         phone_number,  # data.initiate.phone_number
@@ -131,7 +186,7 @@ class SqliteStore(IStore):
                 try:
                     calls.append(CallStateModel.model_validate_json(row[0]))
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
         return calls
 
     async def _call_asearch_all_total_worker(
@@ -139,8 +194,13 @@ class SqliteStore(IStore):
         phone_number: Optional[str] = None,
     ) -> int:
         async with self._use_db() as db:
+            where_clause = (
+                "WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)"
+                if phone_number
+                else ""
+            )
             cursor = await db.execute(
-                f"SELECT COUNT(*) FROM {self._config.table} {"WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?)" if phone_number else ""}",
+                f"SELECT COUNT(*) FROM {self._config.table} {where_clause}",
                 (
                     (
                         phone_number,  # data.initiate.phone_number
@@ -153,13 +213,13 @@ class SqliteStore(IStore):
             row = await cursor.fetchone()
         return int(row[0]) if row else 0
 
-    async def _init_db(self, db: SQLiteConnection):
+    async def _init_db(self, db: Connection):
         """
         Initialize the database.
 
         See: https://sqlite.org/cgi/src/doc/wal2/doc/wal2.md
         """
-        _logger.info("First run, init database")
+        logger.info("First run, init database")
         # Optimize performance for concurrent writes
         await db.execute("PRAGMA journal_mode=WAL")
         # Create table
@@ -181,20 +241,11 @@ class SqliteStore(IStore):
         await db.commit()
 
     @asynccontextmanager
-    async def _use_db(self) -> AsyncGenerator[SQLiteConnection, None]:
+    async def _use_db(self) -> AsyncGenerator[Connection, None]:
         """
         Generate the SQLite client and close it after use.
         """
-        # Create folder
-        db_path = self._config.full_path()
-        first_run = False
-        if not os.path.isfile(db_path):
-            db_folder = db_path[: db_path.rfind("/")]
-            os.makedirs(name=db_folder, exist_ok=True)
-            first_run = True
-
-        # Connect to DB
-        async with sqlite_connect(database=db_path) as db:
-            if first_run:
-                await self._init_db(db)
-            yield db
+        async with self._client as client:
+            if self._first_run_done:
+                await self._init_db(client)
+            yield client

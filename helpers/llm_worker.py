@@ -8,8 +8,7 @@ from azure.ai.contentsafety.models import (
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError, ServiceRequestError
 from helpers.config import CONFIG
-from contextlib import asynccontextmanager
-from helpers.logging import build_logger, TRACER
+from helpers.logging import logger, tracer
 from openai import (
     APIConnectionError,
     APIResponseValidationError,
@@ -50,6 +49,7 @@ from os import environ
 from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
 import json
 import tiktoken
+from helpers.http import azure_transport
 
 
 # Instrument OpenAI
@@ -58,20 +58,14 @@ environ["TRACELOOP_TRACE_CONTENT"] = str(
 )  # Instrumentation logs prompts, completions, and embeddings to span attributes, set to False to lower monitoring costs or to avoid logging PII
 OpenAIInstrumentor(enrich_token_usage=True).instrument()
 
-_logger = build_logger(__name__)
-_logger.info(
+logger.info(
     f"Using LLM models {CONFIG.llm.selected(False).model} (primary) and {CONFIG.llm.selected(True).model} (backup)"
 )
-_logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
+logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 
 _cache = CONFIG.cache.instance()
 ModelType = TypeVar("ModelType", bound=BaseModel)
-_retried_exceptions = [
-    APIConnectionError,
-    APIResponseValidationError,
-    InternalServerError,
-    RateLimitError,
-]
+_contentsafety_client: Optional[ContentSafetyClient] = None
 
 
 class SafetyCheckError(Exception):
@@ -85,7 +79,16 @@ class SafetyCheckError(Exception):
         return self.message
 
 
-@TRACER.start_as_current_span("completion_stream")
+_retried_exceptions = [
+    APIConnectionError,
+    APIResponseValidationError,
+    InternalServerError,
+    RateLimitError,
+    SafetyCheckError,
+]
+
+
+@tracer.start_as_current_span("completion_stream")
 async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
@@ -111,7 +114,7 @@ async def completion_stream(
     except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
-        _logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
+        logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
 
     # Try more times with backup LLM, if it fails again, raise the error
     retryed = AsyncRetrying(
@@ -153,79 +156,87 @@ async def _completion_stream_worker(
                 yield chunck
             return
         except ValidationError as e:
-            _logger.debug(f"Parsing error: {e.errors()}")
+            logger.debug(f"Parsing error: {e.errors()}")
 
     # Try live
     to_cache: list[ChoiceDelta] = []
-    async with _use_llm(is_backup) as (client, platform):
-        extra = {}
-        if tools:
-            extra["tools"] = tools  # Add tools if any
+    client, platform = _use_llm(is_backup)
+    extra = {}
+    if tools:
+        extra["tools"] = tools  # Add tools if any
 
-        prompt = _limit_messages(
-            context=platform.context,
-            max_messages=20,  # Quick response
-            max_tokens=max_tokens,
-            messages=messages,
-            model=platform.model,
-            system=system,
-            tools=tools,
-        )  # Limit to 20 messages for quick response and avoid hallucinations
-        chat_kwargs = {
-            "max_tokens": max_tokens,
-            "messages": prompt,
-            "model": platform.model,
-            "seed": 42,  # Reproducible results
-            "temperature": 0,  # Most focused and deterministic
-            **extra,
-        }  # Shared kwargs for both streaming and non-streaming
+    prompt = _limit_messages(
+        context_window=platform.context,
+        max_messages=20,  # Quick response
+        max_tokens=max_tokens,
+        messages=messages,
+        model=platform.model,
+        system=system,
+        tools=tools,
+    )  # Limit to 20 messages for quick response and avoid hallucinations
+    chat_kwargs = {
+        "max_tokens": max_tokens,
+        "messages": prompt,
+        "model": platform.model,
+        "seed": 42,  # Reproducible results
+        "temperature": 0,  # Most focused and deterministic
+        **extra,
+    }  # Shared kwargs for both streaming and non-streaming
 
-        if platform.streaming:  # Streaming
-            stream: AsyncStream[ChatCompletionChunk] = (
-                await client.chat.completions.create(
-                    **chat_kwargs,
-                    stream=True,
+    if platform.streaming:  # Streaming
+        stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
+            **chat_kwargs,
+            stream=True,
+        )
+        async for chunck in stream:
+            choices = chunck.choices
+            if not choices:  # Skip empty choices, happens sometimes with GPT-4 Turbo
+                continue
+            choice = choices[0]
+            if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+                raise SafetyCheckError(
+                    f"Content filter detected for text: {choice.delta.content}"
                 )
-            )
-            async for chunck in stream:
-                choices = chunck.choices
-                if (
-                    not choices
-                ):  # Skip empty choices, happens sometimes with GPT-4 Turbo
-                    continue
-                delta = choices[0].delta
-                yield delta
-                to_cache.append(delta)
-
-        else:  # Non-streaming, emulate streaming with a single completion
-            completion: ChatCompletion = await client.chat.completions.create(
-                **chat_kwargs
-            )
-            message = completion.choices[0].message
-            delta = ChoiceDelta(
-                content=message.content,
-                role=message.role,
-                tool_calls=[
-                    ChoiceDeltaToolCall(
-                        id=tool.id,
-                        index=0,
-                        type=tool.type,
-                        function=ChoiceDeltaToolCallFunction(
-                            arguments=tool.function.arguments,
-                            name=tool.function.name,
-                        ),
-                    )
-                    for tool in message.tool_calls or []
-                ],
-            )
+            if choice.finish_reason == "length":
+                logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+            delta = choice.delta
             yield delta
             to_cache.append(delta)
+
+    else:  # Non-streaming, emulate streaming with a single completion
+        completion: ChatCompletion = await client.chat.completions.create(**chat_kwargs)
+        choice = completion.choices[0]
+        if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+            raise SafetyCheckError(
+                f"Content filter detected for text: {choice.message.content}"
+            )
+        if choice.finish_reason == "length":
+            logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+        message = choice.message
+        delta = ChoiceDelta(
+            content=message.content,
+            role=message.role,
+            tool_calls=[
+                ChoiceDeltaToolCall(
+                    id=tool.id,
+                    index=0,
+                    type=tool.type,
+                    function=ChoiceDeltaToolCallFunction(
+                        arguments=tool.function.arguments,
+                        name=tool.function.name,
+                    ),
+                )
+                for tool in message.tool_calls or []
+            ],
+        )
+        yield delta
+        to_cache.append(delta)
 
     # Update cache
     await _cache.aset(cache_key, TypeAdapter(list[ChoiceDelta]).dump_json(to_cache))
 
 
-@TRACER.start_as_current_span("completion_sync")
+@tracer.start_as_current_span("completion_sync")
 async def completion_sync(
     max_tokens: int,
     system: list[ChatCompletionSystemMessageParam],
@@ -247,7 +258,7 @@ async def completion_sync(
     except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
-        _logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
+        logger.warning(f"{e.__class__.__name__} error, trying with backup LLM")
 
     # Try more times with backup LLM, if it fails again, raise the error
     retryed = AsyncRetrying(
@@ -287,28 +298,35 @@ async def _completion_sync_worker(
 
     # Try live
     content = None
-    async with _use_llm(is_backup) as (client, platform):
-        extra = {}
-        if json_output:
-            extra["response_format"] = {"type": "json_object"}
+    client, platform = _use_llm(is_backup)
+    extra = {}
+    if json_output:
+        extra["response_format"] = {"type": "json_object"}
 
-        prompt = _limit_messages(
-            context=platform.context,
-            max_tokens=max_tokens,
-            messages=[],
-            model=platform.model,
-            system=system,
-        )
+    prompt = _limit_messages(
+        context_window=platform.context,
+        max_tokens=max_tokens,
+        messages=[],
+        model=platform.model,
+        system=system,
+    )
 
-        res = await client.chat.completions.create(
-            max_tokens=max_tokens,
-            messages=prompt,
-            model=platform.model,
-            seed=42,  # Reproducible results
-            temperature=0,  # Most focused and deterministic
-            **extra,
+    res = await client.chat.completions.create(
+        max_tokens=max_tokens,
+        messages=prompt,
+        model=platform.model,
+        seed=42,  # Reproducible results
+        temperature=0,  # Most focused and deterministic
+        **extra,
+    )
+    choice = res.choices[0]
+    if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+        raise SafetyCheckError(
+            f"Content filter detected for text: {choice.message.content}"
         )
-        content = res.choices[0].message.content
+    if choice.finish_reason == "length":
+        logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+    content = choice.message.content
 
     # Update cache
     if content:
@@ -317,8 +335,7 @@ async def _completion_sync_worker(
     if not content:
         return None
     if not json_output:
-        await safety_check(content)
-    return content
+        return await safety_check(content)
 
 
 @retry(
@@ -327,7 +344,7 @@ async def _completion_sync_worker(
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.5, max=30),
 )
-@TRACER.start_as_current_span("completion_model_sync")
+@tracer.start_as_current_span("completion_model_sync")
 async def completion_model_sync(
     max_tokens: int,
     model: Type[ModelType],
@@ -349,7 +366,7 @@ async def completion_model_sync(
 
 
 def _limit_messages(
-    context: int,
+    context_window: int,
     max_tokens: int,
     messages: list[MessageModel],
     model: str,
@@ -370,7 +387,7 @@ def _limit_messages(
     The context size is the maximum number of tokens allowed by the model. The messages are selected from the newest to the oldest, until the context or the maximum number of messages is reached.
     """
     counter = 0
-    max_context = context - max_tokens
+    max_context = context_window - max_tokens
     selected_messages = []
     tokens = 0
     total = min(len(system) + len(messages), max_messages)
@@ -399,35 +416,43 @@ def _limit_messages(
         selected_messages += openai_message[::-1]
         tokens += new_tokens
 
-    _logger.info(f"Using {counter}/{total} messages ({tokens} tokens) as context")
+    logger.info(f"Using {counter}/{total} messages ({tokens} tokens) as context")
     return [
         *system,
         *selected_messages[::-1],
     ]
 
 
-@TRACER.start_as_current_span("safety_check")
-async def safety_check(text: str) -> None:
+@tracer.start_as_current_span("safety_check")
+async def safety_check(text: str) -> str:
     """
     Raise `SafetyCheckError` if the text is safe, nothing otherwise.
 
     Text can be returned both safe and censored, before containing unsafe content.
     """
-    if not text:  # Empty text is safe
-        return
+    safe_value = "safe"
+
+    # Try cache
+    cache_key = f"{__name__}-safety_check-{text}"
+    cached = await _cache.aget(cache_key)
+    if cached:
+        decoded = cached.decode()
+        if decoded == safe_value:
+            return text  # Return safe text
+        raise SafetyCheckError(decoded)
 
     try:
         res = await _contentsafety_analysis(text)
     except ServiceRequestError as e:
-        _logger.error(f"Request error: {e}")
-        return  # Assume safe
+        logger.error(f"Request error: {e}")
+        return text  # Assume safe
     except HttpResponseError as e:
-        _logger.error(f"Response error: {e}")
-        return  # Assume safe
+        logger.error(f"Response error: {e}")
+        return text  # Assume safe
 
     # Replace blocklist items with censored text
     for match in res.blocklists_match or []:
-        _logger.debug(f"Matched blocklist item: {match.blocklist_item_text}")
+        logger.debug(f"Matched blocklist item: {match.blocklist_item_text}")
         text = text.replace(
             match.blocklist_item_text, "*" * len(match.blocklist_item_text)
         )
@@ -459,12 +484,15 @@ async def safety_check(text: str) -> None:
 
     # True if all categories are safe
     safety = hate_result and self_harm_result and sexual_result and violence_result
-    _logger.debug(f'Text safety "{safety}" for text: {text}')
+    logger.debug(f'Text safety "{safety}" for text: {text}')
 
     if not safety:
-        raise SafetyCheckError(
-            f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}: {text}"
-        )
+        error_message = f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}: {text}"
+        await _cache.aset(cache_key, error_message)
+        raise SafetyCheckError(error_message)
+
+    await _cache.aset(cache_key, safe_value)
+    return text  # Return updated text
 
 
 @retry(
@@ -479,15 +507,16 @@ async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
 
     Catch errors for a maximum of 3 times (internal + `HttpResponseError`), then raise the error.
     """
-    async with _use_contentsafety() as client:
-        return await client.analyze_text(
-            AnalyzeTextOptions(
-                blocklist_names=CONFIG.content_safety.blocklists,
-                halt_on_blocklist_hit=False,
-                output_type="EightSeverityLevels",
-                text=text,
-            )
+    client = await _use_contentsafety()
+    res = await client.analyze_text(
+        AnalyzeTextOptions(
+            blocklist_names=CONFIG.content_safety.blocklists,
+            halt_on_blocklist_hit=False,
+            output_type="EightSeverityLevels",
+            text=text,
         )
+    )
+    return res
 
 
 def _contentsafety_category_test(
@@ -504,7 +533,7 @@ def _contentsafety_category_test(
     detection = next((item for item in res if item.category == category), None)
 
     if detection and detection.severity and detection.severity > score:
-        _logger.debug(f"Matched {category} with severity {detection.severity}")
+        logger.debug(f"Matched {category} with severity {detection.severity}")
         return False
     return True
 
@@ -520,7 +549,7 @@ def _count_tokens(content: str, model: str) -> int:
         encoding_name = tiktoken.encoding_name_for_model(model)
     except KeyError:
         encoding_name = tiktoken.encoding_name_for_model("gpt-3.5")
-        _logger.warning(f"Unknown model {model}, using {encoding_name} encoding")
+        logger.warning(f"Unknown model {model}, using {encoding_name} encoding")
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 
@@ -529,36 +558,31 @@ def _llm_key(is_backup: bool) -> str:
     return f"{platform.model}-{platform.context}"
 
 
-@asynccontextmanager
-async def _use_llm(
+def _use_llm(
     is_backup: bool,
-) -> AsyncGenerator[
-    Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel], None
-]:
+) -> Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel]:
     """
     Returns an LLM client and platform model.
 
     The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
     """
-    async with CONFIG.llm.selected(is_backup).instance() as (client, platform):
-        yield client, platform
+    return CONFIG.llm.selected(is_backup).instance()
 
 
-@asynccontextmanager
-async def _use_contentsafety() -> AsyncGenerator[ContentSafetyClient, None]:
+async def _use_contentsafety() -> ContentSafetyClient:
     """
     Returns a Content Safety client.
     """
-    client = ContentSafetyClient(
-        # Azure deployment
-        endpoint=CONFIG.content_safety.endpoint,
-        # Authentication with API key
-        credential=AzureKeyCredential(
-            CONFIG.content_safety.access_key.get_secret_value()
-        ),
-    )
-
-    try:
-        yield client
-    finally:
-        await client.close()
+    global _contentsafety_client
+    if not isinstance(_contentsafety_client, ContentSafetyClient):
+        _contentsafety_client = ContentSafetyClient(
+            # Azure deployment
+            endpoint=CONFIG.content_safety.endpoint,
+            # Performance
+            transport=await azure_transport(),
+            # Authentication
+            credential=AzureKeyCredential(
+                CONFIG.content_safety.access_key.get_secret_value()
+            ),
+        )
+    return _contentsafety_client

@@ -1,26 +1,23 @@
+from aiohttp_retry import ExponentialRetry, RetryClient
+from helpers.http import aiohttp_session
 from helpers.config_models.sms import TwilioModel
-from helpers.logging import build_logger
+from helpers.logging import logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessStatus
 from persistence.isms import ISms
 from twilio.base.exceptions import TwilioRestException
+from twilio.http.async_http_client import AsyncTwilioHttpClient
 from twilio.rest import Client
-
-
-_logger = build_logger(__name__)
+from typing import Optional
 
 
 class TwilioSms(ISms):
-    _client: Client
+    _client: Optional[Client] = None
     _config: TwilioModel
 
     def __init__(self, config: TwilioModel):
-        _logger.info(f"Using Twilio from number {config.phone_number}")
+        logger.info(f"Using Twilio from number {config.phone_number}")
         self._config = config
-        self._client = Client(
-            password=config.auth_token.get_secret_value(),
-            username=config.account_sid,
-        )  # TODO: Use async client, but get multiple "attached to a different loop" errors with AsyncTwilioHttpClient
 
     async def areadiness(self) -> ReadinessStatus:
         """
@@ -29,35 +26,53 @@ class TwilioSms(ISms):
         This only check if the Twilio API is reachable and the account has remaining balance.
         """
         account_sid = self._config.account_sid
+        client = await self._use_client()
         try:
-            account = self._client.api.accounts(account_sid).fetch()
+            account = await client.api.accounts(account_sid).fetch_async()
             balance = account.balance.fetch()
             assert balance.balance and float(balance.balance) > 0
             return ReadinessStatus.OK
         except AssertionError:
-            _logger.error("Readiness test failed", exc_info=True)
+            logger.error("Readiness test failed", exc_info=True)
         return ReadinessStatus.FAIL
 
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
-        _logger.info(f"Sending SMS to {phone_number}")
+        logger.info(f"Sending SMS to {phone_number}")
         success = False
-        _logger.info(f"SMS content: {content}")
+        logger.info(f"SMS content: {content}")
+        client = await self._use_client()
         try:
-            res = self._client.messages.create(
+            res = await client.messages.create_async(
                 body=content,
                 from_=str(self._config.phone_number),
                 to=phone_number,
             )
             # TODO: How to check the delivery status? Seems present in "res.status" but not documented
             if res.error_message:
-                _logger.warning(
+                logger.warning(
                     f"Failed SMS to {phone_number}, status {res.error_code}, error {res.error_message}"
                 )
             else:
-                _logger.debug(f"SMS sent to {phone_number}")
+                logger.debug(f"SMS sent to {phone_number}")
                 success = True
         except TwilioRestException as e:
-            _logger.error(f"Error sending SMS: {e}")
+            logger.error(f"Error sending SMS: {e}")
         except Exception:
-            _logger.warning(f"Failed SMS to {phone_number}", exc_info=True)
+            logger.warning(f"Failed SMS to {phone_number}", exc_info=True)
         return success
+
+    async def _use_client(self) -> Client:
+        if not self._client:
+            http = AsyncTwilioHttpClient()
+            http.session = RetryClient(
+                client_session=await aiohttp_session(),
+                retry_options=ExponentialRetry(attempts=3),
+            )  # Use the same session as the rest of the application, and retry 3 times with exponential backoff with the same lib as Twilio
+            self._client = Client(
+                # Performance
+                http_client=http,
+                # Authentication
+                password=self._config.auth_token.get_secret_value(),
+                username=self._config.account_sid,
+            )
+        return self._client

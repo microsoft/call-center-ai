@@ -1,8 +1,8 @@
-from azure.communication.callautomation import CallAutomationClient
-from helpers.call_utils import ContextEnum as CallContextEnum, handle_play
+from azure.communication.callautomation.aio import CallAutomationClient
+from helpers.call_utils import ContextEnum as CallContextEnum, handle_recognize_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
-from helpers.logging import build_logger
+from helpers.logging import logger
 from inspect import getmembers, isfunction
 from models.call import CallStateModel
 from models.message import (
@@ -14,11 +14,11 @@ from models.message import (
 from models.reminder import ReminderModel
 from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
-from typing import Awaitable, Callable, Annotated, Literal, TypedDict
+from typing import Awaitable, Callable, Annotated, Literal
+from typing_extensions import TypedDict
 import asyncio
 
 
-_logger = build_logger(__name__)
 _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()
 
@@ -30,25 +30,22 @@ class UpdateClaimDict(TypedDict):
 
 class LlmPlugins:
     call: CallStateModel
-    cancellation_callback: Callable[[], Awaitable]
     client: CallAutomationClient
-    post_call_intelligence: Callable[[CallStateModel], None]
+    post_callback: Callable[[CallStateModel], None]
     style: MessageStyleEnum = MessageStyleEnum.NONE
-    user_callback: Callable[[str, MessageStyleEnum], Awaitable]
+    tts_callback: Callable[[str, MessageStyleEnum], Awaitable]
 
     def __init__(
         self,
         call: CallStateModel,
-        cancellation_callback: Callable[[], Awaitable],
         client: CallAutomationClient,
-        post_call_intelligence: Callable[[CallStateModel], None],
-        user_callback: Callable[[str, MessageStyleEnum], Awaitable],
+        post_callback: Callable[[CallStateModel], None],
+        tts_callback: Callable[[str, MessageStyleEnum], Awaitable],
     ):
         self.call = call
-        self.cancellation_callback = cancellation_callback
         self.client = client
-        self.post_call_intelligence = post_call_intelligence
-        self.user_callback = user_callback
+        self.post_callback = post_callback
+        self.tts_callback = tts_callback
 
     async def end_call(self) -> str:
         """
@@ -66,12 +63,12 @@ class LlmPlugins:
         - 'Goodbye, see you tomorrow'
         - 'I want to hangup'
         """
-        await self.cancellation_callback()
-        await handle_play(
+        await handle_recognize_text(
             call=self.call,
             client=self.client,
             context=CallContextEnum.GOODBYE,
             text=await CONFIG.prompts.tts.goodbye(self.call),
+            timeout_error=False,  # Shouldn't trigger anything, as call is ending
         )
         return "Call ended"
 
@@ -79,7 +76,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the creation of a new claim. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a new claim for a car accident.', 'A new claim for a stolen watch is being created.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'A new claim for a stolen watch is being created.'
+            - 'I am creating a new claim for a car accident.'
+            - 'Please wait while I create your new folder about the fire.'
+            """,
         ],
     ) -> str:
         """
@@ -93,9 +101,9 @@ class LlmPlugins:
         - Approval from the customer must be explicitely given (e.g. 'I want to create a new claim')
         - This should be used only when the subject is totally different
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # Launch post-call intelligence for the current call
-        self.post_call_intelligence(self.call)
+        self.post_callback(self.call)
         # Store the last message and use it at first message of the new claim
         last_message = self.call.messages[-1]
         call = CallStateModel(
@@ -117,7 +125,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am creating a reminder for next week to call you back.', 'A todo for next week is planned.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'A todo for next week is planned.'
+            - 'I am creating a reminder for next week to call you back.'
+            - 'The rendez-vous is scheduled for tomorrow.'
+            """,
         ],
         description: Annotated[
             str,
@@ -148,7 +167,7 @@ class LlmPlugins:
         - If a reminder already exists, it will be updated with the new values
         - The due date should be in the future
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
 
         # Check if reminder already exists, if so update it
         for reminder in self.call.reminders:
@@ -178,7 +197,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'Both your name and the incident date are updated.'
+            - 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'
+            - 'The incident date is now set to yesterday at 18h.'
+            """,
         ],
         updates: Annotated[
             list[UpdateClaimDict],
@@ -218,7 +248,7 @@ class LlmPlugins:
         - For values, it is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now)
         - It is best to update multiple fields at once
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # Update all claim fields
         res = "# Updated fields"
         for field in updates:
@@ -253,12 +283,12 @@ class LlmPlugins:
         - 'I want to talk to a human'
         - 'I want to talk to a real person'
         """
-        await self.cancellation_callback()
-        await handle_play(
+        await handle_recognize_text(
             call=self.call,
             client=self.client,
             context=CallContextEnum.CONNECT_AGENT,
             text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
+            timeout_error=False,  # Shouldn't trigger anything, as conversation with Assistant is ending
         )
         return "Transferring to human agent"
 
@@ -266,7 +296,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the search, in the same language as the customer. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am searching for the document about the car accident.', 'I am looking for the contract details.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'I am looking for the article about the new law on cyber security.'
+            - 'I am looking in our database for your car insurance contract.'
+            - 'I am searching for the procedure to declare a stolen luxury watch.'
+            """,
         ],
         queries: Annotated[
             list[str],
@@ -283,7 +324,7 @@ class LlmPlugins:
         # Searchable topics
         contract, law, regulation, article, procedure, guide
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # Execute in parallel
         tasks = await asyncio.gather(
             *[
@@ -303,7 +344,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the action. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am notifying the emergency services.', 'Police number is confirmed.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'I am calling the firefighters to help you with the fire.'
+            - 'I am contacting the police for the accident with your neighbor.'
+            - 'I am notifying the emergency services right now.'
+            """,
         ],
         reason: Annotated[
             str,
@@ -337,9 +389,9 @@ class LlmPlugins:
         - 'I am stuck in a car in fire'
         - 'My neighbor is having a heart attack'
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
-        _logger.info(
+        logger.info(
             f"Notifying {service}, location {location}, contact {contact}, reason {reason}."
         )
         return f"Notifying {service} for {reason}."
@@ -348,7 +400,18 @@ class LlmPlugins:
         self,
         customer_response: Annotated[
             str,
-            "Phrase used to confirm the action. This phrase will be spoken to the user. Describe what you're doing in one sentence. Example: 'I am sending a SMS to your phone number.', 'SMS with the details is sent.'.",
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'I am sending a SMS to your phone number.'
+            - 'I am texting you the information right now.'
+            - 'SMS with the details is sent.'
+            """,
         ],
         message: Annotated[
             str,
@@ -363,7 +426,7 @@ class LlmPlugins:
         - Confirm a detail like a reference number, if there is a misunderstanding
         - Send a confirmation, if the customer wants to have a written proof
         """
-        await self.user_callback(customer_response, self.style)
+        await self.tts_callback(customer_response, self.style)
         success = await _sms.asend(
             content=message,
             phone_number=self.call.initiate.phone_number,

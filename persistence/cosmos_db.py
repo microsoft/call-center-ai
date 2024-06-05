@@ -1,27 +1,28 @@
-import asyncio
-from azure.core.exceptions import ServiceResponseError
+from azure.cosmos import ConsistencyLevel
 from azure.cosmos.aio import CosmosClient, ContainerProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from contextlib import asynccontextmanager
 from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
-from helpers.logging import build_logger
+from helpers.http import azure_transport
+from helpers.logging import logger
 from models.call import CallStateModel
 from models.readiness import ReadinessStatus
+from persistence.icache import ICache
 from persistence.istore import IStore
 from pydantic import ValidationError
 from typing import AsyncGenerator, Optional
 from uuid import UUID, uuid4
-
-
-_logger = build_logger(__name__)
+import asyncio
 
 
 class CosmosDbStore(IStore):
+    _client: Optional[CosmosClient] = None
     _config: CosmosDbModel
 
-    def __init__(self, config: CosmosDbModel):
-        _logger.info(f"Using Cosmos DB {config.database}/{config.container}")
+    def __init__(self, cache: ICache, config: CosmosDbModel):
+        super().__init__(cache)
+        logger.info(f"Using Cosmos DB {config.database}/{config.container}")
         self._config = config
 
     async def areadiness(self) -> ReadinessStatus:
@@ -43,7 +44,7 @@ class CosmosDbStore(IStore):
             # Test the item does not exist
             if await self._item_exists(test_id, test_partition):
                 return ReadinessStatus.FAIL
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 # Create a new item
                 await db.upsert_item(body=test_dict)
                 # Test the item is the same
@@ -60,28 +61,39 @@ class CosmosDbStore(IStore):
                 return ReadinessStatus.FAIL
             return ReadinessStatus.OK
         except AssertionError:
-            _logger.error("Readiness test failed", exc_info=True)
+            logger.error("Readiness test failed", exc_info=True)
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error requesting CosmosDB, {e}")
+            logger.error(f"Error requesting CosmosDB, {e}")
         return ReadinessStatus.FAIL
 
     async def _item_exists(self, test_id: str, partition_key: str) -> bool:
         exist = False
-        async with self._use_db() as db:
+        async with self._use_client() as db:
             try:
                 await db.read_item(item=test_id, partition_key=partition_key)
                 exist = True
             except CosmosHttpResponseError as e:
                 if e.status_code != 404:
-                    _logger.error(f"Error requesting CosmosDB, {e}")
+                    logger.error(f"Error requesting CosmosDB, {e}")
                     exist = True
         return exist
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
-        _logger.debug(f"Loading call {call_id}")
+        logger.debug(f"Loading call {call_id}")
+
+        # Try cache
+        cache_key = self._cache_key_call_id(call_id)
+        cached = await self._cache.aget(cache_key)
+        if cached:
+            try:
+                return CallStateModel.model_validate_json(cached)
+            except ValidationError as e:
+                logger.debug(f"Parsing error: {e.errors()}")
+
+        # Try live
         call = None
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 items = db.query_items(
                     query="SELECT * FROM c WHERE STRINGEQUALS(c.id, @id)",
                     parameters=[{"name": "@id", "value": str(call_id)}],
@@ -90,30 +102,56 @@ class CosmosDbStore(IStore):
                 try:
                     call = CallStateModel.model_validate(raw)
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB, {e}")
+            logger.error(f"Error accessing CosmosDB, {e}")
+
+        # Update cache
+        if call:
+            await self._cache.aset(cache_key, call.model_dump_json())
+
         return call
 
     async def call_aset(self, call: CallStateModel) -> bool:
+        logger.debug(f"Saving call {call.call_id}")
+
+        # Update live
         data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
-        _logger.debug(f"Saving call {call.call_id}: {data}")
+        logger.debug(f"Saving call {call.call_id}: {data}")
+        res = False
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 await db.upsert_item(body=data)
-            return True
+            res = True
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e}")
-            return False
+            logger.error(f"Error accessing CosmosDB: {e}")
+
+        # Update cache
+        if res:
+            cache_key = self._cache_key_call_id(call.call_id)
+            await self._cache.aset(cache_key, call.model_dump_json())
+
+        return res
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
-        _logger.debug(f"Loading last call for {phone_number}")
+        logger.debug(f"Loading last call for {phone_number}")
+
+        # Try cache
+        cache_key = self._cache_key_phone_number(phone_number)
+        cached = await self._cache.aget(cache_key)
+        if cached:
+            try:
+                return CallStateModel.model_validate_json(cached)
+            except ValidationError as e:
+                logger.debug(f"Parsing error: {e.errors()}")
+
+        # Try live
         call = None
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
                 items = db.query_items(
                     max_item_count=1,
                     query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.workflow.conversation_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
@@ -128,11 +166,16 @@ class CosmosDbStore(IStore):
                 try:
                     call = CallStateModel.model_validate(raw)
                 except ValidationError as e:
-                    _logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug(f"Parsing error: {e.errors()}")
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB: {e}")
+            logger.error(f"Error accessing CosmosDB: {e}")
+
+        # Update cache
+        if call:
+            await self._cache.aset(cache_key, call.model_dump_json())
+
         return call
 
     async def call_asearch_all(
@@ -140,7 +183,8 @@ class CosmosDbStore(IStore):
         count: int,
         phone_number: Optional[str] = None,
     ) -> tuple[Optional[list[CallStateModel]], int]:
-        _logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        # TODO: Cache results
         calls, total = await asyncio.gather(
             self._call_asearch_all_calls_worker(count, phone_number),
             self._call_asearch_all_total_worker(phone_number),
@@ -154,9 +198,14 @@ class CosmosDbStore(IStore):
     ) -> Optional[list[CallStateModel]]:
         calls: list[CallStateModel] = []
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
+                where_clause = (
+                    "WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)"
+                    if phone_number
+                    else ""
+                )
                 items = db.query_items(
-                    query=f"SELECT * FROM c {"WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""} ORDER BY c.created_at DESC OFFSET 0 LIMIT @count",
+                    query=f"SELECT * FROM c {where_clause} ORDER BY c.created_at DESC OFFSET 0 LIMIT @count",
                     parameters=[
                         {
                             "name": "@phone_number",
@@ -174,9 +223,9 @@ class CosmosDbStore(IStore):
                     try:
                         calls.append(CallStateModel.model_validate(raw))
                     except ValidationError as e:
-                        _logger.debug(f"Parsing error: {e.errors()}")
+                        logger.debug(f"Parsing error: {e.errors()}")
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB, {e}")
+            logger.error(f"Error accessing CosmosDB, {e}")
         return calls
 
     async def _call_asearch_all_total_worker(
@@ -184,9 +233,14 @@ class CosmosDbStore(IStore):
         phone_number: Optional[str] = None,
     ) -> int:
         try:
-            async with self._use_db() as db:
+            async with self._use_client() as db:
+                where_clause = (
+                    "WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)"
+                    if phone_number
+                    else ""
+                )
                 items = db.query_items(
-                    query=f"SELECT VALUE COUNT(1) FROM c {"WHERE STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)" if phone_number else ""}",
+                    query=f"SELECT VALUE COUNT(1) FROM c {where_clause}",
                     parameters=[
                         {
                             "name": "@phone_number",
@@ -196,27 +250,30 @@ class CosmosDbStore(IStore):
                 )
                 total: int = await anext(items)  # type: ignore
         except CosmosHttpResponseError as e:
-            _logger.error(f"Error accessing CosmosDB, {e}")
+            logger.error(f"Error accessing CosmosDB, {e}")
         return total if total else 0
 
     @asynccontextmanager
-    async def _use_db(self) -> AsyncGenerator[ContainerProxy, None]:
+    async def _use_client(self) -> AsyncGenerator[ContainerProxy, None]:
         """
         Generate the Cosmos DB client and close it after use.
         """
-        client = CosmosClient(
-            # Reliability
-            connection_timeout=10,
-            retry_backoff_factor=0.5,
-            retry_backoff_max=30,
-            retry_total=3,
-            # Azure deployment
-            url=self._config.endpoint,
-            # Authentication with API key
-            credential=self._config.access_key.get_secret_value(),
-        )
-        try:
+        if not self._client:
+            self._client = CosmosClient(
+                # Usage
+                consistency_level=ConsistencyLevel.Eventual,
+                # Reliability
+                connection_timeout=10,
+                retry_backoff_factor=0.5,
+                retry_backoff_max=30,
+                retry_total=3,
+                # Performance
+                transport=await azure_transport(),
+                # Azure deployment
+                url=self._config.endpoint,
+                # Authentication
+                credential=self._config.access_key.get_secret_value(),
+            )
+        async with self._client as client:
             database = client.get_database_client(self._config.database)
             yield database.get_container_client(self._config.container)
-        finally:
-            await client.close()

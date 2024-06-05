@@ -2,10 +2,10 @@ from azure.ai.translation.text.aio import TextTranslationClient
 from azure.ai.translation.text.models import TranslatedTextItem
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
-from contextlib import asynccontextmanager
+from helpers.http import azure_transport
 from helpers.config import CONFIG
-from helpers.logging import build_logger
-from typing import AsyncGenerator, Optional
+from helpers.logging import logger
+from typing import Optional
 from tenacity import (
     retry_if_exception_type,
     retry,
@@ -14,10 +14,10 @@ from tenacity import (
 )
 
 
-_logger = build_logger(__name__)
-_logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
+logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
 
 _cache = CONFIG.cache.instance()
+_client = Optional[TextTranslationClient]
 
 
 @retry(
@@ -45,15 +45,13 @@ async def translate_text(
 
     # Try live
     translation: Optional[str] = None
-    async with _use_client() as client:  # Perform translation
-        res: list[TranslatedTextItem] = await client.translate(
-            body=[text],
-            from_language=source_lang,
-            to_language=[target_lang],
-        )
-        translation = (
-            res[0].translations[0].text if res and res[0].translations else None
-        )
+    client = await _use_client()
+    res: list[TranslatedTextItem] = await client.translate(
+        body=[text],
+        from_language=source_lang,
+        to_language=[target_lang],
+    )
+    translation = res[0].translations[0].text if res and res[0].translations else None
 
     # Update cache
     await _cache.aset(cache_key, translation)
@@ -61,15 +59,20 @@ async def translate_text(
     return translation
 
 
-@asynccontextmanager
-async def _use_client() -> AsyncGenerator[TextTranslationClient, None]:
-    client = TextTranslationClient(
-        credential=AzureKeyCredential(
-            CONFIG.ai_translation.access_key.get_secret_value()
-        ),
-        endpoint=CONFIG.ai_translation.endpoint,
-    )
-    try:
-        yield client
-    finally:
-        await client.close()
+async def _use_client() -> TextTranslationClient:
+    """
+    Generate the Translation client and close it after use.
+    """
+    global _client
+    if not isinstance(_client, TextTranslationClient):
+        _client = TextTranslationClient(
+            # Performance
+            transport=await azure_transport(),
+            # Azure deployment
+            endpoint=CONFIG.ai_translation.endpoint,
+            # Authentication
+            credential=AzureKeyCredential(
+                CONFIG.ai_translation.access_key.get_secret_value()
+            ),
+        )
+    return _client

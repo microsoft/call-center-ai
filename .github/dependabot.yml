@@ -10,8 +10,3 @@ updates:
     target-branch: develop
     schedule:
       interval: daily
-  - package-ecosystem: docker
-    directory: ""
-    target-branch: develop
-    schedule:
-      interval: daily

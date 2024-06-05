@@ -18,9 +18,10 @@ class CosmosDbModel(BaseModel, frozen=True):
 
     @cache
     def instance(self) -> IStore:
+        from helpers.config import CONFIG
         from persistence.cosmos_db import CosmosDbStore
 
-        return CosmosDbStore(self)
+        return CosmosDbStore(CONFIG.cache.instance(), self)
 
 
 class SqliteModel(BaseModel, frozen=True):
@@ -38,9 +39,10 @@ class SqliteModel(BaseModel, frozen=True):
 
     @cache
     def instance(self) -> IStore:
+        from helpers.config import CONFIG
         from persistence.sqlite import SqliteStore
 
-        return SqliteStore(self)
+        return SqliteStore(CONFIG.cache.instance(), self)
 
 
 class DatabaseModel(BaseModel):

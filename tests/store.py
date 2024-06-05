@@ -18,7 +18,7 @@ import pytest
         ),
     ],
 )
-@pytest.mark.asyncio  # Allow async functions
+@pytest.mark.asyncio(scope="session")
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_acid(call: CallStateModel, database_mode: DatabaseModeEnum) -> None:
     """

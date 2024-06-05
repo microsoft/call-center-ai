@@ -1,13 +1,10 @@
 from collections import OrderedDict
 from helpers.config_models.cache import MemoryModel
-from helpers.logging import build_logger
+from helpers.logging import logger
 from models.readiness import ReadinessStatus
 from persistence.icache import ICache
 from typing import Optional, Union
 import hashlib
-
-
-_logger = build_logger(__name__)
 
 
 class MemoryCache(ICache):
@@ -23,7 +20,7 @@ class MemoryCache(ICache):
     _config: MemoryModel
 
     def __init__(self, config: MemoryModel):
-        _logger.warning(
+        logger.warning(
             f"Using memory cache with {config.max_size} size limit, memory usage can be high, prefer an external cache like Redis"
         )
         self._config = config
@@ -57,6 +54,15 @@ class MemoryCache(ICache):
         # Add to first
         self._cache[sha_key] = value.encode() if isinstance(value, str) else value
         self._cache.move_to_end(sha_key, last=False)
+        return True
+
+    async def adel(self, key: str) -> bool:
+        """
+        Delete a value from the cache.
+        """
+        sha_key = self._key_to_hash(key)
+        if sha_key in self._cache:
+            self._cache.pop(sha_key)
         return True
 
     @staticmethod

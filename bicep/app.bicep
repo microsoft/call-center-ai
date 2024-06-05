@@ -1,35 +1,32 @@
 param adaModel string
 param adaVersion string
 param cognitiveCommunicationLocation string
+param functionappLocation string
 param gptBackupContext int
 param gptBackupModel string
 param gptBackupVersion string
 param gptContext int
 param gptModel string
 param gptVersion string
-param imageVersion string
 param location string
 param moderationBlocklists array
 param openaiLocation string
 param searchLocation string
 param tags object
+param version string
 
+var appName = 'call-center-ai'
 var prefix = deployment().name
-var appUrl = 'https://call-center-ai.${acaEnv.properties.defaultDomain}'
+var functionAppName = '${prefix}-${appName}'
+var appUrl = 'https://${functionAppName}.azurewebsites.net'
 var gptBackupModelFullName = toLower('${gptBackupModel}-${gptBackupVersion}')
 var gptModelFullName = toLower('${gptModel}-${gptVersion}')
 var adaModelFullName = toLower('${adaModel}-${adaVersion}')
 var cosmosContainerName = 'calls-v3'  // Third schema version
 var localConfig = loadYamlContent('../config.yaml')
+var phonenumberSanitized = replace(localConfig.communication_services.phone_number, '+', '')
 var config = {
-  api: {
-    events_domain: appUrl
-  }
-  monitoring: {
-    application_insights: {
-      connection_string: applicationInsights.properties.ConnectionString
-    }
-  }
+  public_domain: appUrl
   database: {
     mode: 'cosmos_db'
     cosmos_db: {
@@ -50,10 +47,14 @@ var config = {
       lang: localConfig.workflow.initiate.lang
     }
   }
-  communication_service: {
-    access_key: communication.listKeys().primaryKey
-    endpoint: communication.properties.hostName
-    phone_number: localConfig.communication_service.phone_number
+  communication_services: {
+    access_key: communicationServices.listKeys().primaryKey
+    call_queue_name: callQueue.name
+    endpoint: communicationServices.properties.hostName
+    phone_number: localConfig.communication_services.phone_number
+    post_queue_name: postQueue.name
+    sms_queue_name: smsQueue.name
+    trainings_queue_name: trainingsQueue.name
   }
   sms: localConfig.sms
   cognitive_service: {
@@ -85,7 +86,6 @@ var config = {
     access_key: search.listAdminKeys().primaryKey
     endpoint: 'https://${search.name}.search.windows.net'
     index: 'trainings'
-    semantic_configuration: 'default'
   }
   content_safety: {
     access_key: cognitiveContentsafety.listKeys().key1
@@ -112,10 +112,11 @@ var config = {
 
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
-output communicationId string = communication.id
-output logAnalyticsWorkspaceCustomerId string = logAnalyticsWorkspace.properties.customerId
+output communicationId string = communicationServices.id
+output functionAppName string = functionAppName
+output logAnalyticsCustomerId string = logAnalytics.properties.customerId
 
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: prefix
   location: location
   tags: tags
@@ -134,92 +135,138 @@ resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
   kind: 'web'
   properties: {
     Application_Type: 'web'
-    WorkspaceResourceId: logAnalyticsWorkspace.id
+    WorkspaceResourceId: logAnalytics.id
   }
 }
 
-resource acaEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
+resource flexFuncPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: prefix
-  location: location
+  location: functionappLocation
   tags: tags
+  sku: {
+    tier: 'FlexConsumption'
+    name: 'FC1'
+  }
   properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalyticsWorkspace.properties.customerId
-        sharedKey: logAnalyticsWorkspace.listKeys().primarySharedKey
-      }
-    }
-    workloadProfiles: [
-      {
-        // Consumption workload profile name must be 'Consumption'
-        name: 'Consumption'
-        workloadProfileType: 'Consumption'
-      }
-    ]
+    reserved: true
   }
 }
 
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
-  name: 'call-center-ai'
-  location: location
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: functionAppName
+  location: functionappLocation
   tags: tags
+  kind: 'functionapp,linux'
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
-    configuration: {
-      activeRevisionsMode: 'Single'
-      ingress: {
-        external: true
-        targetPort: 8080
-      }
-    }
-    environmentId: acaEnv.id
-    template: {
-      containers: [
+    serverFarmId: flexFuncPlan.id
+    siteConfig: {
+      appSettings: [
+        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#azurewebjobsstorage__accountname
         {
-          image: 'ghcr.io/clemlesne/call-center-ai:${imageVersion}'
-          name: 'call-center-ai'
-          env: [
-            {
-              name: 'CONFIG_JSON'
-              value: string(config)
-            }
-          ]
-          resources: {
-            cpu: 1
-            memory: '2Gi'
-          }
-          probes: [
-            {
-              type: 'Startup'
-              tcpSocket: {
-                port: 8080
-              }
-            }
-            {
-              type: 'Liveness'
-              httpGet: {
-                path: '/health/liveness'
-                port: 8080
-              }
-              periodSeconds: 10  // 2x the timeout
-              timeoutSeconds: 5  // Fast to check if the app is running
-            }
-            {
-              type: 'Readiness'
-              httpGet: {
-                path: '/health/readiness'
-                port: 8080
-              }
-              periodSeconds: 20  // 2x the timeout
-              timeoutSeconds: 10  // Database can take a while to be ready, query is necessary but expensive to run
-            }
-          ]
+          name: 'AzureWebJobsStorage__accountName'
+          value: storageAccount.name
+        }
+        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#applicationinsights_connection_string
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: applicationInsights.properties.ConnectionString
+        }
+        // See: https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration?tabs=python#enable-sampling
+        {
+          name: 'OTEL_TRACES_SAMPLER_ARG'
+          value: '0.5'
+        }
+        {
+          name: 'CONFIG_JSON'
+          value: string(config)
+        }
+        {
+          name: 'VERSION'
+          value: version
         }
       ]
     }
+    functionAppConfig: {
+      deployment: {
+        storage: {
+          type: 'blobContainer'
+          value: '${storageAccount.properties.primaryEndpoints.blob}${functionAppBlob.name}'
+          authentication: {
+            type: 'SystemAssignedIdentity'
+          }
+        }
+      }
+      scaleAndConcurrency: {
+        instanceMemoryMB: 2048  // Default and recommended
+        maximumInstanceCount: 100  // TODO: Avoid billing surprises, delete when sure
+        alwaysReady: [
+          {
+            instanceCount: 1
+            name: 'function:communicationservices_event_post'
+          }
+          {
+            instanceCount: 1
+            name: 'function:call_event'
+          }
+          {
+            instanceCount: 1
+            name: 'function:trainings_event'
+          }
+        ]
+      }
+      runtime: {
+        name: 'python'
+        version: '3.11'
+      }
+    }
+  }
+}
+
+// Storage Account Contributor
+resource roleStorageAccountContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '17d1049b-9a84-46fb-8f53-869881c3d3ab'
+}
+
+resource assignmentFunctionAppStorageAccountContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentFunctionAppStorageAccountContributor')
+  scope: storageAccount
+  properties: {
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleStorageAccountContributor.id
+  }
+}
+
+// Storage Blob Data Owner
+resource roleBlobDataOwner 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+}
+
+resource assignmentFunctionAppBlobDataOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentFunctionAppBlobDataOwner')
+  scope: storageAccount
+  properties: {
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleBlobDataOwner.id
+  }
+}
+
+// Storage Queue Data Contributor
+resource roleQueueDataContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+}
+
+resource assignmentFunctionAppQueueDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentFunctionAppQueueDataContributor')
+  scope: storageAccount
+  properties: {
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleQueueDataContributor.id
   }
 }
 
@@ -231,6 +278,34 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     name: 'Standard_ZRS'
   }
   kind: 'StorageV2'
+  properties: {
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource callQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'call-${phonenumberSanitized}'
+}
+
+resource smsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'sms-${phonenumberSanitized}'
+}
+
+resource postQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'post-${phonenumberSanitized}'
+}
+
+resource trainingsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+  parent: queueService
+  name: 'trainings-${phonenumberSanitized}'
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
@@ -238,26 +313,32 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01'
   name: 'default'
 }
 
-resource blobContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+resource publicBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
   parent: blobService
   name: '$web'
 }
 
-resource roleCommunicationContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: functionAppName
+}
+
+// Contributor
+resource roleContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'b24988ac-6180-42a0-ab88-20f7382dd24c'
 }
 
-resource appContribCommunication 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, communication.name, 'appContribCommunication')
-  scope: communication
+resource assignmentFunctionAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, communicationServices.name, 'assignmentFunctionAppContributor')
+  scope: communicationServices
   properties: {
-    principalId: containerApp.identity.principalId
+    principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: roleCommunicationContributor.id
+    roleDefinitionId: roleContributor.id
   }
 }
 
-resource communication 'Microsoft.Communication/CommunicationServices@2023-06-01-preview' existing = {
+resource communicationServices 'Microsoft.Communication/CommunicationServices@2023-06-01-preview' existing = {
   name: prefix
 }
 
@@ -265,21 +346,110 @@ resource eventgridTopic 'Microsoft.EventGrid/systemTopics@2023-12-15-preview' = 
   name: prefix
   location: 'global'
   tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
-    source: communication.id
+    source: communicationServices.id
     topicType: 'Microsoft.Communication.CommunicationServices'
   }
 }
 
+// Storage Queue Data Message Sender
+resource roleQueueSender 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'c6a89b2d-59bc-44d0-9896-0f6e12d7b80a'
+}
+
+resource assignmentEventgridTopicQueueSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, eventgridTopic.name, 'assignmentEventgridTopicQueueSender')
+  scope: storageAccount
+  properties: {
+    principalId: eventgridTopic.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleQueueSender.id
+  }
+}
+
+resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2024-06-01-preview' = {
+  parent: eventgridTopic
+  name: '${prefix}-${phonenumberSanitized}'
+  properties: {
+    eventDeliverySchema: 'EventGridSchema'
+    deliveryWithResourceIdentity: {
+      identity: {
+        type: 'SystemAssigned'
+      }
+      destination: {
+        endpointType: 'StorageQueue'
+        properties: {
+          queueMessageTimeToLiveInSeconds: 60  // Short lived messages, only new call events
+          queueName: callQueue.name
+          resourceId: storageAccount.id
+        }
+      }
+    }
+    filter: {
+      enableAdvancedFilteringOnArrays: true
+      advancedFilters: [
+        {
+          operatorType: 'StringBeginsWith'
+          key: 'data.to.PhoneNumber.Value'
+          values: [
+            localConfig.communication_services.phone_number
+          ]
+        }
+      ]
+      includedEventTypes: ['Microsoft.Communication.IncomingCall']
+    }
+  }
+  dependsOn: [assignmentEventgridTopicQueueSender]
+}
+
+resource eventgridSubscriptionSms 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2024-06-01-preview' = {
+  parent: eventgridTopic
+  name: '${prefix}-${phonenumberSanitized}-sms'
+  properties: {
+    eventDeliverySchema: 'EventGridSchema'
+    deliveryWithResourceIdentity: {
+      identity: {
+        type: 'SystemAssigned'
+      }
+      destination: {
+        endpointType: 'StorageQueue'
+        properties: {
+          queueMessageTimeToLiveInSeconds: -1  // Infinite persistence, SMS is async
+          queueName: smsQueue.name
+          resourceId: storageAccount.id
+        }
+      }
+    }
+    filter: {
+      enableAdvancedFilteringOnArrays: true
+      advancedFilters: [
+        {
+          operatorType: 'StringBeginsWith'
+          key: 'data.to'
+          values: [
+            localConfig.communication_services.phone_number
+          ]
+        }
+      ]
+      includedEventTypes: ['Microsoft.Communication.SMSReceived']
+    }
+  }
+  dependsOn: [assignmentEventgridTopicQueueSender]
+}
+
+// Cognitive Services User
 resource roleCognitiveUser 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'a97b65f3-24c7-4388-baec-2e87135dc908'
 }
 
-resource appUserCommunication 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, cognitiveCommunication.name, 'appUserCommunication')
+resource assignmentsCommunicationServicesCognitiveUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, cognitiveCommunication.name, 'assignmentsCommunicationServicesCognitiveUser')
   scope: cognitiveCommunication
   properties: {
-    principalId: communication.identity.principalId
+    principalId: communicationServices.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: roleCognitiveUser.id
   }
@@ -328,15 +498,16 @@ resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01
   }
 }
 
+// Cognitive Services OpenAI Contributor
 resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'a001fd3d-188f-4b5d-821b-7da978bf7442'
 }
 
-resource appContribOpenai 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, deployment().name, cognitiveOpenai.name, 'appContribOpenai')
+resource assignmentsFunctionAppOpenaiContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, cognitiveOpenai.name, 'assignmentsFunctionAppOpenaiContributor')
   scope: cognitiveOpenai
   properties: {
-    principalId: containerApp.identity.principalId
+    principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: roleOpenaiContributor.id
   }
@@ -358,8 +529,9 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-previe
 resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
   name: gptModelFullName
+  tags: tags
   sku: {
-    capacity: 20  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
+    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -377,8 +549,9 @@ resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-previe
 resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
   name: gptBackupModelFullName
+  tags: tags
   sku: {
-    capacity: 20  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
+    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -396,6 +569,7 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
 // resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2023-06-01-preview' = {
 //   parent: cognitiveOpenai
 //   name: 'disabled'
+//   tags: tags
 //   properties: {
 //     basePolicyName: 'Microsoft.Default'
 //     mode: 'Default'
@@ -455,8 +629,9 @@ resource gptBackup 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
 resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
   name: adaModelFullName
+  tags: tags
   sku: {
-    capacity: 150
+    capacity: 40  // Keep it small, will be scaled up if needed with "dynamicThrottlingEnabled"
     name: 'Standard'  // Pay-as-you-go
   }
   properties: {
@@ -498,10 +673,10 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
 
 resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15' = {
   parent: cosmos
-  name: 'call-center-ai'
+  name: appName
   properties: {
     resource: {
-      id: 'call-center-ai'
+      id: appName
     }
   }
 }
