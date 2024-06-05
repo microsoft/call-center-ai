@@ -21,6 +21,7 @@ from helpers.call_utils import (
     ContextEnum as CallContextEnum,
     handle_clear_queue,
     handle_hangup,
+    handle_play_text,
     handle_recognize_ivr,
     handle_recognize_text,
     handle_transfer,
@@ -160,46 +161,46 @@ async def on_recognize_timeout_error(
             )
         return
 
+    if (
+        call.recognition_retry >= CONFIG.workflow.max_voice_recognition_retry
+    ):  # Voice retries are exhausted, end call
+        logger.info("Timeout, ending call")
+        await _handle_goodbye(
+            call=call,
+            client=client,
+        )
+        return
+
     if not (
         contexts and CallContextEnum.LAST_CHUNK in contexts
     ):  # Not the last chunk, ignore
         logger.debug("Ignoring timeout if bot is still speaking")
         return
 
-    if (
-        call.recognition_retry < CONFIG.workflow.max_voice_recognition_retry
-    ):  # Retry voice recognition
-        call.recognition_retry += 1
-        logger.info(
-            f"Timeout, retrying voice recognition ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
-        )
-        await handle_recognize_text(
-            call=call,
-            client=client,
-            store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
-            text=await CONFIG.prompts.tts.timeout_silence(call),
-            timeout_error=True,  # Should re-trigger an error or the LLM
-        )
-
-    else:  # Voice retries are exhausted, end call
-        logger.info("Timeout, ending call")
-        await _handle_goodbye(
-            call=call,
-            client=client,
-        )
+    # Retry voice recognition
+    call.recognition_retry += 1
+    logger.info(
+        f"Timeout, retrying voice recognition ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
+    )
+    await handle_recognize_text(
+        call=call,
+        client=client,
+        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+        text=await CONFIG.prompts.tts.timeout_silence(call),
+        timeout_error=True,  # Should re-trigger an error or the LLM
+    )
 
 
 async def _handle_goodbye(
     call: CallStateModel,
     client: CallAutomationClient,
 ) -> None:
-    await handle_recognize_text(
+    await handle_play_text(
         call=call,
         client=client,
         context=CallContextEnum.GOODBYE,
         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
         text=await CONFIG.prompts.tts.goodbye(call),
-        timeout_error=False,
     )
 
 
