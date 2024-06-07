@@ -1,24 +1,23 @@
+from datetime import datetime
 from functools import total_ordering
-from pydantic import BaseModel, Field
-from typing import Optional
+from uuid import UUID
+from pydantic import BaseModel
 
 
 @total_ordering
-class TrainingModel(BaseModel):
+class TrainingModel(BaseModel, frozen=True):
     """
-    Represents a training document from Azure Search.
-
-    Must include a field "vectors", type "Collection(Edm.Single)" with 1536 dimensions, searchable only.
+    Represents a training document from AI Search.
     """
 
-    # Immutable fields
-    id: str = Field(frozen=True)  # Type: Edm.String, attributes: retrievable
-    # Editable fields
-    content: str  # Type: Edm.String, attributes: retrievable, searchable
-    source_uri: Optional[str] = None  # Type: Edm.String, attributes: retrievable
-    title: str  # Type: Edm.String, attributes: retrievable, searchable
-    # On search
-    score: float = Field(frozen=True)
+    answer: str
+    context: str
+    created_at: datetime
+    document_synthesis: str
+    file_path: str
+    id: UUID
+    question: str
+    score: float
 
     def __hash__(self) -> int:
         return self.id.__hash__()
@@ -32,3 +31,10 @@ class TrainingModel(BaseModel):
         if not isinstance(other, TrainingModel):
             return NotImplemented
         return self.score < other.score
+
+    @staticmethod
+    def excluded_fields_for_llm() -> set[str]:
+        """
+        Returns fields that should be excluded from sending to LLM because they are not relevant for document understanding.
+        """
+        return {"id", "file_path", "score", "created_at"}

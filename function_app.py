@@ -705,7 +705,7 @@ async def _use_automation_client() -> CallAutomationClient:
     global _automation_client
     if not isinstance(_automation_client, CallAutomationClient):
         _automation_client = CallAutomationClient(
-            # Azure deployment
+            # Deployment
             endpoint=CONFIG.communication_services.endpoint,
             # Performance
             transport=await azure_transport(),

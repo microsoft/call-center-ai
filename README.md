@@ -360,10 +360,10 @@ AZURE_CLIENT_SECRET=xxx
 AZURE_TENANT_ID=xxx
 ```
 
-To override a specific configuration value, you can also use environment variables. For example, to override the `openai.endpoint` value, you can use the `OPENAI__ENDPOINT` variable:
+To override a specific configuration value, you can also use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:
 
 ```dotenv
-OPENAI__ENDPOINT=https://xxx.openai.azure.com
+LLM__FAST__ENDPOINT=https://xxx.openai.azure.com
 ```
 
 Then run:
@@ -399,13 +399,16 @@ Required index schema:
 
 | **Field Name** | `Type` | Retrievable | Searchable | Dimensions | Vectorizer |
 |-|-|-|-|-|-|
+| **answer** | `Edm.String` | Yes | Yes | | |
+| **context** | `Edm.String` | Yes | Yes | | |
+| **created_at** | `Edm.String` | Yes | No | | |
+| **document_synthesis** | `Edm.String` | Yes | Yes | | |
+| **file_path** | `Edm.String` | Yes | No | | |
 | **id** | `Edm.String` | Yes | No | | |
-| **content** | `Edm.String` | Yes | Yes | | |
-| **source_uri** | `Edm.String` | Yes | No | | |
-| **title** | `Edm.String` | Yes | Yes| | |
+| **question** | `Edm.String` | Yes | Yes | | |
 | **vectors** | `Collection(Edm.Single)` | No | Yes | 1536 | *OpenAI ADA* |
 
-An exampe is [available at `examples/import-training.ipynb`](examples/import-training.ipynb). It shows how to import training data from a PDF files dataset.
+Software to fill the index is included [on Synthetic RAG Index](https://github.com/clemlesne/rag-index) repository.
 
 ### Customize the languages
 

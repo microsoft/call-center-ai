@@ -271,13 +271,13 @@ class CosmosDbStore(IStore):
                 # Usage
                 consistency_level=ConsistencyLevel.Eventual,
                 # Reliability
-                connection_timeout=10,
-                retry_backoff_factor=0.5,
-                retry_backoff_max=30,
+                connection_timeout=10,  # 10 seconds
+                retry_backoff_factor=0.8,
+                retry_backoff_max=8,
                 retry_total=3,
                 # Performance
                 transport=await azure_transport(),
-                # Azure deployment
+                # Deployment
                 url=self._config.endpoint,
                 # Authentication
                 credential=self._config.access_key.get_secret_value(),

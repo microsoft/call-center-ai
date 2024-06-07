@@ -12,8 +12,9 @@ from models.message import (
     StyleEnum as MessageStyleEnum,
 )
 from models.reminder import ReminderModel
+from models.training import TrainingModel
 from openai.types.chat import ChatCompletionToolParam
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from typing import Awaitable, Callable, Annotated, Literal
 from typing_extensions import TypedDict
 import asyncio
@@ -334,10 +335,14 @@ class LlmPlugins:
         )
         # Flatten, remove duplicates, and sort by score
         trainings = sorted(set(training for task in tasks for training in task or []))
+        trainings_str = (
+            TypeAdapter(list[TrainingModel])
+            .dump_json(trainings, exclude=TrainingModel.excluded_fields_for_llm())
+            .decode()
+        )
         # Format results
         res = "# Search results"
-        for training in trainings:
-            res += f"\n- {training.title}: {training.content}"
+        res += f"\n{trainings_str}"
         return res
 
     async def notify_emergencies(
