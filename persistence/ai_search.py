@@ -142,7 +142,7 @@ class AiSearchSearch(ISearch):
     async def _use_client(self) -> SearchClient:
         if not self._client:
             self._client = SearchClient(
-                # Azure deployment
+                # Deployment
                 endpoint=self._config.endpoint,
                 index_name=self._config.index,
                 # Performance

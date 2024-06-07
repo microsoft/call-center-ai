@@ -277,7 +277,7 @@ class CosmosDbStore(IStore):
                 retry_total=3,
                 # Performance
                 transport=await azure_transport(),
-                # Azure deployment
+                # Deployment
                 url=self._config.endpoint,
                 # Authentication
                 credential=self._config.access_key.get_secret_value(),

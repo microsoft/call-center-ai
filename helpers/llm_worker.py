@@ -555,7 +555,7 @@ async def _use_contentsafety() -> ContentSafetyClient:
     global _contentsafety_client
     if not isinstance(_contentsafety_client, ContentSafetyClient):
         _contentsafety_client = ContentSafetyClient(
-            # Azure deployment
+            # Deployment
             endpoint=CONFIG.content_safety.endpoint,
             # Performance
             transport=await azure_transport(),

@@ -368,9 +368,7 @@ async def on_sms_received(
             persona=MessagePersonaEnum.HUMAN,
         )
     )
-    await _db.call_aset(
-        call
-    )  # save in DB allowing SMS answers to be more "in-sync"
+    await _db.call_aset(call)  # save in DB allowing SMS answers to be more "in-sync"
     if not call.in_progress:
         logger.info("Call not in progress, answering with SMS")
     else:

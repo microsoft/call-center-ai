@@ -68,7 +68,7 @@ async def _use_client() -> TextTranslationClient:
         _client = TextTranslationClient(
             # Performance
             transport=await azure_transport(),
-            # Azure deployment
+            # Deployment
             endpoint=CONFIG.ai_translation.endpoint,
             # Authentication
             credential=AzureKeyCredential(

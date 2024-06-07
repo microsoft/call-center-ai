@@ -57,7 +57,7 @@ class CommunicationServicesSms(ISms):
     async def _use_client(self) -> SmsClient:
         if not self._client:
             self._client = SmsClient(
-                # Azure deployment
+                # Deployment
                 endpoint=self._config.endpoint,
                 # Performance
                 transport=await azure_transport(),

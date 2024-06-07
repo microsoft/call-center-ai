@@ -1,4 +1,4 @@
-aiohttp==3.9.5  # Required for azure-search-documents, azure-ai-contentsafety, azure-cosmos
+aiohttp==3.9.5  # Required for all Azure SDKs
 aiosqlite==0.20.0
 azure-ai-contentsafety==1.0.0
 azure-ai-translation-text==1.0.0

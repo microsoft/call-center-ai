@@ -108,7 +108,7 @@ class DeepEvalAzureOpenAI(GPTModel):
                 "seed": 42,
             },
             "temperature": 0,
-            # Azure deployment
+            # Deployment
             "api_version": "2023-12-01-preview",
             "azure_deployment": platform.deployment,
             "azure_endpoint": platform.endpoint,

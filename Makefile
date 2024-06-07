@@ -34,21 +34,19 @@ install:
 	@echo "➡️ Installing Twilio CLI..."
 	twilio --version || brew tap twilio/brew && brew install twilio
 
-	@echo "➡️ Installing Python app dependencies..."
-	python3 -m pip install -r requirements.txt
-
-	@echo "➡️ Installing Python dev dependencies..."
-	python3 -m pip install -r requirements-dev.txt
+	@for f in $$(find . -name "requirements*.txt"); do \
+		echo "➡️ Installing Python dependencies in $$f..."; \
+		python3 -m pip install -r $$f; \
+	done
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
 	python3 -m pip install --upgrade pip
 
-	@echo "➡️ Upgrading Python app dependencies..."
-	python3 -m pur -r requirements.txt
-
-	@echo "➡️ Upgrading Python dev dependencies..."
-	python3 -m pur -r requirements-dev.txt
+	@for f in $$(find . -name "requirements*.txt"); do \
+		echo "➡️ Upgrading Python dependencies in $$f..."; \
+		python3 -m pip install --upgrade -r $$f; \
+	done
 
 	@echo "➡️ Upgrading Bicep CLI..."
 	az bicep upgrade
