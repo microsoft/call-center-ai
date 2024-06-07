@@ -97,46 +97,43 @@ async def completion_stream(
 
     Completion is first made with the fast LLM, then the slow LLM if the previous fails. Catch errors for a maximum of 3 times (internal + `RateLimitError`). If it fails again, raise the error.
     """
-    # Try a three time with fast LLM
+    # Try a first time with primary LLM
     try:
-        retryed = AsyncRetrying(
-            reraise=True,
-            retry=retry_any(
-                *[
-                    retry_if_exception_type(exception)
-                    for exception in _retried_exceptions
-                ]
-            ),
-            stop=stop_after_attempt(
-                3
-            ),  # Usage is short-lived, so stop after 3 attempts
-            wait=wait_random_exponential(multiplier=0.8, max=8),
-        )
-        async for attempt in retryed:
-            with attempt:
-                async for chunck in _completion_stream_worker(
-                    is_fast=True,
-                    max_tokens=max_tokens,
-                    messages=messages,
-                    system=system,
-                    tools=tools,
-                ):
-                    yield chunck
-                return
+        async for chunck in _completion_stream_worker(
+            is_fast=not CONFIG.workflow.use_slow_llm_for_chat_as_default,  # Let configuration decide
+            max_tokens=max_tokens,
+            messages=messages,
+            system=system,
+            tools=tools,
+        ):
+            yield chunck
+        return
     except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
-        logger.warning(f"{e.__class__.__name__} error, trying with slow LLM")
+        logger.warning(
+            f"{e.__class__.__name__} error, trying with {'fast' if CONFIG.workflow.use_slow_llm_for_chat_as_default else 'slow'} LLM"
+        )
 
-    # Try a last time with slow LLM, if it fails again, raise the error
-    async for chunck in _completion_stream_worker(
-        is_fast=False,
-        max_tokens=max_tokens,
-        messages=messages,
-        system=system,
-        tools=tools,
-    ):
-        yield chunck
+    # Try more times with backup LLM, if it fails again, raise the error
+    retryed = AsyncRetrying(
+        reraise=True,
+        retry=retry_any(
+            *[retry_if_exception_type(exception) for exception in _retried_exceptions]
+        ),
+        stop=stop_after_attempt(3),  # Usage is short-lived, so stop after 3 attempts
+        wait=wait_random_exponential(multiplier=0.5, max=30),
+    )
+    async for attempt in retryed:
+        with attempt:
+            async for chunck in _completion_stream_worker(
+                is_fast=CONFIG.workflow.use_slow_llm_for_chat_as_default,  # Let configuration decide
+                max_tokens=max_tokens,
+                messages=messages,
+                system=system,
+                tools=tools,
+            ):
+                yield chunck
 
 
 async def _completion_stream_worker(
