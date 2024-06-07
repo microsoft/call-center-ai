@@ -360,10 +360,10 @@ AZURE_CLIENT_SECRET=xxx
 AZURE_TENANT_ID=xxx
 ```
 
-To override a specific configuration value, you can also use environment variables. For example, to override the `openai.endpoint` value, you can use the `OPENAI__ENDPOINT` variable:
+To override a specific configuration value, you can also use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:
 
 ```dotenv
-OPENAI__ENDPOINT=https://xxx.openai.azure.com
+LLM__FAST__ENDPOINT=https://xxx.openai.azure.com
 ```
 
 Then run:
