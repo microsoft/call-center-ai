@@ -468,8 +468,7 @@ class LlmModel(BaseModel):
         # Format trainings, if any
         if trainings:
             res += "\n\n# Trusted data you can use"
-            for training in trainings:
-                res += f"\n- {training.title}: {training.content}"
+            res += f"\n{TypeAdapter(list[TrainingModel]).dump_json(trainings).decode()}"
 
         # Remove newlines to avoid hallucinations issues with GPT-4 Turbo
         res = " ".join([line.strip() for line in res.splitlines()])

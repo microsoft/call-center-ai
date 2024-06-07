@@ -92,13 +92,9 @@ class AiSearchSearch(ISearch):
                     # Full text search
                     query_language=QueryLanguage(lang.lower()),
                     query_type=QueryType.SEMANTIC,
-                    semantic_configuration_name=self._config.semantic_configuration,
-                    search_fields=[
-                        "content",
-                        "title",
-                    ],
                     search_mode=SearchMode.ANY,  # Any of the terms will match
                     search_text=text,
+                    semantic_configuration_name=self._config.semantic_configuration,
                     # Vector search
                     vector_queries=[
                         VectorizableTextQuery(
