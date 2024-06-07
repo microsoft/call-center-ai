@@ -24,7 +24,7 @@ _client = Optional[TextTranslationClient]
     reraise=True,
     retry=retry_if_exception_type(HttpResponseError),
     stop=stop_after_attempt(3),
-    wait=wait_random_exponential(multiplier=0.5, max=30),
+    wait=wait_random_exponential(multiplier=0.8, max=8),
 )
 async def translate_text(
     text: str, source_lang: str, target_lang: str

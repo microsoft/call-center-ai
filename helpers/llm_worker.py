@@ -110,7 +110,7 @@ async def completion_stream(
             stop=stop_after_attempt(
                 3
             ),  # Usage is short-lived, so stop after 3 attempts
-            wait=wait_random_exponential(multiplier=0.5, max=30),
+            wait=wait_random_exponential(multiplier=0.8, max=8),
         )
         async for attempt in retryed:
             with attempt:
@@ -259,7 +259,7 @@ async def completion_sync(
         stop=stop_after_attempt(
             10
         ),  # Usage is async and long-lived, so stop after 10 attempts
-        wait=wait_random_exponential(multiplier=0.5, max=30),
+        wait=wait_random_exponential(multiplier=0.8, max=8),
     )
     async for attempt in retryed:
         with attempt:
@@ -321,7 +321,7 @@ async def _completion_sync_worker(
     reraise=True,
     retry=retry_if_exception_type(ValidationError),
     stop=stop_after_attempt(3),
-    wait=wait_random_exponential(multiplier=0.5, max=30),
+    wait=wait_random_exponential(multiplier=0.8, max=8),
 )
 @tracer.start_as_current_span("completion_model_sync")
 async def completion_model_sync(
@@ -478,7 +478,7 @@ async def safety_check(text: str) -> str:
     reraise=True,
     retry=retry_if_exception_type(HttpResponseError),
     stop=stop_after_attempt(3),
-    wait=wait_random_exponential(multiplier=0.5, max=30),
+    wait=wait_random_exponential(multiplier=0.8, max=8),
 )
 async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
     """

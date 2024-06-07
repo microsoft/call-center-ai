@@ -60,7 +60,7 @@ class AiSearchSearch(ISearch):
         reraise=True,
         retry=retry_if_exception_type(ServiceResponseError),
         stop=stop_after_attempt(3),
-        wait=wait_random_exponential(multiplier=0.5, max=30),
+        wait=wait_random_exponential(multiplier=0.8, max=8),
     )
     async def training_asearch_all(
         self,
