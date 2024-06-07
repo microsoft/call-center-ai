@@ -1,16 +1,19 @@
 param cognitiveCommunicationLocation string
+param embeddingDeploymentType string = 'Standard'  // Pay-as-you-go in a single region
 param embeddingModel string = 'text-embedding-ada-002'
-param embeddingQuota int = 40  // Keep it small, will be scaled up if regional quota remains
+param embeddingQuota int = 120
 param embeddingVersion string = '2'
 param functionappLocation string
 param instance string = deployment().name
 param llmFastContext int = 16385
+param llmFastDeploymentType string = 'Standard'  // Pay-as-you-go in a single region
 param llmFastModel string = 'gpt-35-turbo'
-param llmFastQuota int = 40  // Keep it small, will be scaled up if regional quota remains
+param llmFastQuota int = 120
 param llmFastVersion string = '0125'
 param llmSlowContext int = 128000
+param llmSlowDeploymentType string = 'Global-Standard'  // Pay-as-you-go in multiple regions
 param llmSlowModel string = 'gpt-4o'
-param llmSlowQuota int = 40  // Keep it small, will be scaled up if regional quota remains
+param llmSlowQuota int = 225
 param llmSlowVersion string = '2024-05-13'
 param location string = deployment().location
 param openaiLocation string
@@ -44,15 +47,18 @@ module app 'app.bicep' = {
   scope: sub
   params: {
     cognitiveCommunicationLocation: cognitiveCommunicationLocation
+    embeddingDeploymentType: embeddingDeploymentType
     embeddingModel: embeddingModel
     embeddingQuota: embeddingQuota
     embeddingVersion: embeddingVersion
     functionappLocation: functionappLocation
     llmFastContext: llmFastContext
+    llmFastDeploymentType: llmFastDeploymentType
     llmFastModel: llmFastModel
     llmFastQuota: llmFastQuota
     llmFastVersion: llmFastVersion
     llmSlowContext: llmSlowContext
+    llmSlowDeploymentType: llmSlowDeploymentType
     llmSlowModel: llmSlowModel
     llmSlowQuota: llmSlowQuota
     llmSlowVersion: llmSlowVersion

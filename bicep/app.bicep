@@ -1,13 +1,16 @@
 param cognitiveCommunicationLocation string
+param embeddingDeploymentType string
 param embeddingModel string
 param embeddingQuota int
 param embeddingVersion string
 param functionappLocation string
 param llmFastContext int
+param llmFastDeploymentType string
 param llmFastModel string
 param llmFastQuota int
 param llmFastVersion string
 param llmSlowContext int
+param llmSlowDeploymentType string
 param llmSlowModel string
 param llmSlowQuota int
 param llmSlowVersion string
@@ -535,10 +538,9 @@ resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-pr
   tags: tags
   sku: {
     capacity: llmSlowQuota
-    name: 'Standard'  // Pay-as-you-go
+    name: llmSlowDeploymentType
   }
   properties: {
-    dynamicThrottlingEnabled: true  // Declared as read-only but can be set
     // raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
@@ -555,10 +557,9 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-pr
   tags: tags
   sku: {
     capacity: llmFastQuota
-    name: 'Standard'  // Pay-as-you-go
+    name: llmFastDeploymentType
   }
   properties: {
-    dynamicThrottlingEnabled: true  // Declared as read-only but can be set
     // raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
@@ -629,16 +630,15 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-pr
 //   }
 // }
 
-resource ada 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
   parent: cognitiveOpenai
   name: embeddingModelFullName
   tags: tags
   sku: {
     capacity: embeddingQuota
-    name: 'Standard'  // Pay-as-you-go
+    name: embeddingDeploymentType
   }
   properties: {
-    dynamicThrottlingEnabled: true  // Declared as read-only but can be set
     // raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
