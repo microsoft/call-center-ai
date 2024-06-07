@@ -182,16 +182,14 @@ async def handle_recognize_text(
 
     If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    timeout_value = 5  # Wait 5 seconds for the user to speak and end the recognition
     contexts = [context] if context else []
-
     if not text:  # Only recognize
         contexts.append(ContextEnum.LAST_CHUNK)
         await _handle_recognize_media(
             call=call,
             client=client,
             contexts=contexts,
-            end_silence=timeout_value,
+            end_silence=CONFIG.workflow.voice_timeout_after_silence_sec,
             style=style,
             text=None,
         )
@@ -206,7 +204,7 @@ async def handle_recognize_text(
     for i, chunk in enumerate(chunks):
         end_silence = None
         if i == len(chunks) - 1:  # Last chunk
-            end_silence = timeout_value
+            end_silence = CONFIG.workflow.voice_timeout_after_silence_sec
             if timeout_error:
                 contexts.append(ContextEnum.LAST_CHUNK)
         await _handle_recognize_media(
