@@ -335,9 +335,14 @@ class LlmPlugins:
         )
         # Flatten, remove duplicates, and sort by score
         trainings = sorted(set(training for task in tasks for training in task or []))
+        trainings_str = (
+            TypeAdapter(list[TrainingModel])
+            .dump_json(trainings, exclude=TrainingModel.excluded_fields_for_llm())
+            .decode()
+        )
         # Format results
         res = "# Search results"
-        res += f"\n{TypeAdapter(list[TrainingModel]).dump_json(trainings).decode()}"
+        res += f"\n{trainings_str}"
         return res
 
     async def notify_emergencies(

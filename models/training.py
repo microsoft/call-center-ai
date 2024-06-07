@@ -31,3 +31,10 @@ class TrainingModel(BaseModel, frozen=True):
         if not isinstance(other, TrainingModel):
             return NotImplemented
         return self.score < other.score
+
+    @staticmethod
+    def excluded_fields_for_llm() -> set[str]:
+        """
+        Returns fields that should be excluded from sending to LLM because they are not relevant for document understanding.
+        """
+        return {"id", "file_path", "score", "created_at"}

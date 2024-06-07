@@ -173,7 +173,9 @@ async def test_relevancy(
         actual_output="",  # Not used
         input=full_input,
         retrieval_context=[
-            TypeAdapter(TrainingModel).dump_json(training).decode()
+            TypeAdapter(TrainingModel)
+            .dump_json(training, exclude=TrainingModel.excluded_fields_for_llm())
+            .decode()
             for training in trainings
         ],
     )
