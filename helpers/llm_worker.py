@@ -43,13 +43,14 @@ from tenacity import (
 )
 from functools import lru_cache
 from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
+from helpers.http import azure_transport
+from helpers.resources import resources_dir
 from models.message import MessageModel
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from os import environ
 from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
 import json
 import tiktoken
-from helpers.http import azure_transport
 
 
 # Instrument OpenAI
@@ -57,6 +58,9 @@ environ["TRACELOOP_TRACE_CONTENT"] = str(
     True
 )  # Instrumentation logs prompts, completions, and embeddings to span attributes, set to False to lower monitoring costs or to avoid logging PII
 OpenAIInstrumentor(enrich_token_usage=True).instrument()
+
+# tiktoken cache
+environ["TIKTOKEN_CACHE_DIR"] = resources_dir("tiktoken")
 
 logger.info(
     f"Using LLM models {CONFIG.llm.selected(False).model} (slow) and {CONFIG.llm.selected(True).model} (fast)"
@@ -519,7 +523,7 @@ def _count_tokens(content: str, model: str) -> int:
     """
     Returns the number of tokens in the content, using the model's encoding.
 
-    If the model is unknown to TikToken, it uses the GPT-3.5 encoding.
+    If the model is unknown to tiktoken, it uses the GPT-3.5 encoding.
     """
     try:
         encoding_name = tiktoken.encoding_name_for_model(model)
