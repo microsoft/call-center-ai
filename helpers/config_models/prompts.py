@@ -60,6 +60,7 @@ class LlmModel(BaseModel):
         - Answer directly to the customer's issue, only if it is related to the objective or the claim
         - Answers in {default_lang}, even if the customer speaks another language
         - Aways answer with at least one full sentence
+        - Be concise
         - Be proactive in the reminders you create, customer assistance is your priority
         - Customer can send SMS in addition to the call, answers will be made by phone
         - Do not ask for something which is already stored in the claim
@@ -149,12 +150,11 @@ class LlmModel(BaseModel):
 
         # Rules
         - Answers in {default_lang}, even if the customer speaks another language
-        - Briefly summarize the call with the customer
+        - Be concise
         - Can include personal details about the customer
         - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
         - Include details stored in the claim, to make the customer confident that the situation is understood
         - Include salutations (e.g., "Have a nice day", "Best regards", "Best wishes for recovery")
-        - Is polite, helpful, and professional
         - Refer to the customer by their name, if known
         - Use simple and short sentences
         - Won't make any assumptions
@@ -189,6 +189,7 @@ class LlmModel(BaseModel):
 
         # Rules
         - Answers in English, even if the customer speaks another language
+        - Be concise
         - Consider all the conversation history, from the beginning
         - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
         - Prefix the answer with a determiner (e.g., "the theft of your car", "your broken window")
@@ -219,6 +220,7 @@ class LlmModel(BaseModel):
 
         # Rules
         - Answers in English, even if the customer speaks another language
+        - Be concise
         - Consider all the conversation history, from the beginning
         - Do not include details of the call process
         - Do not include personal details (e.g., name, phone number, address)
@@ -247,6 +249,7 @@ class LlmModel(BaseModel):
 
         # Rules
         - Add as many citations as needed to the text to make it fact-checkable
+        - Be concise
         - Only use exact words from the text as citations
         - Treats a citation as a word or a group of words
         - Use claim, reminders, and messages extracts as citations
@@ -286,6 +289,7 @@ class LlmModel(BaseModel):
 
         # Rules
         - Answers in English, even if the customer speaks another language
+        - Be concise
         - Take as priority the customer satisfaction
         - Won't make any assumptions
         - Write no more than a few sentences as justification
