@@ -37,7 +37,10 @@ class SqliteStore(IStore):
             self._first_run_done = True
 
         # Init client
-        self._client = sqlite_connect(database=db_path)
+        self._client = sqlite_connect(
+            check_same_thread=False,  # Allow pytest tests to run
+            database=db_path,
+        )
 
     async def areadiness(self) -> ReadinessStatus:
         """
