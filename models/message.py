@@ -16,8 +16,8 @@ import json
 
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
-_MESSAGE_ACTION_R = r"action=([a-z_]*)( .*)?"
-_MESSAGE_STYLE_R = r"style=([a-z_]*)( .*)?"
+_MESSAGE_ACTION_R = r"action(?:=)?([a-z_]*)( .*)?"
+_MESSAGE_STYLE_R = r"style(?:=)?([a-z_]*)( .*)?"
 
 
 class StyleEnum(str, Enum):
