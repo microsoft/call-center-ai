@@ -459,7 +459,6 @@ By default, the schema of composed of:
 - `caller_email` (`email`)
 - `caller_name` (`text`)
 - `caller_phone` (`phone_number`)
-- `extra_details` (`text`)
 
 Values are validated to ensure the data format commit to your schema. They can be either:
 

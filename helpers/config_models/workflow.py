@@ -117,11 +117,6 @@ class WorkflowInitiateModel(BaseModel):
                     name="policyholder_phone",
                     type=ClaimTypeEnum.PHONE_NUMBER,
                 ),
-                ClaimFieldModel(
-                    description="Relevant details gathered in the conversation than can be useful to solve the task",
-                    name="extra_details",
-                    type=ClaimTypeEnum.TEXT,
-                ),
             ],
         )
 
