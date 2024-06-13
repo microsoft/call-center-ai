@@ -13,12 +13,11 @@ from tests.conftest import with_conversations
 from typing import Optional
 import asyncio
 import pytest
+import re
 
 
 class RagRelevancyMetric(BaseMetric):
     model: GPTModel
-    score: Optional[float] = 0
-    success: bool = False
     threshold: float
 
     def __init__(
@@ -44,6 +43,7 @@ class RagRelevancyMetric(BaseMetric):
                 for document in test_case.retrieval_context
             ]
         )
+        logger.info(f"Scores: {scores}")
         # Res 1 is weighted 1, res 2 is weighted 0.5, res 3 is weighted 0.33, ...
         weights = [score / i for i, score in enumerate(scores, start=1)]
         # Score is the weighted average, top 1 result should be the most important
@@ -54,12 +54,12 @@ class RagRelevancyMetric(BaseMetric):
 
     async def _measure_single(self, document: str, message: str) -> float:
         score = 0
-        llm_res, _ = await self.model.a_generate(
+        res, _ = await self.model.a_generate(
             f"""
             Assistant is a data analyst expert with 20 years of experience.
 
             # Objective
-            Assistant will analyze a document and decide whether it would be useful to respond to the user message.
+            Analyze a document and decide whether it would be useful to respond to the user message.
 
             # Context
             The document comes from a database. It has been stemmed. It may contains technical data and jargon a specialist would use.
@@ -75,17 +75,17 @@ class RagRelevancyMetric(BaseMetric):
             {document}
 
             # Response format
-            A float from 0.0 to 1.0
+            [score, a float between 0.0 and 1.0]
 
             ## Example 1
             Message: I love bananas
             Document: bananas are yellow, apples are red
-            Assistant: 1
+            Assistant: 1.0
 
             ## Example 2
             Message: The sky is blue
             Document: mouse is a rodent, mouse is a computer peripheral
-            Assistant: 0
+            Assistant: 0.0
 
             ## Example 3
             Message: my car is stuck in the mud
@@ -94,9 +94,12 @@ class RagRelevancyMetric(BaseMetric):
         """
         )
         try:
-            score = float(llm_res)
+            score = float(res)
         except ValueError:
-            raise ValueError(f"LLM response is not a number: {llm_res}")
+            group = re.search(r"\d+\.\d+", res)
+            if group:
+                return float(group.group())
+            raise ValueError(f"LLM response is not a number: {res}")
         return score
 
     def is_successful(self) -> bool:
