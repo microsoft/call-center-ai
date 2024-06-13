@@ -168,7 +168,6 @@ class DeepEvalAzureOpenAI(GPTModel):
 
 class Conversation(BaseModel):
     claim_tests_excl: list[str] = []
-    claim_tests_incl: list[str] = []
     expected_output: str
     id: str
     inputs: list[str]

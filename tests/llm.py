@@ -11,6 +11,9 @@ from helpers.call_events import (
     on_speech_recognized,
     on_call_connected,
 )
+from datetime import UTC, datetime
+from deepeval.metrics import BaseMetric
+from helpers.config_models.workflow import ClaimFieldModel
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.reminder import ReminderModel
@@ -18,8 +21,200 @@ from models.training import TrainingModel
 from pydantic import TypeAdapter
 from pytest import assume
 from tests.conftest import CallAutomationClientMock, with_conversations
+from typing import Any, Optional
+import asyncio
 import json
 import pytest
+import re
+
+
+class ClaimRelevancyMetric(BaseMetric):
+    claim_fields: list[ClaimFieldModel]
+    claim: dict[str, Any]
+    model: GPTModel
+    threshold: float
+
+    def __init__(
+        self,
+        claim_keys: list[ClaimFieldModel],
+        claim: dict[str, Any],
+        model: GPTModel,
+        threshold: float = 0.5,
+    ):
+        self.claim = claim
+        self.claim_fields = claim_keys
+        self.model = model
+        self.threshold = threshold
+
+    async def a_measure(
+        self,
+        test_case: LLMTestCase,
+        *args,
+        **kwargs,
+    ) -> float:
+        assert test_case.input
+        # Extract claim data
+        extracts = await self._extract_claim_theory(test_case.input)
+        logger.info(f"Extracted claim data: {extracts}")
+        # Measure each claim in parallel
+        scores = await asyncio.gather(
+            *[
+                self._score_data(
+                    key=key,
+                    throry=value,
+                    real=str(self.claim.get(key, None)),
+                )
+                for key, value in extracts.items()
+            ]
+        )
+        logger.info(f"Claim scores: {scores}")
+        # Score is the average
+        self.score = sum(scores) / len(scores) if len(extracts) > 0 else 1
+        # Test against the threshold
+        self.success = self.score >= self.threshold
+        return self.score
+
+    async def _score_data(self, key: str, throry: str, real: Optional[str]) -> float:
+        res, _ = await self.model.a_generate(
+            f"""
+            Assistant is a data analyst expert with 20 years of experience.
+
+            # Context
+            Connversation come from a call center.
+
+            # Objective
+            Score the relevancy of a theoritical data against the real one.
+
+            # Rules
+            - A high score means the real data is correct
+            - A low score means the real data is not relevant and lacks details against the theoritical data
+            - Answer only with the score, nothing else
+            - The score should be between 0 and 1
+
+            # Data
+            Name: {key}
+            Throry: {throry or "N/A"}
+            Real: {real or "N/A"}
+
+            # Response format
+            [score, a float between 0.0 and 1.0]
+
+            ## Example 1
+            Name: age
+            Throry: 25 years old, born in 1996
+            Real: 25
+            Assistant: 1
+
+            ## Example 2
+            Name: street_address
+            Throry: 123 Main St, New York, NY 10001
+            Real: United States
+            Assistant: 0.2
+
+            ## Example 3
+            Name: phone
+            Throry: 123-456-7890
+            Real: +11234567890
+            Assistant: 1.0
+
+            ## Example 4
+            Name: email
+            Throry: john.doe@gmail.com
+            Real: marie.rac@yahoo.fr
+            Assistant: 0.0
+
+            ## Example 5
+            Name: incident_location
+            Throry: Near the Eiffel Tower, Paris, France
+            Real: Eiffel Tower
+            Assistant: 0.6
+
+            ## Example 6
+            Name: incident_date
+            Throry: 2021-01-01
+            Real: N/A
+            Assistant: 0.0
+        """
+        )
+        try:
+            score = float(res)
+        except ValueError:
+            group = re.search(r"\d+\.\d+", res)
+            if group:
+                return float(group.group())
+            raise ValueError(f"LLM response is not a number: {res}")
+        return score
+
+    async def _extract_claim_theory(self, conversation: str) -> dict[str, str]:
+        res, _ = await self.model.a_generate(
+            f"""
+            Assistant is a data analyst expert with 20 years of experience.
+
+            # Context
+            Conversation is coming from a call centre. Today is {datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M")}.
+
+            # Objective
+            Extract fields from a conversation. The answer will be a JSON object with the key-value pairs.
+
+            # Rules
+            - All data should be extracted
+            - Answer only with the JSON object, nothing else
+            - If there is no data to populate a field, do not include it
+            - Limit fields to the ones listed
+            - Values should be detailed, if data exists
+
+            # Fields
+            {", ".join([f"{field.name} ({field.type.value})" for field in self.claim_fields])}
+
+            # Conversation
+            {conversation}
+
+            # Response format in JSON
+            [
+                {{
+                    "key": "[key]",
+                    "value": "[value]"
+                }}
+            ]
+
+            ## Example 1
+            Conversation: I am 25 years old and I was born in 1996.
+            Fields: age (text), birth_date (datetime), car_model (text)
+            Assistant: [{{"key": "age", "value": "25 years old"}}, {{"key": "birth_date", "value": "1996-05-07"}}]
+
+            ## Example 2
+            Conversation: I live at 123 Main St, New York, NY 10001. My car is a Ford F-150 2021.
+            Fields: street_address (text), car_model (text), phone (phone_number)
+            Assistant: [{{"key": "street_address", "value": "123 Main St, New York, NY 10001"}}, {{"key": "car_model", "value": "Ford F-150 2021"}}]
+
+            ## Example 3
+            Conversation: zsssk zsssk
+            Fields: incident_location (text), incident_date (datetime)
+            Assistant: []
+
+            ## Example 4
+            Conversation: My name is John Doe.
+            Fields: car_model (text)
+            Assistant: []
+        """
+        )
+        res = res.strip().strip("```json\n").strip("\n```").strip()
+        extracts: list[dict[str, str]] = json.loads(res)
+        return {
+            extract["key"]: extract["value"]
+            for extract in extracts
+            if extract["value"]
+            and any(
+                claim_field.name == extract["key"] for claim_field in self.claim_fields
+            )
+        }
+
+    def is_successful(self) -> bool:
+        return self.success
+
+    @property
+    def __name__(self):
+        return "Claim Relevancy"
 
 
 @with_conversations
@@ -28,7 +223,6 @@ import pytest
 async def test_llm(
     call: CallStateModel,
     claim_tests_excl: list[str],
-    claim_tests_incl: list[str],
     deepeval_model: GPTModel,
     expected_output: str,
     inputs: list[str],
@@ -81,10 +275,6 @@ async def test_llm(
     logger.info(f"claim: {call.claim}")
     logger.info(f"full_input: {full_input}")
 
-    # Test claim data
-    for field in claim_tests_incl:
-        assume(call.claim.get(field, None), f"Claim field {field} is missing")
-
     # Configure LLM tests
     test_case = LLMTestCase(
         actual_output=actual_output,
@@ -99,9 +289,15 @@ async def test_llm(
 
     # Define LLM metrics
     llm_metrics = [
-        BiasMetric(threshold=1, model=deepeval_model),
-        ToxicityMetric(threshold=1, model=deepeval_model),
-    ]  # By default, include generic metrics
+        BiasMetric(threshold=1, model=deepeval_model),  # Gender, age, ethnicity
+        ClaimRelevancyMetric(
+            claim_keys=call.initiate.claim,
+            claim=call.claim,
+            model=deepeval_model,
+            threshold=0.5,
+        ),  # Claim data
+        ToxicityMetric(threshold=1, model=deepeval_model),  # Hate speech, insults
+    ]  # Include those by default
 
     if not any(
         field == "answer_relevancy" for field in claim_tests_excl
