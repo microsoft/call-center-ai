@@ -81,20 +81,55 @@ class WorkflowInitiateModel(BaseModel):
     bot_company: str
     bot_name: str
     claim: list[ClaimFieldModel] = [
-        ClaimFieldModel(name="extra_details", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="incident_datetime", type=ClaimTypeEnum.DATETIME),
-        ClaimFieldModel(name="incident_description", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="incident_location", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="injuries", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="medical_records", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="parties", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="policy_number", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="pre_existing_damages", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="witnesses", type=ClaimTypeEnum.TEXT),
+        ClaimFieldModel(
+            description="Date and time of the incident",
+            name="incident_datetime",
+            type=ClaimTypeEnum.DATETIME,
+        ),
+        ClaimFieldModel(
+            description="Description of the incident",
+            name="incident_description",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Location of the incident",
+            name="incident_location",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Injuries sustained during the incident",
+            name="injuries",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Involved parties in the incident",
+            name="involved_parties",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Medical records related to the incident",
+            name="medical_records",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Policy number of the customer",
+            name="policy_number",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Pre-existing damages",
+            name="pre_existing_damages",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Witnesses of the incident",
+            name="witnesses",
+            type=ClaimTypeEnum.TEXT,
+        ),
     ]  # Configured like in v4 for compatibility
     lang: LanguageModel = LanguageModel()  # Object is fully defined by default
     task: str = """
-        Assistant will help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. Claim data is located in the customer file. Assistant role is not over until all the relevant data is gathered.
+        Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. Claim data is located in the customer file. Assistant role is not over until all the relevant data is gathered.
     """
 
     def claim_model(self) -> type[BaseModel]:
