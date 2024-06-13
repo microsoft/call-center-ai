@@ -66,7 +66,7 @@ test:
 	PUBLIC_DOMAIN=dummy pytest \
 		--alluredir test-reports \
 		-ra \
-		*/tests/*.py
+		tests/*.py
 
 test-serve:
 	allure serve test-reports
