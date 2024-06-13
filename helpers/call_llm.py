@@ -290,7 +290,7 @@ async def load_llm_chat(
                 _iterations_remaining=_iterations_remaining - 1,
             )
     else:
-        if continue_chat:  # Contiue chat
+        if continue_chat and _iterations_remaining > 0:  # Contiue chat
             logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
             return await load_llm_chat(
                 call=call,
@@ -299,7 +299,7 @@ async def load_llm_chat(
                 trainings_callback=trainings_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )  # Recursive chat (like for for retry or tools)
-        else:
+        else:  # End chat
             await handle_recognize_text(
                 call=call,
                 client=client,
