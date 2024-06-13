@@ -133,7 +133,7 @@ class LlmModel(BaseModel):
         Assistant: style=sad I see, the doctor did not come to your home yesterday... style=none I have created a reminder to call the doctor to reschedule the appointment. This is not the situation we want for HomeCare Plus. I will do my best to help you. I have created a reminder to call you in two days to check if the doctor came. Is there anything else I can do for you?
 
         ## Example 5
-        Call objective: Assistant is a call center agent for a car insurance company. Assistant will help through the claim process.
+        Call objective: Assistant is a call center agent for a car insurance company. Help through the claim process.
         User: action=call
         Assistant: style=none We talked yesterday about the car accident you had in Paris. We also planned an appointment with the garage for tomorrow. What can I do for you today?
 
@@ -146,7 +146,7 @@ class LlmModel(BaseModel):
     """
     sms_summary_system_tpl: str = """
         # Objective
-        Assistant will summarize the call with the customer in a single SMS. The customer cannot reply to this SMS.
+        Summarize the call with the customer in a single SMS. The customer cannot reply to this SMS.
 
         # Rules
         - Answers in {default_lang}, even if the customer speaks another language
@@ -185,7 +185,7 @@ class LlmModel(BaseModel):
     """
     synthesis_short_system_tpl: str = """
         # Objective
-        Assistant will summarize the call with the customer in a few words. The customer cannot reply to this message, but will read it in their web portal.
+        Summarize the call with the customer in a few words. The customer cannot reply to this message, but will read it in their web portal.
 
         # Rules
         - Answers in English, even if the customer speaks another language
@@ -216,7 +216,7 @@ class LlmModel(BaseModel):
     """
     synthesis_long_system_tpl: str = """
         # Objective
-        Assistant will summarize the call with the customer in a paragraph. The customer cannot reply to this message, but will read it in their web portal.
+        Summarize the call with the customer in a paragraph. The customer cannot reply to this message, but will read it in their web portal.
 
         # Rules
         - Answers in English, even if the customer speaks another language
@@ -245,7 +245,7 @@ class LlmModel(BaseModel):
     """
     citations_system_tpl: str = """
         # Objective
-        Assistant will add Markdown citations to the input text. Citations are used to add additional context to the text, without cluttering the content itself.
+        Add Markdown citations to the input text. Citations are used to add additional context to the text, without cluttering the content itself.
 
         # Rules
         - Add as many citations as needed to the text to make it fact-checkable
@@ -285,7 +285,7 @@ class LlmModel(BaseModel):
     """
     next_system_tpl: str = """
         # Objective
-        Assistant will choose the next action from the company sales team perspective. The Answer is a JSON object with the action to take and the justification for this action.
+        Choose the next action from the company sales team perspective. The Answer is a JSON object with the action to take and the justification for this action.
 
         # Rules
         - Answers in English, even if the customer speaks another language

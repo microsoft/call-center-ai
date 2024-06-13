@@ -18,7 +18,7 @@ data='{
   "bot_company": "Contoso",
   "bot_name": "Amélie",
   "phone_number": "+11234567890",
-  "task": "Assistant will help the customer with their digital workplace. Assistant is working for the IT support department. The objective is to help the customer with their issue and gather information in the claim.",
+  "task": "Help the customer with their digital workplace. Assistant is working for the IT support department. The objective is to help the customer with their issue and gather information in the claim.",
   "agent_phone_number": "+33612345678",
   "claim": [
     {
@@ -506,7 +506,7 @@ Default task, for inbound calls, is defined in the configuration:
 
 workflow:
   initiate:
-    task: "Assistant will help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered."
+    task: "Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered."
 ```
 
 Task can be customized for each call, by adding the `task` field in the `POST /call` API call.
@@ -598,7 +598,7 @@ prompts:
       Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
     chat_system_tpl: |
       # Objective
-      Assistant will provide internal IT support to employees. Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
+      Provide internal IT support to employees. Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
 
       # Rules
       - Answers in {default_lang}, even if the customer speaks another language
