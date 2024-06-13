@@ -53,11 +53,10 @@ import json
 import tiktoken
 
 
-# Instrument OpenAI
 environ["TRACELOOP_TRACE_CONTENT"] = str(
     True
 )  # Instrumentation logs prompts, completions, and embeddings to span attributes, set to False to lower monitoring costs or to avoid logging PII
-OpenAIInstrumentor(enrich_token_usage=True).instrument()
+OpenAIInstrumentor().instrument()  # Instrument OpenAI
 
 # tiktoken cache
 environ["TIKTOKEN_CACHE_DIR"] = resources_dir("tiktoken")
