@@ -281,7 +281,9 @@ async def _chunk_before_tts(
     # Store text in call messages
     if store:
         if (
-            call.messages and call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
+            call.messages
+            and call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
+            and call.messages[-1].style == style
         ):  # Append to last message if possible
             call.messages[-1].content += f" {text}"
         else:
