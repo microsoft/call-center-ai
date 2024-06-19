@@ -210,16 +210,16 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         maximumInstanceCount: 100  // TODO: Avoid billing surprises, delete when sure
         alwaysReady: [
           {
-            instanceCount: 1
-            name: 'function:communicationservices_event_post'
+            instanceCount: 2
+            name: 'function:communicationservices_event_post'  // Handle conversation events
           }
           {
             instanceCount: 1
-            name: 'function:call_event'
+            name: 'function:call_event'  // "new call" event from Communication Services
           }
           {
             instanceCount: 1
-            name: 'function:trainings_event'
+            name: 'function:trainings_event'  // Preload trainings from AI Search
           }
         ]
       }
