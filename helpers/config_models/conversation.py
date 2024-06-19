@@ -156,14 +156,32 @@ class WorkflowInitiateModel(BaseModel):
         )
 
 
-class WorkflowModel(BaseModel):
-    conversation_timeout_hour: int = 72  # 3 days
+class ConversationModel(BaseModel):
     initiate: WorkflowInitiateModel
-    intelligence_hard_timeout_sec: int = 180  # 3 minutes
-    intelligence_soft_timeout_sec: int = 30  # 30 seconds
-    max_voice_recognition_retry: int = 3
-    use_slow_llm_for_chat_as_default: bool = True
-    voice_timeout_after_silence_sec: int = 2  # 2 seconds
+    answer_hard_timeout_sec: int = Field(
+        default=180,  # 3 minutes
+        serialization_alias="intelligence_hard_timeout_sec",  # Compatibility with v7
+    )
+    answer_soft_timeout_sec: int = Field(
+        default=30,  # 30 seconds
+        serialization_alias="intelligence_soft_timeout_sec",  # Compatibility with v7
+    )
+    callback_timeout_hour: int = Field(
+        default=72,  # 3 days
+        serialization_alias="conversation_timeout_hour",  # Compatibility with v7
+    )
+    phone_silence_timeout_sec: int = Field(
+        default=2,  # 2 seconds
+        serialization_alias="voice_timeout_after_silence_sec",  # Compatibility with v7
+    )
+    slow_llm_for_chat: bool = Field(
+        default=True,
+        serialization_alias="use_slow_llm_for_chat_as_default",  # Compatibility with v7
+    )
+    voice_recognition_retry_max: int = Field(
+        default=2,  # 2 retries
+        serialization_alias="max_voice_recognition_retry",  # Compatibility with v7
+    )
 
 
 def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseModel]:

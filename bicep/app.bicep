@@ -45,12 +45,12 @@ var config = {
   resources: {
     public_url: storageAccount.properties.primaryEndpoints.web
   }
-  workflow: {
+  conversation: {
     initiate: {
-      agent_phone_number: localConfig.workflow.initiate.agent_phone_number
-      bot_company: localConfig.workflow.initiate.bot_company
-      bot_name: localConfig.workflow.initiate.bot_name
-      lang: localConfig.workflow.initiate.lang
+      agent_phone_number: localConfig.conversation.initiate.agent_phone_number
+      bot_company: localConfig.conversation.initiate.bot_company
+      bot_name: localConfig.conversation.initiate.bot_name
+      lang: localConfig.conversation.initiate.lang
     }
   }
   communication_services: {

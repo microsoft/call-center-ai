@@ -10,7 +10,7 @@ from helpers.config_models.monitoring import MonitoringModel
 from helpers.config_models.prompts import PromptsModel
 from helpers.config_models.resources import ResourcesModel
 from helpers.config_models.sms import SmsModel
-from helpers.config_models.workflow import WorkflowModel
+from helpers.config_models.conversation import ConversationModel
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,4 +43,6 @@ class RootModel(BaseSettings):
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel
     sms: SmsModel = SmsModel()  # Object is fully defined by default
-    workflow: WorkflowModel
+    conversation: ConversationModel = Field(
+        serialization_alias="workflow"
+    )  # Compatibility with v7

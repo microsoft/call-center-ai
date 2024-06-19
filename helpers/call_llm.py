@@ -179,10 +179,10 @@ async def load_llm_chat(
     # Timeouts
     soft_timeout_triggered = False
     soft_timeout_task = asyncio.create_task(
-        asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
+        asyncio.sleep(CONFIG.conversation.answer_soft_timeout_sec)
     )
     hard_timeout_task = asyncio.create_task(
-        asyncio.sleep(CONFIG.workflow.intelligence_hard_timeout_sec)
+        asyncio.sleep(CONFIG.conversation.answer_hard_timeout_sec)
     )
 
     await handle_media(
@@ -228,7 +228,7 @@ async def load_llm_chat(
 
             if hard_timeout_task.done():  # Break when hard timeout is reached
                 logger.warning(
-                    f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached"
+                    f"Hard timeout of {CONFIG.conversation.answer_hard_timeout_sec}s reached"
                 )
                 # Clean up
                 _clear_tasks()
@@ -239,7 +239,7 @@ async def load_llm_chat(
                     soft_timeout_task.done() and not soft_timeout_triggered
                 ):  # Speak when soft timeout is reached
                     logger.warning(
-                        f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached"
+                        f"Soft timeout of {CONFIG.conversation.answer_soft_timeout_sec}s reached"
                     )
                     soft_timeout_triggered = True
                     await handle_recognize_text(

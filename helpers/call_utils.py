@@ -189,7 +189,7 @@ async def handle_recognize_text(
             call=call,
             client=client,
             contexts=contexts,
-            end_silence=CONFIG.workflow.voice_timeout_after_silence_sec,
+            end_silence=CONFIG.conversation.phone_silence_timeout_sec,
             style=style,
             text=None,
         )
@@ -204,7 +204,7 @@ async def handle_recognize_text(
     for i, chunk in enumerate(chunks):
         end_silence = None
         if i == len(chunks) - 1:  # Last chunk
-            end_silence = CONFIG.workflow.voice_timeout_after_silence_sec
+            end_silence = CONFIG.conversation.phone_silence_timeout_sec
             if timeout_error:
                 contexts.append(ContextEnum.LAST_CHUNK)
         await _handle_recognize_media(

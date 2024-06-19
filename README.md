@@ -260,7 +260,7 @@ Create a local `config.yaml` file (most of the fields are filled automatically b
 
 ```yaml
 # config.yaml
-workflow:
+conversation:
   initiate:
     agent_phone_number: "+33612345678"
     bot_company: Contoso
@@ -300,7 +300,7 @@ Place a file called `config.yaml` in the root of the project with the following 
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
-workflow:
+conversation:
   initiate:
     agent_phone_number: "+33612345678"
     bot_company: Contoso
@@ -333,9 +333,9 @@ llm:
     azure_openai:
       api_key: xxx
       context: 128000
-      deployment: gpt-4-0125-preview
+      deployment: gpt-4o-2024-05-13
       endpoint: https://xxx.openai.azure.com
-      model: gpt-4
+      model: gpt-4o
       streaming: true
 
 ai_search:
@@ -420,7 +420,7 @@ See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai
 # config.yaml
 [...]
 
-workflow:
+conversation:
   initiate:
     lang:
       default_short_code: "fr-FR"
@@ -475,7 +475,7 @@ Default schema, for inbound calls, is defined in the configuration:
 # config.yaml
 [...]
 
-workflow:
+conversation:
   default_initiate:
     claim:
       - name: additional_notes
@@ -503,7 +503,7 @@ Default task, for inbound calls, is defined in the configuration:
 # config.yaml
 [...]
 
-workflow:
+conversation:
   initiate:
     task: "Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered."
 ```

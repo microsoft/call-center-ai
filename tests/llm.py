@@ -13,7 +13,7 @@ from helpers.call_events import (
 )
 from datetime import UTC, datetime
 from deepeval.metrics import BaseMetric
-from helpers.config_models.workflow import ClaimFieldModel
+from helpers.config_models.conversation import ClaimFieldModel
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.reminder import ReminderModel

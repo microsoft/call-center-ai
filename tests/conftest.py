@@ -208,7 +208,7 @@ def random_text() -> str:
 def call() -> CallStateModel:
     call = CallStateModel(
         initiate=CallInitiateModel(
-            **CONFIG.workflow.initiate.model_dump(),
+            **CONFIG.conversation.initiate.model_dump(),
             phone_number="+33612345678",  # type: ignore
         ),
         voice_id="dummy",

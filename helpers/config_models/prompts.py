@@ -554,7 +554,7 @@ class TtsModel(BaseModel):
             call,
             bot_company=call.initiate.bot_company,
             bot_name=call.initiate.bot_name,
-            conversation_timeout_hour=CONFIG.workflow.conversation_timeout_hour,
+            conversation_timeout_hour=CONFIG.conversation.callback_timeout_hour,
         )
 
     async def timeout_loading(self, call: CallStateModel) -> str:

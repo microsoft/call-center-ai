@@ -1,6 +1,6 @@
 from datetime import datetime, UTC, tzinfo
-from helpers.config_models.workflow import LanguageEntryModel
-from helpers.config_models.workflow import WorkflowInitiateModel
+from helpers.config_models.conversation import LanguageEntryModel
+from helpers.config_models.conversation import WorkflowInitiateModel
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.message import MessageModel, ActionEnum as MessageActionEnum
 from models.next import NextModel
@@ -85,7 +85,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
     def lang(self) -> LanguageEntryModel:  # type: ignore
         from helpers.config import CONFIG
 
-        lang = CONFIG.workflow.initiate.lang
+        lang = CONFIG.conversation.initiate.lang
         default = lang.default_lang
         if self.lang_short_code:
             return next(
