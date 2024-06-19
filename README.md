@@ -510,6 +510,24 @@ conversation:
 
 Task can be customized for each call, by adding the `task` field in the `POST /call` API call.
 
+### Customize the conversation
+
+Conversation options are documented in [conversation.py](helpers/config_models/conversation.py). The options can all be overridden in `config.yaml` file:
+
+```yaml
+# config.yaml
+[...]
+
+conversation:
+  answer_hard_timeout_sec: 180
+  answer_soft_timeout_sec: 30
+  callback_timeout_hour: 72
+  content_safety_for_chat: true
+  phone_silence_timeout_sec: 1
+  slow_llm_for_chat: true
+  voice_recognition_retry_max: 2
+```
+
 ### Use an OpenAI compatible model for the LLM
 
 To use a model compatible with the OpenAI completion API, you need to create an account and get the following information:
