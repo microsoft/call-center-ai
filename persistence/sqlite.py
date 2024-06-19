@@ -37,7 +37,10 @@ class SqliteStore(IStore):
             self._first_run_done = True
 
         # Init client
-        self._client = sqlite_connect(database=db_path)
+        self._client = sqlite_connect(
+            check_same_thread=False,  # Allow pytest tests to run
+            database=db_path,
+        )
 
     async def areadiness(self) -> ReadinessStatus:
         """
@@ -129,7 +132,7 @@ class SqliteStore(IStore):
         call = None
         async with self._use_db() as db:
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.workflow.conversation_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
+                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.conversation.callback_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
                 (
                     phone_number,  # data.initiate.phone_number
                     phone_number,  # data.claim.policyholder_phone

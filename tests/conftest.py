@@ -48,10 +48,11 @@ class CallConnectionClientMock(CallConnectionClient):
 
     async def start_recognizing_media(
         self,
+        play_prompt: Union[FileSource, TextSource, SsmlSource],
         *args,
         **kwargs,
     ) -> None:
-        pass
+        self._log_media(play_prompt)
 
     async def play_media(
         self,
@@ -59,13 +60,7 @@ class CallConnectionClientMock(CallConnectionClient):
         *args,
         **kwargs,
     ) -> None:
-        if isinstance(play_source, TextSource):
-            self._play_media_callback(play_source.text.strip())
-        elif isinstance(play_source, SsmlSource):
-            # deepcode ignore InsecureXmlParser/test: SSML is internally generated
-            for text in ET.fromstring(play_source.ssml_text).itertext():
-                if text.strip():
-                    self._play_media_callback(text.strip())
+        self._log_media(play_source)
 
     async def transfer_call_to_participant(
         self,
@@ -87,6 +82,17 @@ class CallConnectionClientMock(CallConnectionClient):
         **kwargs,
     ) -> None:
         pass
+
+    def _log_media(
+        self, play_source: Union[FileSource, TextSource, SsmlSource]
+    ) -> None:
+        if isinstance(play_source, TextSource):
+            self._play_media_callback(play_source.text.strip())
+        elif isinstance(play_source, SsmlSource):
+            # deepcode ignore InsecureXmlParser/test: SSML is internally generated
+            for text in ET.fromstring(play_source.ssml_text).itertext():
+                if text.strip():
+                    self._play_media_callback(text.strip())
 
 
 class DeepEvalAzureOpenAI(GPTModel):
@@ -162,7 +168,6 @@ class DeepEvalAzureOpenAI(GPTModel):
 
 class Conversation(BaseModel):
     claim_tests_excl: list[str] = []
-    claim_tests_incl: list[str] = []
     expected_output: str
     id: str
     inputs: list[str]
@@ -203,7 +208,7 @@ def random_text() -> str:
 def call() -> CallStateModel:
     call = CallStateModel(
         initiate=CallInitiateModel(
-            **CONFIG.workflow.initiate.model_dump(),
+            **CONFIG.conversation.initiate.model_dump(),
             phone_number="+33612345678",  # type: ignore
         ),
         voice_id="dummy",

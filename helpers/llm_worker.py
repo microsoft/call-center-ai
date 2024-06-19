@@ -32,7 +32,7 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCall,
     ChoiceDeltaToolCallFunction,
 )
-from pydantic import BaseModel, ValidationError, TypeAdapter
+from pydantic import BaseModel, ValidationError
 from tenacity import (
     AsyncRetrying,
     retry_any,
@@ -43,20 +43,23 @@ from tenacity import (
 )
 from functools import lru_cache
 from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
+from helpers.http import azure_transport
+from helpers.resources import resources_dir
 from models.message import MessageModel
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from os import environ
 from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
 import json
 import tiktoken
-from helpers.http import azure_transport
 
 
-# Instrument OpenAI
 environ["TRACELOOP_TRACE_CONTENT"] = str(
     True
 )  # Instrumentation logs prompts, completions, and embeddings to span attributes, set to False to lower monitoring costs or to avoid logging PII
-OpenAIInstrumentor(enrich_token_usage=True).instrument()
+OpenAIInstrumentor().instrument()  # Instrument OpenAI
+
+# tiktoken cache
+environ["TIKTOKEN_CACHE_DIR"] = resources_dir("tiktoken")
 
 logger.info(
     f"Using LLM models {CONFIG.llm.selected(False).model} (slow) and {CONFIG.llm.selected(True).model} (fast)"
@@ -100,7 +103,7 @@ async def completion_stream(
     # Try a first time with primary LLM
     try:
         async for chunck in _completion_stream_worker(
-            is_fast=not CONFIG.workflow.use_slow_llm_for_chat_as_default,  # Let configuration decide
+            is_fast=not CONFIG.conversation.slow_llm_for_chat,  # Let configuration decide
             max_tokens=max_tokens,
             messages=messages,
             system=system,
@@ -112,7 +115,7 @@ async def completion_stream(
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
         logger.warning(
-            f"{e.__class__.__name__} error, trying with {'fast' if CONFIG.workflow.use_slow_llm_for_chat_as_default else 'slow'} LLM"
+            f"{e.__class__.__name__} error, trying with {'fast' if CONFIG.conversation.slow_llm_for_chat else 'slow'} LLM"
         )
 
     # Try more times with backup LLM, if it fails again, raise the error
@@ -127,7 +130,7 @@ async def completion_stream(
     async for attempt in retryed:
         with attempt:
             async for chunck in _completion_stream_worker(
-                is_fast=CONFIG.workflow.use_slow_llm_for_chat_as_default,  # Let configuration decide
+                is_fast=CONFIG.conversation.slow_llm_for_chat,  # Let configuration decide
                 max_tokens=max_tokens,
                 messages=messages,
                 system=system,
@@ -519,13 +522,13 @@ def _count_tokens(content: str, model: str) -> int:
     """
     Returns the number of tokens in the content, using the model's encoding.
 
-    If the model is unknown to TikToken, it uses the GPT-3.5 encoding.
+    If the model is unknown to tiktoken, it uses the GPT-3.5 encoding.
     """
     try:
         encoding_name = tiktoken.encoding_name_for_model(model)
     except KeyError:
         encoding_name = tiktoken.encoding_name_for_model("gpt-3.5")
-        logger.warning(f"Unknown model {model}, using {encoding_name} encoding")
+        logger.debug(f"Unknown model {model}, using {encoding_name} encoding")
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 

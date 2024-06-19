@@ -18,7 +18,7 @@ data='{
   "bot_company": "Contoso",
   "bot_name": "Amélie",
   "phone_number": "+11234567890",
-  "task": "Assistant will help the customer with their digital workplace. Assistant is working for the IT support department. The objective is to help the customer with their issue and gather information in the claim.",
+  "task": "Help the customer with their digital workplace. Assistant is working for the IT support department. The objective is to help the customer with their issue and gather information in the claim.",
   "agent_phone_number": "+33612345678",
   "claim": [
     {
@@ -260,7 +260,7 @@ Create a local `config.yaml` file (most of the fields are filled automatically b
 
 ```yaml
 # config.yaml
-workflow:
+conversation:
   initiate:
     agent_phone_number: "+33612345678"
     bot_company: Contoso
@@ -300,7 +300,7 @@ Place a file called `config.yaml` in the root of the project with the following 
 resources:
   public_url: "https://xxx.blob.core.windows.net/public"
 
-workflow:
+conversation:
   initiate:
     agent_phone_number: "+33612345678"
     bot_company: Contoso
@@ -333,9 +333,9 @@ llm:
     azure_openai:
       api_key: xxx
       context: 128000
-      deployment: gpt-4-0125-preview
+      deployment: gpt-4o-2024-05-13
       endpoint: https://xxx.openai.azure.com
-      model: gpt-4
+      model: gpt-4o
       streaming: true
 
 ai_search:
@@ -420,7 +420,7 @@ See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai
 # config.yaml
 [...]
 
-workflow:
+conversation:
   initiate:
     lang:
       default_short_code: "fr-FR"
@@ -459,7 +459,6 @@ By default, the schema of composed of:
 - `caller_email` (`email`)
 - `caller_name` (`text`)
 - `caller_phone` (`phone_number`)
-- `extra_details` (`text`)
 
 Values are validated to ensure the data format commit to your schema. They can be either:
 
@@ -476,7 +475,7 @@ Default schema, for inbound calls, is defined in the configuration:
 # config.yaml
 [...]
 
-workflow:
+conversation:
   default_initiate:
     claim:
       - name: additional_notes
@@ -504,12 +503,30 @@ Default task, for inbound calls, is defined in the configuration:
 # config.yaml
 [...]
 
-workflow:
+conversation:
   initiate:
-    task: "Assistant will help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered."
+    task: "Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered."
 ```
 
 Task can be customized for each call, by adding the `task` field in the `POST /call` API call.
+
+### Customize the conversation
+
+Conversation options are documented in [conversation.py](helpers/config_models/conversation.py). The options can all be overridden in `config.yaml` file:
+
+```yaml
+# config.yaml
+[...]
+
+conversation:
+  answer_hard_timeout_sec: 180
+  answer_soft_timeout_sec: 30
+  callback_timeout_hour: 72
+  content_safety_for_chat: true
+  phone_silence_timeout_sec: 1
+  slow_llm_for_chat: true
+  voice_recognition_retry_max: 2
+```
 
 ### Use an OpenAI compatible model for the LLM
 
@@ -598,7 +615,7 @@ prompts:
       Today is {date}. Customer is calling from {phone_number}. Call center number is {bot_phone_number}.
     chat_system_tpl: |
       # Objective
-      Assistant will provide internal IT support to employees. Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
+      Provide internal IT support to employees. Assistant requires data from the employee to provide IT support. The assistant's role is not over until the issue is resolved or the request is fulfilled.
 
       # Rules
       - Answers in {default_lang}, even if the customer speaks another language

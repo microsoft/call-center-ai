@@ -133,11 +133,12 @@ async def load_llm_chat(
         """
         nonlocal should_play_sound
 
-        try:
-            text = await safety_check(text)
-        except SafetyCheckError as e:
-            logger.warning(f"Unsafe text detected, not playing: {e}")
-            return
+        if CONFIG.conversation.content_safety_for_chat:
+            try:
+                text = await safety_check(text)
+            except SafetyCheckError as e:
+                logger.warning(f"Unsafe text detected, not playing: {e}")
+                return
 
         should_play_sound = False
         await asyncio.gather(
@@ -179,10 +180,10 @@ async def load_llm_chat(
     # Timeouts
     soft_timeout_triggered = False
     soft_timeout_task = asyncio.create_task(
-        asyncio.sleep(CONFIG.workflow.intelligence_soft_timeout_sec)
+        asyncio.sleep(CONFIG.conversation.answer_soft_timeout_sec)
     )
     hard_timeout_task = asyncio.create_task(
-        asyncio.sleep(CONFIG.workflow.intelligence_hard_timeout_sec)
+        asyncio.sleep(CONFIG.conversation.answer_hard_timeout_sec)
     )
 
     await handle_media(
@@ -228,7 +229,7 @@ async def load_llm_chat(
 
             if hard_timeout_task.done():  # Break when hard timeout is reached
                 logger.warning(
-                    f"Hard timeout of {CONFIG.workflow.intelligence_hard_timeout_sec}s reached"
+                    f"Hard timeout of {CONFIG.conversation.answer_hard_timeout_sec}s reached"
                 )
                 # Clean up
                 _clear_tasks()
@@ -239,7 +240,7 @@ async def load_llm_chat(
                     soft_timeout_task.done() and not soft_timeout_triggered
                 ):  # Speak when soft timeout is reached
                     logger.warning(
-                        f"Soft timeout of {CONFIG.workflow.intelligence_soft_timeout_sec}s reached"
+                        f"Soft timeout of {CONFIG.conversation.answer_soft_timeout_sec}s reached"
                     )
                     soft_timeout_triggered = True
                     await handle_recognize_text(
@@ -290,7 +291,7 @@ async def load_llm_chat(
                 _iterations_remaining=_iterations_remaining - 1,
             )
     else:
-        if continue_chat:  # Contiue chat
+        if continue_chat and _iterations_remaining > 0:  # Contiue chat
             logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
             return await load_llm_chat(
                 call=call,
@@ -299,7 +300,7 @@ async def load_llm_chat(
                 trainings_callback=trainings_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )  # Recursive chat (like for for retry or tools)
-        else:
+        else:  # End chat
             await handle_recognize_text(
                 call=call,
                 client=client,

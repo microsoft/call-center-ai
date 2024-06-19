@@ -1,17 +1,25 @@
-# Temporary files
+# Local dev
+.version.cache
 *.sqlite*
-.pytest_cache/
 
 # Local app config file
+*.env
 config*.yaml
 
+# Tests
+tests/
+
 # Test reports
+.pytest_cache/
 test-reports/
 
 # Documentation and examples
 docs/
 examples/
 
-# Python Tools for Visual Studio (PTVS)
+# Python cache
 __pycache__/
 *.pyc
+
+# GitHub
+.github/

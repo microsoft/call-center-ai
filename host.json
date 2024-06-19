@@ -8,14 +8,13 @@
   "logging": {
     "logLevel": {
       "default": "Warning",
-      "Function": "Information",
-      "Host.Results": "Warning"
+      "Function": "Information"
     }
   },
   "extensions": {
     "http": {
-      "maxConcurrentRequests": 16,
-      "maxOutstandingRequests": 4,
+      "maxConcurrentRequests": 8,
+      "maxOutstandingRequests": 2,
       "routePrefix": ""
     },
     "queues": {

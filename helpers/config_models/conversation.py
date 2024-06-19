@@ -81,20 +81,55 @@ class WorkflowInitiateModel(BaseModel):
     bot_company: str
     bot_name: str
     claim: list[ClaimFieldModel] = [
-        ClaimFieldModel(name="extra_details", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="incident_datetime", type=ClaimTypeEnum.DATETIME),
-        ClaimFieldModel(name="incident_description", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="incident_location", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="injuries", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="medical_records", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="parties", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="policy_number", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="pre_existing_damages", type=ClaimTypeEnum.TEXT),
-        ClaimFieldModel(name="witnesses", type=ClaimTypeEnum.TEXT),
+        ClaimFieldModel(
+            description="Date and time of the incident",
+            name="incident_datetime",
+            type=ClaimTypeEnum.DATETIME,
+        ),
+        ClaimFieldModel(
+            description="Description of the incident",
+            name="incident_description",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Location of the incident",
+            name="incident_location",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Injuries sustained during the incident",
+            name="injuries",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Involved parties in the incident",
+            name="involved_parties",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Medical records related to the incident",
+            name="medical_records",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Policy number of the customer",
+            name="policy_number",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Pre-existing damages",
+            name="pre_existing_damages",
+            type=ClaimTypeEnum.TEXT,
+        ),
+        ClaimFieldModel(
+            description="Witnesses of the incident",
+            name="witnesses",
+            type=ClaimTypeEnum.TEXT,
+        ),
     ]  # Configured like in v4 for compatibility
     lang: LanguageModel = LanguageModel()  # Object is fully defined by default
     task: str = """
-        Assistant will help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. Claim data is located in the customer file. Assistant role is not over until all the relevant data is gathered.
+        Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. Claim data is located in the customer file. Assistant role is not over until all the relevant data is gathered.
     """
 
     def claim_model(self) -> type[BaseModel]:
@@ -117,23 +152,37 @@ class WorkflowInitiateModel(BaseModel):
                     name="policyholder_phone",
                     type=ClaimTypeEnum.PHONE_NUMBER,
                 ),
-                ClaimFieldModel(
-                    description="Relevant details gathered in the conversation than can be useful to solve the task",
-                    name="extra_details",
-                    type=ClaimTypeEnum.TEXT,
-                ),
             ],
         )
 
 
-class WorkflowModel(BaseModel):
-    conversation_timeout_hour: int = 72  # 3 days
+class ConversationModel(BaseModel):
     initiate: WorkflowInitiateModel
-    intelligence_hard_timeout_sec: int = 180  # 3 minutes
-    intelligence_soft_timeout_sec: int = 30  # 30 seconds
-    max_voice_recognition_retry: int = 3
-    use_slow_llm_for_chat_as_default: bool = True
-    voice_timeout_after_silence_sec: int = 2  # 2 seconds
+    answer_hard_timeout_sec: int = Field(
+        default=180,  # 3 minutes
+        serialization_alias="intelligence_hard_timeout_sec",  # Compatibility with v7
+    )
+    answer_soft_timeout_sec: int = Field(
+        default=30,  # 30 seconds
+        serialization_alias="intelligence_soft_timeout_sec",  # Compatibility with v7
+    )
+    callback_timeout_hour: int = Field(
+        default=72,  # 3 days
+        serialization_alias="conversation_timeout_hour",  # Compatibility with v7
+    )
+    phone_silence_timeout_sec: int = Field(
+        default=1,  # 1 second
+        serialization_alias="voice_timeout_after_silence_sec",  # Compatibility with v7
+    )
+    slow_llm_for_chat: bool = Field(
+        default=True,
+        serialization_alias="use_slow_llm_for_chat_as_default",  # Compatibility with v7
+    )
+    voice_recognition_retry_max: int = Field(
+        default=2,  # 2 retries
+        serialization_alias="max_voice_recognition_retry",  # Compatibility with v7
+    )
+    content_safety_for_chat: bool = True
 
 
 def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseModel]:

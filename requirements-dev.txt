@@ -1,4 +1,3 @@
-allure-pytest==2.13.5  # Required for pytest
 black[jupyter]==24.4.2
 deepeval==0.21.47
 deptry==0.16.1

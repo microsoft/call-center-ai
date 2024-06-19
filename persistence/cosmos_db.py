@@ -162,7 +162,7 @@ class CosmosDbStore(IStore):
             async with self._use_client() as db:
                 items = db.query_items(
                     max_item_count=1,
-                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.workflow.conversation_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
+                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.conversation.callback_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
                     parameters=[
                         {
                             "name": "@phone_number",

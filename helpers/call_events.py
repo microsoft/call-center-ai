@@ -147,10 +147,10 @@ async def on_recognize_timeout_error(
     if (
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
     ):  # Retry IVR recognition
-        if call.recognition_retry < CONFIG.workflow.max_voice_recognition_retry:
+        if call.recognition_retry < CONFIG.conversation.voice_recognition_retry_max:
             call.recognition_retry += 1
             logger.info(
-                f"Timeout, retrying language selection ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
+                f"Timeout, retrying language selection ({call.recognition_retry}/{CONFIG.conversation.voice_recognition_retry_max})"
             )
             await _handle_ivr_language(call=call, client=client)
         else:  # IVR retries are exhausted, end call
@@ -162,7 +162,7 @@ async def on_recognize_timeout_error(
         return
 
     if (
-        call.recognition_retry >= CONFIG.workflow.max_voice_recognition_retry
+        call.recognition_retry >= CONFIG.conversation.voice_recognition_retry_max
     ):  # Voice retries are exhausted, end call
         logger.info("Timeout, ending call")
         await _handle_goodbye(
@@ -180,7 +180,7 @@ async def on_recognize_timeout_error(
     # Retry voice recognition
     call.recognition_retry += 1
     logger.info(
-        f"Timeout, retrying voice recognition ({call.recognition_retry}/{CONFIG.workflow.max_voice_recognition_retry})"
+        f"Timeout, retrying voice recognition ({call.recognition_retry}/{CONFIG.conversation.voice_recognition_retry_max})"
     )
     await handle_recognize_text(
         call=call,
@@ -539,7 +539,7 @@ async def _handle_ivr_language(
         DtmfTone.NINE,
     ]
     choices = []
-    for i, lang in enumerate(CONFIG.workflow.initiate.lang.availables):
+    for i, lang in enumerate(CONFIG.conversation.initiate.lang.availables):
         choices.append(
             RecognitionChoice(
                 label=lang.short_code,

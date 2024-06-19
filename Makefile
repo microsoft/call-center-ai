@@ -28,9 +28,6 @@ version-full:
 	@bash ./cicd/version/version.sh -g . -c -m
 
 install:
-	@echo "➡️ Installing Allure..."
-	allure --version || brew install allure
-
 	@echo "➡️ Installing Twilio CLI..."
 	twilio --version || brew tap twilio/brew && brew install twilio
 
@@ -64,12 +61,8 @@ test:
 
 	@echo "➡️ Running Pytest..."
 	PUBLIC_DOMAIN=dummy pytest \
-		--alluredir test-reports \
-		-ra \
-		*/tests/*.py
-
-test-serve:
-	allure serve test-reports
+		--junit-xml=test-reports/$$(date +%Y%m%d%H%M%S).xml \
+		tests/*.py
 
 lint:
 	@echo "➡️ Running Black..."

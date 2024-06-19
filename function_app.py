@@ -609,7 +609,7 @@ async def _communicationservices_event_url(
         call = CallStateModel(
             initiate=initiate
             or CallInitiateModel(
-                **CONFIG.workflow.initiate.model_dump(),
+                **CONFIG.conversation.initiate.model_dump(),
                 phone_number=phone_number,
             )
         )
