@@ -122,7 +122,7 @@ output communicationId string = communicationServices.id
 output functionAppName string = functionAppName
 output logAnalyticsCustomerId string = logAnalytics.properties.customerId
 
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: prefix
   location: location
   tags: tags
@@ -276,7 +276,7 @@ resource assignmentFunctionAppQueueDataContributor 'Microsoft.Authorization/role
   }
 }
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: replace(prefix, '-', '')
   location: location
   tags: tags
@@ -289,42 +289,42 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   }
 }
 
-resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-01-01' = {
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
   parent: storageAccount
   name: 'default'
 }
 
-resource callQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+resource callQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: 'call-${phonenumberSanitized}'
 }
 
-resource smsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+resource smsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: 'sms-${phonenumberSanitized}'
 }
 
-resource postQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+resource postQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: 'post-${phonenumberSanitized}'
 }
 
-resource trainingsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-01-01' = {
+resource trainingsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: 'trainings-${phonenumberSanitized}'
 }
 
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storageAccount
   name: 'default'
 }
 
-resource publicBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+resource publicBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: '$web'
 }
 
-resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: functionAppName
 }
@@ -348,7 +348,7 @@ resource communicationServices 'Microsoft.Communication/CommunicationServices@20
   name: prefix
 }
 
-resource eventgridTopic 'Microsoft.EventGrid/systemTopics@2023-12-15-preview' = {
+resource eventgridTopic 'Microsoft.EventGrid/systemTopics@2024-06-01-preview' = {
   name: prefix
   location: 'global'
   tags: tags
@@ -461,7 +461,7 @@ resource assignmentsCommunicationServicesCognitiveUser 'Microsoft.Authorization/
   }
 }
 
-resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   name: '${prefix}-${cognitiveCommunicationLocation}-communication'
   location: cognitiveCommunicationLocation
   tags: tags
@@ -474,7 +474,7 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2023-10-01
   }
 }
 
-resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   name: '${prefix}-${location}-document'
   location: location
   tags: tags
@@ -487,7 +487,7 @@ resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2023-10-01-prev
   }
 }
 
-resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   name: '${prefix}-${location}-contentsafety'
   location: location
   tags: tags
@@ -519,7 +519,7 @@ resource assignmentsFunctionAppOpenaiContributor 'Microsoft.Authorization/roleAs
   }
 }
 
-resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   name: '${prefix}-${openaiLocation}-openai'
   location: openaiLocation
   tags: tags
@@ -532,7 +532,7 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2023-10-01-previe
   }
 }
 
-resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
   parent: cognitiveOpenai
   name: llmSlowModelFullName
   tags: tags
@@ -551,7 +551,7 @@ resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-pr
   }
 }
 
-resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
   parent: cognitiveOpenai
   name: llmFastModelFullName
   tags: tags
@@ -630,7 +630,7 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-pr
 //   }
 // }
 
-resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-preview' = {
+resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
   parent: cognitiveOpenai
   name: embeddingModelFullName
   tags: tags
@@ -649,7 +649,7 @@ resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2023-10-01-
   }
 }
 
-resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
+resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: prefix
   location: location
   tags: tags
@@ -674,7 +674,7 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
   }
 }
 
-resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15' = {
+resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' = {
   parent: cosmos
   name: appName
   properties: {
@@ -684,7 +684,7 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15
   }
 }
 
-resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-11-15' = {
+resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
   parent: database
   name: cosmosContainerName
   properties: {
@@ -730,7 +730,7 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
   }
 }
 
-resource search 'Microsoft.Search/searchServices@2023-11-01' = {
+resource search 'Microsoft.Search/searchServices@2024-03-01-preview' = {
   name: prefix
   location: searchLocation
   tags: tags
@@ -745,7 +745,7 @@ resource search 'Microsoft.Search/searchServices@2023-11-01' = {
   }
 }
 
-resource translate 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = {
+resource translate 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   name: '${prefix}-${location}-translate'
   location: location
   tags: tags
