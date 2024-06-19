@@ -171,7 +171,7 @@ class ConversationModel(BaseModel):
         serialization_alias="conversation_timeout_hour",  # Compatibility with v7
     )
     phone_silence_timeout_sec: int = Field(
-        default=2,  # 2 seconds
+        default=1,  # 1 second
         serialization_alias="voice_timeout_after_silence_sec",  # Compatibility with v7
     )
     slow_llm_for_chat: bool = Field(
