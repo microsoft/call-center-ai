@@ -20,9 +20,9 @@ SQLite3Instrumentor().instrument()
 
 
 class SqliteStore(IStore):
-    _client: Connection
     _config: SqliteModel
-    _first_run_done: bool = False
+    _db_path: str
+    _first_run_done: bool
 
     def __init__(self, cache: ICache, config: SqliteModel):
         super().__init__(cache)
@@ -30,17 +30,14 @@ class SqliteStore(IStore):
         self._config = config
 
         # Create folder if does not exist
-        db_path = self._config.full_path()
-        if not os.path.isfile(db_path):
-            db_folder = db_path[: db_path.rfind("/")]
+        self._db_path = self._config.full_path()
+
+        # Check if first run
+        self._first_run_done = False
+        if not os.path.isfile(self._db_path):
+            db_folder = self._db_path[: self._db_path.rfind("/")]
             os.makedirs(name=db_folder, exist_ok=True)
             self._first_run_done = True
-
-        # Init client
-        self._client = sqlite_connect(
-            check_same_thread=False,  # Allow pytest tests to run
-            database=db_path,
-        )
 
     async def areadiness(self) -> ReadinessStatus:
         """
@@ -254,7 +251,9 @@ class SqliteStore(IStore):
         """
         Generate the SQLite client and close it after use.
         """
-        async with self._client as client:
+        async with sqlite_connect(
+            database=self._db_path,
+        ) as client:
             if self._first_run_done:
                 await self._init_db(client)
             yield client
