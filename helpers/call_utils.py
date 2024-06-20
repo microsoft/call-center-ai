@@ -68,7 +68,7 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
 async def _handle_recognize_media(
     call: CallStateModel,
     client: CallAutomationClient,
-    contexts: Optional[list[ContextEnum]],
+    contexts: Optional[set[ContextEnum]],
     end_silence: Optional[int],
     style: MessageStyleEnum,
     text: Optional[str],

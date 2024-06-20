@@ -103,7 +103,7 @@ class RagRelevancyMetric(BaseMetric):
         return score
 
     def is_successful(self) -> bool:
-        return self.success
+        return self.success or False
 
     @property
     def __name__(self):

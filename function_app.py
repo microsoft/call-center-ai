@@ -426,11 +426,7 @@ async def _communicationservices_event_worker(
     event_type = event.type
     # Extract event context
     operation_context = event.data.get("operationContext", None)
-    operation_contexts: Optional[list[CallContextEnum]] = (
-        [CallContextEnum(context) for context in json.loads(operation_context)]
-        if operation_context
-        else None
-    )
+    operation_contexts = _str_to_contexts(operation_context)
     # Client SDK
     automation_client = await _use_automation_client()
 
@@ -674,6 +670,14 @@ async def twilio_sms_post(
         body=str(MessagingResponse()),  # Twilio expects an empty response everytime
         mimetype="application/xml",
         status_code=HTTPStatus.OK,
+    )
+
+
+def _str_to_contexts(contexts: Optional[str]) -> Optional[set[CallContextEnum]]:
+    return (
+        {CallContextEnum(context) for context in json.loads(contexts)}
+        if contexts
+        else None
     )
 
 

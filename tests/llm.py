@@ -8,12 +8,15 @@ from deepeval.metrics import (
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from helpers.call_events import (
-    on_speech_recognized,
     on_call_connected,
+    on_ivr_recognized,
+    on_play_completed,
+    on_speech_recognized,
 )
+from azure.functions import QueueMessage
 from datetime import UTC, datetime
 from deepeval.metrics import BaseMetric
-from helpers.config_models.conversation import ClaimFieldModel
+from function_app import trainings_event, post_event
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.reminder import ReminderModel
@@ -21,7 +24,7 @@ from models.training import TrainingModel
 from pydantic import TypeAdapter
 from pytest import assume
 from tests.conftest import CallAutomationClientMock, with_conversations
-from typing import Any, Optional
+from typing import Optional
 import asyncio
 import json
 import pytest
@@ -29,20 +32,17 @@ import re
 
 
 class ClaimRelevancyMetric(BaseMetric):
-    claim_fields: list[ClaimFieldModel]
-    claim: dict[str, Any]
+    call: CallStateModel
     model: GPTModel
     threshold: float
 
     def __init__(
         self,
-        claim_keys: list[ClaimFieldModel],
-        claim: dict[str, Any],
+        call: CallStateModel,
         model: GPTModel,
         threshold: float = 0.5,
     ):
-        self.claim = claim
-        self.claim_fields = claim_keys
+        self.call = call
         self.model = model
         self.threshold = threshold
 
@@ -62,7 +62,7 @@ class ClaimRelevancyMetric(BaseMetric):
                 self._score_data(
                     key=key,
                     throry=value,
-                    real=str(self.claim.get(key, None)),
+                    real=str(self.call.claim.get(key, None)),
                 )
                 for key, value in extracts.items()
             ]
@@ -151,7 +151,7 @@ class ClaimRelevancyMetric(BaseMetric):
             Assistant is a data analyst expert with 20 years of experience.
 
             # Context
-            Conversation is coming from a call centre. Today is {datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M")}.
+            Conversation is coming from a call centre. Today is {datetime.now(self.call.tz()).strftime("%Y-%m-%d %H:%M (%Z)")}.
 
             # Objective
             Extract fields from a conversation. The answer will be a JSON object with the key-value pairs.
@@ -164,7 +164,7 @@ class ClaimRelevancyMetric(BaseMetric):
             - Values should be detailed, if data exists
 
             # Fields
-            {", ".join([f"{field.name} ({field.type.value})" for field in self.claim_fields])}
+            {", ".join([f"{field.name} ({field.type.value})" for field in self.call.initiate.claim])}
 
             # Conversation
             {conversation}
@@ -205,12 +205,13 @@ class ClaimRelevancyMetric(BaseMetric):
             for extract in extracts
             if extract["value"]
             and any(
-                claim_field.name == extract["key"] for claim_field in self.claim_fields
+                claim_field.name == extract["key"]
+                for claim_field in self.call.initiate.claim
             )
         }
 
     def is_successful(self) -> bool:
-        return self.success
+        return self.success or False
 
     @property
     def __name__(self):
@@ -245,7 +246,12 @@ async def test_llm(
     actual_output = ""
 
     # Mock client
-    client = CallAutomationClientMock(play_media_callback=_play_media_callback)
+    automation_client = CallAutomationClientMock(
+        hang_up_callback=lambda: None,
+        play_media_callback=_play_media_callback,
+        transfer_callback=lambda: None,
+    )
+    call_client = automation_client.get_call_connection()
 
     # Mock call
     call.lang = lang
@@ -253,18 +259,47 @@ async def test_llm(
     # Connect call
     await on_call_connected(
         call=call,
-        client=client,
+        client=automation_client,
+    )
+
+    # First IVR
+    await on_ivr_recognized(
+        call=call,
+        client=automation_client,
+        label=call.lang.short_code,
+        post_callback=lambda _call: post_event(
+            QueueMessage(body=_call.model_dump_json())
+        ),
+        trainings_callback=lambda _call: trainings_event(
+            QueueMessage(body=_call.model_dump_json())
+        ),
     )
 
     # Simulate conversation with speech recognition
     for input in inputs:
+        # Answer
         await on_speech_recognized(
             call=call,
-            client=client,
-            post_callback=lambda _call: None,  # Disable post call
+            client=automation_client,
+            post_callback=lambda _call: post_event(
+                QueueMessage(body=_call.model_dump_json())
+            ),
             text=input,
-            trainings_callback=lambda _call: None,  # Disable training
+            trainings_callback=lambda _call: trainings_event(
+                QueueMessage(body=_call.model_dump_json())
+            ),
         )
+        # Receip
+        await on_play_completed(
+            call=call,
+            client=automation_client,
+            contexts=call_client.last_contexts,
+            post_callback=lambda _call: post_event(
+                QueueMessage(body=_call.model_dump_json())
+            ),
+        )
+        # Reset contexts
+        call_client.last_contexts.clear()
 
     # Remove newlines for log comparison
     actual_output = _remove_newlines(actual_output)
@@ -291,8 +326,7 @@ async def test_llm(
     llm_metrics = [
         BiasMetric(threshold=1, model=deepeval_model),  # Gender, age, ethnicity
         ClaimRelevancyMetric(
-            claim_keys=call.initiate.claim,
-            claim=call.claim,
+            call=call,
             model=deepeval_model,
             threshold=0.5,
         ),  # Claim data

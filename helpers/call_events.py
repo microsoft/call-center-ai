@@ -142,7 +142,7 @@ async def on_speech_recognized(
 async def on_recognize_timeout_error(
     call: CallStateModel,
     client: CallAutomationClient,
-    contexts: Optional[list[CallContextEnum]],
+    contexts: Optional[set[CallContextEnum]],
 ) -> None:
     if (
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
@@ -228,7 +228,7 @@ async def on_recognize_unknown_error(
 async def on_play_completed(
     call: CallStateModel,
     client: CallAutomationClient,
-    contexts: Optional[list[CallContextEnum]],
+    contexts: Optional[set[CallContextEnum]],
     post_callback: Callable[[CallStateModel], None],
 ) -> None:
     logger.debug("Play completed")
