@@ -6,7 +6,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
 from models.call import CallStateModel, CallInitiateModel
 from textwrap import dedent
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union
 import hashlib
 import pytest
 import random
@@ -22,44 +22,51 @@ from azure.communication.callautomation.aio import (
     CallConnectionClient,
 )
 from _pytest.mark.structures import MarkDecorator
+from function_app import _str_to_contexts
+from helpers.call_utils import ContextEnum as CallContextEnum
 from pydantic import BaseModel, ValidationError
 import yaml
 
 
-class CallAutomationClientMock(CallAutomationClient):
-    _play_media_callback: Callable[[str], None]
-
-    def __init__(self, play_media_callback: Callable[[str], None]) -> None:
-        self._play_media_callback = play_media_callback
-
-    def get_call_connection(
-        self,
-        *args,
-        **kwargs,
-    ) -> CallConnectionClient:
-        return CallConnectionClientMock(self._play_media_callback)
-
-
 class CallConnectionClientMock(CallConnectionClient):
+    _hang_up_callback: Callable[[], None]
     _play_media_callback: Callable[[str], None]
+    _transfer_callback: Callable[[], None]
 
-    def __init__(self, play_media_callback: Callable[[str], None]) -> None:
+    last_contexts: set[CallContextEnum] = set()
+
+    def __init__(
+        self,
+        hang_up_callback: Callable[[], None],
+        play_media_callback: Callable[[str], None],
+        transfer_callback: Callable[[], None],
+    ) -> None:
+        self._hang_up_callback = hang_up_callback
         self._play_media_callback = play_media_callback
+        self._transfer_callback = transfer_callback
 
     async def start_recognizing_media(
         self,
         play_prompt: Union[FileSource, TextSource, SsmlSource],
+        operation_context: Optional[str] = None,
         *args,
         **kwargs,
     ) -> None:
+        contexts = _str_to_contexts(operation_context)
+        for context in contexts or []:
+            self.last_contexts.add(context)
         self._log_media(play_prompt)
 
     async def play_media(
         self,
         play_source: Union[FileSource, TextSource, SsmlSource],
+        operation_context: Optional[str] = None,
         *args,
         **kwargs,
     ) -> None:
+        contexts = _str_to_contexts(operation_context)
+        for context in contexts or []:
+            self.last_contexts.add(context)
         self._log_media(play_source)
 
     async def transfer_call_to_participant(
@@ -67,14 +74,14 @@ class CallConnectionClientMock(CallConnectionClient):
         *args,
         **kwargs,
     ) -> None:
-        pass
+        self._transfer_callback()
 
     async def hang_up(
         self,
         *args,
         **kwargs,
     ) -> None:
-        pass
+        self._hang_up_callback()
 
     async def cancel_all_media_operations(
         self,
@@ -93,6 +100,29 @@ class CallConnectionClientMock(CallConnectionClient):
             for text in ET.fromstring(play_source.ssml_text).itertext():
                 if text.strip():
                     self._play_media_callback(text.strip())
+
+
+class CallAutomationClientMock(CallAutomationClient):
+    _call_client: CallConnectionClientMock
+
+    def __init__(
+        self,
+        hang_up_callback: Callable[[], None],
+        play_media_callback: Callable[[str], None],
+        transfer_callback: Callable[[], None],
+    ) -> None:
+        self._call_client = CallConnectionClientMock(
+            hang_up_callback=hang_up_callback,
+            play_media_callback=play_media_callback,
+            transfer_callback=transfer_callback,
+        )
+
+    def get_call_connection(
+        self,
+        *args,
+        **kwargs,
+    ) -> CallConnectionClientMock:
+        return self._call_client
 
 
 class DeepEvalAzureOpenAI(GPTModel):

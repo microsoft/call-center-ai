@@ -446,7 +446,7 @@ Moderation is applied on all bot data, including the web page and the conversati
 content_safety:
   category_hate_score: 0
   category_self_harm_score: 0
-  category_sexual_score: 5
+  category_sexual_score: 2
   category_violence_score: 0
 ```
 
