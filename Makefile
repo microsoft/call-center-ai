@@ -42,7 +42,7 @@ upgrade:
 
 	@for f in $$(find . -name "requirements*.txt"); do \
 		echo "➡️ Upgrading Python dependencies in $$f..."; \
-		python3 -m pip install --upgrade -r $$f; \
+		python3 -m pur -r $$f; \
 	done
 
 	@echo "➡️ Upgrading Bicep CLI..."
