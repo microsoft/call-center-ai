@@ -6,6 +6,8 @@ from azure.core.exceptions import (
 )
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import (
+    HybridCountAndFacetMode,
+    HybridSearch,
     QueryLanguage,
     QueryType,
     ScoringStatistics,
@@ -102,6 +104,11 @@ class AiSearchSearch(ISearch):
                             text=text,
                         )
                     ],
+                    # Hybrid search (full text + vector search)
+                    hybrid_search=HybridSearch(
+                        count_and_facet_mode=HybridCountAndFacetMode.COUNT_RETRIEVABLE_RESULTS,
+                        max_text_recall_size=1000,
+                    ),
                     # Relability
                     semantic_max_wait_in_milliseconds=750,  # Timeout in ms
                     # Return fields
