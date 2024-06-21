@@ -540,6 +540,13 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
     basePolicyName: 'Microsoft.Default'
     mode: 'Default'
     contentFilters: [
+      // Indirect attacks
+      {
+        blocking: true
+        enabled: true
+        name: 'indirect_attack'
+        source: 'Prompt'
+      }
       // Jailbreak
       {
         blocking: true

@@ -11,10 +11,11 @@ from models.message import (
     PersonaEnum as MessagePersonaEnum,
     StyleEnum as MessageStyleEnum,
 )
+from html import escape
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 from openai.types.chat import ChatCompletionToolParam
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 from typing import Awaitable, Callable, Annotated, Literal
 from typing_extensions import TypedDict
 import asyncio
@@ -335,10 +336,13 @@ class LlmPlugins:
         )
         # Flatten, remove duplicates, and sort by score
         trainings = sorted(set(training for task in tasks for training in task or []))
-        trainings_str = (
-            TypeAdapter(list[TrainingModel])
-            .dump_json(trainings, exclude=TrainingModel.excluded_fields_for_llm())
-            .decode()
+        # Format documents for Content Safety scan compatibility
+        # See: https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/content-filter?tabs=warning%2Cpython-new#embedding-documents-in-your-prompt
+        trainings_str = "\n".join(
+            [
+                f"<documents>{escape(training.model_dump_json(exclude=TrainingModel.excluded_fields_for_llm()))}</documents>"
+                for training in trainings
+            ]
         )
         # Format results
         res = "# Search results"
