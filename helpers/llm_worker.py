@@ -188,19 +188,18 @@ async def _completion_stream_worker(
                 ):  # Skip empty choices, happens sometimes with GPT-4 Turbo
                     continue
                 choice = choices[0]
+                delta = choice.delta
                 if (
                     choice.finish_reason == "content_filter"
                 ):  # Azure OpenAI content filter
-                    raise SafetyCheckError(
-                        f"Issue detected in text: {choice.delta.content}"
-                    )
+                    raise SafetyCheckError(f"Issue detected in text: {delta.content}")
                 if choice.finish_reason == "length":
                     logger.warning(
                         f"Maximum tokens reached {max_tokens}, should be fixed"
                     )
                     maximum_tokens_reached = True
-                delta = choice.delta
-                yield delta
+                if delta:
+                    yield delta
 
         else:  # Non-streaming, emulate streaming with a single completion
             completion: ChatCompletion = await client.chat.completions.create(

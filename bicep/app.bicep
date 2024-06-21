@@ -538,7 +538,7 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
   tags: tags
   properties: {
     basePolicyName: 'Microsoft.Default'
-    mode: 'Default'
+    mode: 'Deferred'  // Async moderation
     contentFilters: [
       // Indirect attacks
       {
