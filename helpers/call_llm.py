@@ -330,7 +330,7 @@ async def _execute_llm_chat(
 
     1. `bool`, notify error
     2. `bool`, should retry chat
-    4. `CallStateModel`, the updated model
+    3. `CallStateModel`, the updated model
     """
     logger.debug("Running LLM chat")
     content_full = ""
@@ -460,13 +460,14 @@ async def _execute_llm_chat(
         message.style = plugins.style
         message.tool_calls = tool_calls
     else:
-        message = MessageModel(
-            content=content_full.strip(),
-            persona=MessagePersonaEnum.ASSISTANT,
-            style=plugins.style,
-            tool_calls=tool_calls,
+        call.messages.append(
+            MessageModel(
+                content=content_full.strip(),
+                persona=MessagePersonaEnum.ASSISTANT,
+                style=plugins.style,
+                tool_calls=tool_calls,
+            )
         )
-        call.messages.append(message)
 
     if tool_calls:  # Recusive call if needed
         return False, True, call

@@ -506,15 +506,18 @@ def _contentsafety_category_test(
     """
     Returns `True` if the category is safe or the severity is low, `False` otherwise, meaning the category is unsafe.
     """
-    if score == 0:
-        return True  # No need to check severity
+    if score == 0:  # No need to check severity
+        return True
 
-    detection = next((item for item in res if item.category == category), None)
-
-    if detection and detection.severity and detection.severity > score:
+    if (
+        (detection := next((item for item in res if item.category == category), None))
+        and detection.severity
+        and detection.severity > score
+    ):  # Unsafe category detected
         logger.debug(f"Matched {category} with severity {detection.severity}")
         return False
-    return True
+
+    return True  # Default to safe
 
 
 @lru_cache  # Cache results in memory as token count is done many times on the same content
