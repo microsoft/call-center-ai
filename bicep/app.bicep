@@ -532,6 +532,87 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-previe
   }
 }
 
+resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04-01-preview' = {
+  parent: cognitiveOpenai
+  name: 'disabled'
+  tags: tags
+  properties: {
+    basePolicyName: 'Microsoft.Default'
+    mode: 'Default'
+    contentFilters: [
+      // Jailbreak
+      {
+        blocking: true
+        enabled: true
+        name: 'jailbreak'
+        source: 'Prompt'
+      }
+      // Prompt
+      {
+        blocking: false
+        enabled: false
+        name: 'hate'
+        source: 'Prompt'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'sexual'
+        source: 'Prompt'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'selfharm'
+        source: 'Prompt'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'violence'
+        source: 'Prompt'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'profanity'
+        source: 'Prompt'
+      }
+      // Completion
+      {
+        blocking: false
+        enabled: false
+        name: 'hate'
+        source: 'Completion'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'sexual'
+        source: 'Completion'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'selfharm'
+        source: 'Completion'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'violence'
+        source: 'Completion'
+      }
+      {
+        blocking: false
+        enabled: false
+        name: 'profanity'
+        source: 'Completion'
+      }
+    ]
+  }
+}
+
 resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
   parent: cognitiveOpenai
   name: llmSlowModelFullName
@@ -541,7 +622,7 @@ resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
     name: llmSlowDeploymentType
   }
   properties: {
-    // raiPolicyName: contentfilter.name
+    raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
@@ -560,7 +641,7 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
     name: llmFastDeploymentType
   }
   properties: {
-    // raiPolicyName: contentfilter.name
+    raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
@@ -568,67 +649,10 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
       version: llmFastVersion
     }
   }
+  dependsOn: [
+    llmSlow
+  ]
 }
-
-// resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2023-06-01-preview' = {
-//   parent: cognitiveOpenai
-//   name: 'disabled'
-//   tags: tags
-//   properties: {
-//     basePolicyName: 'Microsoft.Default'
-//     mode: 'Default'
-//     contentFilters: [
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'hate'
-//         source: 'Prompt'
-//       }
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'sexual'
-//         source: 'Prompt'
-//       }
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'selfharm'
-//         source: 'Prompt'
-//       }
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'violence'
-//         source: 'Prompt'
-//       }
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'hate'
-//         source: 'Completion'
-//       }
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'sexual'
-//         source: 'Completion'
-//       }
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'selfharm'
-//         source: 'Completion'
-//       }
-//       {
-//         blocking: false
-//         enabled: false
-//         name: 'violence'
-//         source: 'Completion'
-//       }
-//     ]
-//   }
-// }
 
 resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
   parent: cognitiveOpenai
@@ -639,7 +663,7 @@ resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-
     name: embeddingDeploymentType
   }
   properties: {
-    // raiPolicyName: contentfilter.name
+    raiPolicyName: contentfilter.name
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
@@ -647,6 +671,9 @@ resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-
       version: embeddingVersion
     }
   }
+  dependsOn: [
+    llmFast
+  ]
 }
 
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
