@@ -138,7 +138,10 @@ async def test_relevancy(
     # Fill call with messages
     for input in inputs:
         call.messages.append(
-            MessageModel(content=input, persona=MessagePersonaEnum.HUMAN)
+            MessageModel(
+                content=input,
+                persona=MessagePersonaEnum.HUMAN,
+            )
         )
 
     # Get trainings

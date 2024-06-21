@@ -119,7 +119,12 @@ async def on_speech_recognized(
     trainings_callback: Callable[[CallStateModel], None],
 ) -> None:
     logger.info(f"Voice recognition: {text}")
-    call.messages.append(MessageModel(content=text, persona=MessagePersonaEnum.HUMAN))
+    call.messages.append(
+        MessageModel(
+            content=text,
+            persona=MessagePersonaEnum.HUMAN,
+        )
+    )
     call.recognition_retry = 0  # Reset recognition retry counter
     await asyncio.gather(
         handle_clear_queue(
@@ -390,9 +395,9 @@ async def _handle_hangup(
     await handle_hangup(client=client, call=call)
     call.messages.append(
         MessageModel(
+            action=MessageActionEnum.HANGUP,
             content="",
             persona=MessagePersonaEnum.HUMAN,
-            action=MessageActionEnum.HANGUP,
         )
     )
     post_callback(call)

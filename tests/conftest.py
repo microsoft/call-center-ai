@@ -165,8 +165,18 @@ class DeepEvalAzureOpenAI(GPTModel):
         self._cache = cache
         self._model = AzureChatOpenAI(**_langchain_kwargs)
 
-    def generate(self, *args, **kwargs):
-        raise NotImplementedError
+    def generate(self, prompt: str) -> Tuple[str, float]:
+        prompt = dedent(prompt).strip()
+        cache_key = self._cache_key(prompt)
+        # Try cache
+        content: Tuple[str, float] = self._cache.get(cache_key, None)
+        if content:
+            return content
+        # Try live
+        res = super().generate(prompt)
+        # Update cache
+        self._cache.set(cache_key, res)
+        return res
 
     async def a_generate(self, prompt: str) -> Tuple[str, float]:
         prompt = dedent(prompt).strip()

@@ -63,6 +63,7 @@ curl \
 - [x] Follow a specific data schema for the claim
 - [x] Has access to a documentation database (few-shot training / RAG)
 - [x] Help the user to find the information needed to complete the claim
+- [x] Jailbreak detection
 - [x] Lower AI Search cost by usign a Redis cache
 - [x] Monitoring and tracing with Application Insights
 - [x] Receive SMS during a conversation for explicit wordings
@@ -283,7 +284,7 @@ Steps to deploy:
 2. Create the local `config.yaml` file (like the example above)
 3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
-5. Wait for the deployment to finish (if it fails for a `'null' not found` error, retry the command)
+5. Wait for the deployment to finish
 6. Link the AI multi-service account named `[my-instance]-communication` to the Communication Services resource
 7. Create a AI Search index named `trainings` plus a semantic search configuration named `default` on the index
 

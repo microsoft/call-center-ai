@@ -42,6 +42,7 @@ class ClaimRelevancyMetric(BaseMetric):
         model: GPTModel,
         threshold: float = 0.5,
     ):
+        super().__init__()
         self.call = call
         self.model = model
         self.threshold = threshold
@@ -203,7 +204,8 @@ class ClaimRelevancyMetric(BaseMetric):
         return {
             extract["key"]: extract["value"]
             for extract in extracts
-            if extract["value"]
+            if "value" in extract
+            and "key" in extract
             and any(
                 claim_field.name == extract["key"]
                 for claim_field in self.call.initiate.claim
@@ -220,7 +222,6 @@ class ClaimRelevancyMetric(BaseMetric):
 
 @with_conversations
 @pytest.mark.asyncio(scope="session")
-@pytest.mark.repeat(3)  # Catch non deterministic issues
 async def test_llm(
     call: CallStateModel,
     claim_tests_excl: list[str],

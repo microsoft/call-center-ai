@@ -4,6 +4,7 @@ from helpers.config import CONFIG
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.message import (
+    ActionEnum as MessageAction,
     extract_message_style,
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
@@ -59,7 +60,7 @@ async def llm_completion(text: Optional[str], call: CallStateModel) -> Optional[
     except APIError as e:
         logger.warning(f"OpenAI API call error: {e}")
     except SafetyCheckError as e:
-        logger.warning(f"OpenAI safety check error: {e}")
+        logger.warning(f"Safety Check error: {e}")
 
     return content
 
@@ -330,7 +331,7 @@ async def _execute_llm_chat(
 
     1. `bool`, notify error
     2. `bool`, should retry chat
-    4. `CallStateModel`, the updated model
+    3. `CallStateModel`, the updated model
     """
     logger.debug("Running LLM chat")
     content_full = ""
@@ -412,12 +413,25 @@ async def _execute_llm_chat(
                 ):
                     content_buffer_pointer += len(sentence)
                     plugins.style = await _content_callback(sentence, plugins.style)
-    except MaximumTokensReachedError:
+    except MaximumTokensReachedError:  # Retry on maximum tokens reached
         logger.warning("Maximum tokens reached for this completion, retry asked")
         maximum_tokens_reached = True
-    except APIError as e:
+    except APIError as e:  # Retry on API error
         logger.warning(f"OpenAI API call error: {e}")
         return True, True, call  # Error, retry
+    except SafetyCheckError as e:  # Last user message is trash, remove it
+        logger.warning(f"Safety Check error: {e}")
+        if last_message := next(
+            (
+                call
+                for call in reversed(call.messages)
+                if call.persona == MessagePersonaEnum.HUMAN
+                and call.action in [MessageAction.SMS, MessageAction.TALK]
+            ),
+            None,
+        ):  # Remove last user message
+            call.messages.remove(last_message)
+        return True, False, call  # Error, no retry
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
@@ -460,13 +474,14 @@ async def _execute_llm_chat(
         message.style = plugins.style
         message.tool_calls = tool_calls
     else:
-        message = MessageModel(
-            content=content_full.strip(),
-            persona=MessagePersonaEnum.ASSISTANT,
-            style=plugins.style,
-            tool_calls=tool_calls,
+        call.messages.append(
+            MessageModel(
+                content=content_full.strip(),
+                persona=MessagePersonaEnum.ASSISTANT,
+                style=plugins.style,
+                tool_calls=tool_calls,
+            )
         )
-        call.messages.append(message)
 
     if tool_calls:  # Recusive call if needed
         return False, True, call
