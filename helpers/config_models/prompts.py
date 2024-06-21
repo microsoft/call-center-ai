@@ -1,6 +1,7 @@
 from azure.core.exceptions import HttpResponseError
 from datetime import datetime, UTC
 from functools import cached_property
+from html import escape
 from logging import Logger
 from models.call import CallStateModel
 from models.message import MessageModel
@@ -464,10 +465,13 @@ class LlmModel(BaseModel):
 
         # Format trainings, if any
         if trainings:
-            trainings_str = (
-                TypeAdapter(list[TrainingModel])
-                .dump_json(trainings, exclude=TrainingModel.excluded_fields_for_llm())
-                .decode()
+            # Format documents for Content Safety scan compatibility
+            # See: https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/content-filter?tabs=warning%2Cpython-new#embedding-documents-in-your-prompt
+            trainings_str = "\n".join(
+                [
+                    f"<documents>{escape(training.model_dump_json(exclude=TrainingModel.excluded_fields_for_llm()))}</documents>"
+                    for training in trainings
+                ]
             )
             res += "\n\n# Trusted data you can use"
             res += f"\n{trainings_str}"
