@@ -316,7 +316,7 @@ async def _execute_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], None],
-    tts_callback: Callable[[str, MessageStyleEnum], Awaitable],
+    tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     use_tools: bool,
 ) -> Tuple[bool, bool, CallStateModel]:
     """

@@ -14,7 +14,7 @@ from helpers.call_events import (
     on_speech_recognized,
 )
 from azure.functions import QueueMessage
-from datetime import UTC, datetime
+from datetime import datetime
 from deepeval.metrics import BaseMetric
 from function_app import trainings_event, post_event
 from helpers.logging import logger

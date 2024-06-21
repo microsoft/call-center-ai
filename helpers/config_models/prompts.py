@@ -1,5 +1,5 @@
 from azure.core.exceptions import HttpResponseError
-from datetime import datetime, UTC
+from datetime import datetime
 from functools import cached_property
 from html import escape
 from logging import Logger

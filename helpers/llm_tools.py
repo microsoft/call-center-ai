@@ -35,14 +35,14 @@ class LlmPlugins:
     client: CallAutomationClient
     post_callback: Callable[[CallStateModel], None]
     style: MessageStyleEnum = MessageStyleEnum.NONE
-    tts_callback: Callable[[str, MessageStyleEnum], Awaitable]
+    tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]]
 
     def __init__(
         self,
         call: CallStateModel,
         client: CallAutomationClient,
         post_callback: Callable[[CallStateModel], None],
-        tts_callback: Callable[[str, MessageStyleEnum], Awaitable],
+        tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     ):
         self.call = call
         self.client = client
