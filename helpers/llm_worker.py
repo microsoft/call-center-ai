@@ -15,6 +15,7 @@ from openai import (
     AsyncAzureOpenAI,
     AsyncOpenAI,
     AsyncStream,
+    BadRequestError,
     InternalServerError,
     RateLimitError,
 )
@@ -84,7 +85,6 @@ _retried_exceptions = [
     APIResponseValidationError,
     InternalServerError,
     RateLimitError,
-    SafetyCheckError,
 ]
 
 
@@ -173,54 +173,69 @@ async def _completion_stream_worker(
     }  # Shared kwargs for both streaming and non-streaming
     maximum_tokens_reached = False
 
-    if platform.streaming:  # Streaming
-        stream: AsyncStream[ChatCompletionChunk] = await client.chat.completions.create(
-            **chat_kwargs,
-            stream=True,
-        )
-        async for chunck in stream:
-            choices = chunck.choices
-            if not choices:  # Skip empty choices, happens sometimes with GPT-4 Turbo
-                continue
-            choice = choices[0]
+    try:
+        if platform.streaming:  # Streaming
+            stream: AsyncStream[ChatCompletionChunk] = (
+                await client.chat.completions.create(
+                    **chat_kwargs,
+                    stream=True,
+                )
+            )
+            async for chunck in stream:
+                choices = chunck.choices
+                if (
+                    not choices
+                ):  # Skip empty choices, happens sometimes with GPT-4 Turbo
+                    continue
+                choice = choices[0]
+                if (
+                    choice.finish_reason == "content_filter"
+                ):  # Azure OpenAI content filter
+                    raise SafetyCheckError(
+                        f"Issue detected in text: {choice.delta.content}"
+                    )
+                if choice.finish_reason == "length":
+                    logger.warning(
+                        f"Maximum tokens reached {max_tokens}, should be fixed"
+                    )
+                    maximum_tokens_reached = True
+                delta = choice.delta
+                yield delta
+
+        else:  # Non-streaming, emulate streaming with a single completion
+            completion: ChatCompletion = await client.chat.completions.create(
+                **chat_kwargs
+            )
+            choice = completion.choices[0]
             if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
                 raise SafetyCheckError(
-                    f"Content filter detected for text: {choice.delta.content}"
+                    f"Issue detected in generation: {choice.message.content}"
                 )
             if choice.finish_reason == "length":
                 logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
                 maximum_tokens_reached = True
-            delta = choice.delta
-            yield delta
-
-    else:  # Non-streaming, emulate streaming with a single completion
-        completion: ChatCompletion = await client.chat.completions.create(**chat_kwargs)
-        choice = completion.choices[0]
-        if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
-            raise SafetyCheckError(
-                f"Content filter detected for text: {choice.message.content}"
+            message = choice.message
+            delta = ChoiceDelta(
+                content=message.content,
+                role=message.role,
+                tool_calls=[
+                    ChoiceDeltaToolCall(
+                        id=tool.id,
+                        index=0,
+                        type=tool.type,
+                        function=ChoiceDeltaToolCallFunction(
+                            arguments=tool.function.arguments,
+                            name=tool.function.name,
+                        ),
+                    )
+                    for tool in message.tool_calls or []
+                ],
             )
-        if choice.finish_reason == "length":
-            logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
-            maximum_tokens_reached = True
-        message = choice.message
-        delta = ChoiceDelta(
-            content=message.content,
-            role=message.role,
-            tool_calls=[
-                ChoiceDeltaToolCall(
-                    id=tool.id,
-                    index=0,
-                    type=tool.type,
-                    function=ChoiceDeltaToolCallFunction(
-                        arguments=tool.function.arguments,
-                        name=tool.function.name,
-                    ),
-                )
-                for tool in message.tool_calls or []
-            ],
-        )
-        yield delta
+            yield delta
+    except BadRequestError as e:
+        if e.code == "content_filter":
+            raise SafetyCheckError("Issue detected in prompt")
+        raise e
 
     if maximum_tokens_reached:
         raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
@@ -294,18 +309,23 @@ async def _completion_sync_worker(
         system=system,
     )
 
-    res = await client.chat.completions.create(
-        max_tokens=max_tokens,
-        messages=prompt,
-        model=platform.model,
-        seed=42,  # Reproducible results
-        temperature=0,  # Most focused and deterministic
-        **extra,
-    )
+    try:
+        res = await client.chat.completions.create(
+            max_tokens=max_tokens,
+            messages=prompt,
+            model=platform.model,
+            seed=42,  # Reproducible results
+            temperature=0,  # Most focused and deterministic
+            **extra,
+        )
+    except BadRequestError as e:
+        if e.code == "content_filter":
+            raise SafetyCheckError("Issue detected in prompt")
+        raise e
     choice = res.choices[0]
     if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
         raise SafetyCheckError(
-            f"Content filter detected for text: {choice.message.content}"
+            f"Issue detected in generation: {choice.message.content}"
         )
     if choice.finish_reason == "length":
         raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
