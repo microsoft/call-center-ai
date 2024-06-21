@@ -390,6 +390,16 @@ Finally, run:
 make dev
 ```
 
+### Debug
+
+Breakpoints can be added in the code to debug the application with your favorite IDE.
+
+Also, `local.py` script is available to test the application without the need of a phone call (= without Communication Services). Run the script with:
+
+```bash
+python3 -m tests.local
+```
+
 ## Advanced usage
 
 ### Add my custom training data with AI Search

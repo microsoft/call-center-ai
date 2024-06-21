@@ -268,12 +268,8 @@ async def test_llm(
         call=call,
         client=automation_client,
         label=call.lang.short_code,
-        post_callback=lambda _call: post_event(
-            QueueMessage(body=_call.model_dump_json())
-        ),
-        trainings_callback=lambda _call: trainings_event(
-            QueueMessage(body=_call.model_dump_json())
-        ),
+        post_callback=lambda _: None,
+        trainings_callback=lambda _: None,
     )
 
     # Simulate conversation with speech recognition
@@ -282,22 +278,18 @@ async def test_llm(
         await on_speech_recognized(
             call=call,
             client=automation_client,
-            post_callback=lambda _call: post_event(
-                QueueMessage(body=_call.model_dump_json())
-            ),
+            post_callback=lambda _: None,
             text=input,
-            trainings_callback=lambda _call: trainings_event(
-                QueueMessage(body=_call.model_dump_json())
-            ),
+            trainings_callback=lambda _: None,
         )
+        # Mock trainings callback
+        await call.trainings(cache_only=False)
         # Receip
         await on_play_completed(
             call=call,
             client=automation_client,
             contexts=call_client.last_contexts,
-            post_callback=lambda _call: post_event(
-                QueueMessage(body=_call.model_dump_json())
-            ),
+            post_callback=lambda _: None,
         )
         # Reset contexts
         call_client.last_contexts.clear()
