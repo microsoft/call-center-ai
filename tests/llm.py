@@ -220,7 +220,6 @@ class ClaimRelevancyMetric(BaseMetric):
 
 @with_conversations
 @pytest.mark.asyncio(scope="session")
-@pytest.mark.repeat(3)  # Catch non deterministic issues
 async def test_llm(
     call: CallStateModel,
     claim_tests_excl: list[str],
