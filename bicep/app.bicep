@@ -335,7 +335,7 @@ resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscr
       destination: {
         endpointType: 'StorageQueue'
         properties: {
-          queueMessageTimeToLiveInSeconds: 60  // Short lived messages, only new call events
+          queueMessageTimeToLiveInSeconds: 30  // Short lived messages, only new call events
           queueName: callQueue.name
           resourceId: storageAccount.id
         }
