@@ -15,7 +15,6 @@ param llmSlowModel string
 param llmSlowQuota int
 param llmSlowVersion string
 param location string
-param moderationBlocklists array
 param openaiLocation string
 param searchLocation string
 param tags object
@@ -92,11 +91,6 @@ var config = {
     access_key: search.listAdminKeys().primaryKey
     endpoint: 'https://${search.name}.search.windows.net'
     index: 'trainings'
-  }
-  content_safety: {
-    access_key: cognitiveContentsafety.listKeys().key1
-    blocklists: moderationBlocklists
-    endpoint: cognitiveContentsafety.properties.endpoint
   }
   prompts: {
     llm: localConfig.prompts.llm
@@ -484,23 +478,6 @@ resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2024-04-01-prev
   kind: 'FormRecognizer'
   properties: {
     customSubDomainName: '${prefix}-${location}-document'
-  }
-}
-
-resource cognitiveContentsafety 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
-  name: '${prefix}-${location}-contentsafety'
-  location: location
-  tags: tags
-  sku: {
-    name: 'S0'  // Pay-as-you-go
-  }
-  kind: 'ContentSafety'
-  properties: {
-    customSubDomainName: '${prefix}-${location}-contentsafety'
-    publicNetworkAccess: 'Enabled'
-    networkAcls: {
-      defaultAction: 'Allow'
-    }
   }
 }
 

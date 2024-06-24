@@ -1,12 +1,3 @@
-from azure.ai.contentsafety.aio import ContentSafetyClient
-from azure.ai.contentsafety.models import (
-    AnalyzeTextOptions,
-    AnalyzeTextResult,
-    TextCategoriesAnalysis,
-    TextCategory,
-)
-from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import HttpResponseError, ServiceRequestError
 from helpers.config import CONFIG
 from helpers.logging import logger, tracer
 from openai import (
@@ -44,7 +35,6 @@ from tenacity import (
 )
 from functools import lru_cache
 from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
-from helpers.http import azure_transport
 from helpers.resources import resources_dir
 from models.message import MessageModel
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
@@ -65,11 +55,8 @@ environ["TIKTOKEN_CACHE_DIR"] = resources_dir("tiktoken")
 logger.info(
     f"Using LLM models {CONFIG.llm.selected(False).model} (slow) and {CONFIG.llm.selected(True).model} (fast)"
 )
-logger.info(f"Using Content Safety {CONFIG.content_safety.endpoint}")
 
-_cache = CONFIG.cache.instance()
 ModelType = TypeVar("ModelType", bound=BaseModel)
-_contentsafety_client: Optional[ContentSafetyClient] = None
 
 
 class SafetyCheckError(Exception):
@@ -332,8 +319,6 @@ async def _completion_sync_worker(
 
     if not content:
         return None
-    if not json_output:
-        return await safety_check(content)
 
 
 @retry(
@@ -421,124 +406,6 @@ def _limit_messages(
     ]
 
 
-@tracer.start_as_current_span("safety_check")
-async def safety_check(text: str) -> str:
-    """
-    Raise `SafetyCheckError` if the text is safe, nothing otherwise.
-
-    Text can be returned both safe and censored, before containing unsafe content.
-    """
-    safe_value = "safe"
-
-    # Try cache
-    cache_key = f"{__name__}-safety_check-{text}"
-    cached = await _cache.aget(cache_key)
-    if cached:
-        decoded = cached.decode()
-        if decoded == safe_value:
-            return text  # Return safe text
-        raise SafetyCheckError(decoded)
-
-    try:
-        res = await _contentsafety_analysis(text)
-    except ServiceRequestError as e:
-        logger.error(f"Request error: {e}")
-        return text  # Assume safe
-    except HttpResponseError as e:
-        logger.error(f"Response error: {e}")
-        return text  # Assume safe
-
-    # Replace blocklist items with censored text
-    for match in res.blocklists_match or []:
-        logger.debug(f"Matched blocklist item: {match.blocklist_item_text}")
-        text = text.replace(
-            match.blocklist_item_text, "*" * len(match.blocklist_item_text)
-        )
-
-    # Check hate category
-    hate_result = _contentsafety_category_test(
-        res.categories_analysis,
-        TextCategory.HATE,
-        CONFIG.content_safety.category_hate_score,
-    )
-    # Check self harm category
-    self_harm_result = _contentsafety_category_test(
-        res.categories_analysis,
-        TextCategory.SELF_HARM,
-        CONFIG.content_safety.category_self_harm_score,
-    )
-    # Check sexual category
-    sexual_result = _contentsafety_category_test(
-        res.categories_analysis,
-        TextCategory.SEXUAL,
-        CONFIG.content_safety.category_sexual_score,
-    )
-    # Check violence category
-    violence_result = _contentsafety_category_test(
-        res.categories_analysis,
-        TextCategory.VIOLENCE,
-        CONFIG.content_safety.category_violence_score,
-    )
-
-    # True if all categories are safe
-    safety = hate_result and self_harm_result and sexual_result and violence_result
-    logger.debug(f'Text safety "{safety}" for text: {text}')
-
-    if not safety:
-        error_message = f"Unsafe content detected, hate={hate_result}, self_harm={self_harm_result}, sexual={sexual_result}, violence={violence_result}: {text}"
-        await _cache.aset(cache_key, error_message)
-        raise SafetyCheckError(error_message)
-
-    await _cache.aset(cache_key, safe_value)
-    return text  # Return updated text
-
-
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(HttpResponseError),
-    stop=stop_after_attempt(3),
-    wait=wait_random_exponential(multiplier=0.8, max=8),
-)
-async def _contentsafety_analysis(text: str) -> AnalyzeTextResult:
-    """
-    Returns the result of the content safety analysis.
-
-    Catch errors for a maximum of 3 times (internal + `HttpResponseError`), then raise the error.
-    """
-    client = await _use_contentsafety()
-    res = await client.analyze_text(
-        AnalyzeTextOptions(
-            blocklist_names=CONFIG.content_safety.blocklists,
-            halt_on_blocklist_hit=False,
-            output_type="EightSeverityLevels",
-            text=text,
-        )
-    )
-    return res
-
-
-def _contentsafety_category_test(
-    res: list[TextCategoriesAnalysis],
-    category: TextCategory,
-    score: int,
-) -> bool:
-    """
-    Returns `True` if the category is safe or the severity is low, `False` otherwise, meaning the category is unsafe.
-    """
-    if score == 0:  # No need to check severity
-        return True
-
-    if (
-        (detection := next((item for item in res if item.category == category), None))
-        and detection.severity
-        and detection.severity > score
-    ):  # Unsafe category detected
-        logger.debug(f"Matched {category} with severity {detection.severity}")
-        return False
-
-    return True  # Default to safe
-
-
 @lru_cache  # Cache results in memory as token count is done many times on the same content
 def _count_tokens(content: str, model: str) -> int:
     """
@@ -554,11 +421,6 @@ def _count_tokens(content: str, model: str) -> int:
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 
-def _llm_key(is_fast: bool) -> str:
-    platform = CONFIG.llm.selected(is_fast)
-    return f"{platform.model}-{platform.context}"
-
-
 def _use_llm(
     is_fast: bool,
 ) -> Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel]:
@@ -568,22 +430,3 @@ def _use_llm(
     The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
     """
     return CONFIG.llm.selected(is_fast).instance()
-
-
-async def _use_contentsafety() -> ContentSafetyClient:
-    """
-    Returns a Content Safety client.
-    """
-    global _contentsafety_client
-    if not isinstance(_contentsafety_client, ContentSafetyClient):
-        _contentsafety_client = ContentSafetyClient(
-            # Deployment
-            endpoint=CONFIG.content_safety.endpoint,
-            # Performance
-            transport=await azure_transport(),
-            # Authentication
-            credential=AzureKeyCredential(
-                CONFIG.content_safety.access_key.get_secret_value()
-            ),
-        )
-    return _contentsafety_client

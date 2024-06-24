@@ -26,7 +26,6 @@ from helpers.llm_worker import (
     completion_sync,
     MaximumTokensReachedError,
     ModelType,
-    safety_check,
     SafetyCheckError,
 )
 from openai import APIError
@@ -133,13 +132,6 @@ async def load_llm_chat(
         Send back the TTS to the user.
         """
         nonlocal should_play_sound
-
-        if CONFIG.conversation.content_safety_for_chat:
-            try:
-                text = await safety_check(text)
-            except SafetyCheckError as e:
-                logger.warning(f"Unsafe text detected, not playing: {e}")
-                return
 
         should_play_sound = False
         await asyncio.gather(

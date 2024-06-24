@@ -144,7 +144,6 @@ graph LR
     ada["Embedding\n(ADA)"]
     app["App\n(Functions App)"]
     communication_services["Call & SMS gateway\n(Communication Services)"]
-    constent_safety["Moderation\n(Content Safety)"]
     db[("Conversations and claims\n(Cosmos DB / SQLite)")]
     eventgrid["Broker\n(Event Grid)"]
     gpt["LLM\n(GPT-4o)"]
@@ -165,7 +164,6 @@ graph LR
   app -- Get cached data --> redis
   app -- Save conversation --> db
   app -- Send SMS report --> communication_services
-  app -- Test for profanity --> constent_safety
   app -. Watch .-> queues
 
   communication_services -- Generate voice --> tts
@@ -196,7 +194,6 @@ sequenceDiagram
     actor Human agent
     participant Event Grid
     participant Communication Services
-    participant Content Safety
     participant App
     participant Cosmos DB
     participant OpenAI GPT
@@ -223,10 +220,6 @@ sequenceDiagram
         loop Over buffer
             loop Over multiple tools
                 alt Is this a claim data update?
-                    App->>Content Safety: Ask for safety test
-                    alt Is the text safe?
-                        App->>Communication Services: Send dynamic SSML text
-                    end
                     App->>Cosmos DB: Update claim data
                 else Does the user want the human agent?
                     App->>Communication Services: Send static SSML text
@@ -235,14 +228,6 @@ sequenceDiagram
                 else Should we end the call?
                     App->>Communication Services: Send static SSML text
                     App->>Communication Services: End the call
-                end
-            end
-            alt Is there a text?
-                alt Is there enough text to make a sentence?
-                    App->>Content Safety: Ask for safety test
-                    alt Is the text safe?
-                        App->>Communication Services: Send dynamic SSML text
-                    end
                 end
             end
         end
@@ -344,10 +329,6 @@ ai_search:
   endpoint: https://xxx.search.windows.net
   index: trainings
 
-content_safety:
-  access_key: xxx
-  endpoint: https://xxx.cognitiveservices.azure.com
-
 ai_translation:
   access_key: xxx
   endpoint: https://xxx.cognitiveservices.azure.com
@@ -446,20 +427,7 @@ conversation:
 
 ### Customize the moderation levels
 
-Levels are defined for each category of Content Safety. The higher the score, the more strict the moderation is, from 0 to 7.
-
-Moderation is applied on all bot data, including the web page and the conversation.
-
-```yaml
-# config.yaml
-[...]
-
-content_safety:
-  category_hate_score: 0
-  category_self_harm_score: 0
-  category_sexual_score: 2
-  category_violence_score: 0
-```
+Levels are defined for each category of Content Safety. The higher the score, the more strict the moderation is, from 0 to 7. Moderation is applied on all bot data, including the web page and the conversation. Configure them in Azure OpenAI Content Filters.
 
 ### Customize the claim data schema
 
@@ -533,7 +501,6 @@ conversation:
   answer_hard_timeout_sec: 180
   answer_soft_timeout_sec: 30
   callback_timeout_hour: 72
-  content_safety_for_chat: true
   phone_silence_timeout_sec: 1
   slow_llm_for_chat: true
   voice_recognition_retry_max: 2

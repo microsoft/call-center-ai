@@ -3,7 +3,6 @@ from helpers.config_models.ai_translation import AiTranslationModel
 from helpers.config_models.cache import CacheModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_services import CommunicationServicesModel
-from helpers.config_models.content_safety import ContentSafetyModel
 from helpers.config_models.database import DatabaseModel
 from helpers.config_models.llm import LlmModel
 from helpers.config_models.monitoring import MonitoringModel
@@ -34,7 +33,6 @@ class RootModel(BaseSettings):
     communication_services: CommunicationServicesModel = Field(
         serialization_alias="communication_service",  # Compatibility with v5
     )
-    content_safety: ContentSafetyModel
     database: DatabaseModel = DatabaseModel()  # Object is fully defined by default
     llm: LlmModel
     monitoring: MonitoringModel = (

@@ -63,7 +63,6 @@ module app 'app.bicep' = {
     llmSlowQuota: llmSlowQuota
     llmSlowVersion: llmSlowVersion
     location: location
-    moderationBlocklists: []
     openaiLocation: openaiLocation
     searchLocation: searchLocation
     tags: tags
