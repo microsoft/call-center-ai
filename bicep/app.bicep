@@ -164,10 +164,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: flexFuncPlan.id
     siteConfig: {
       appSettings: [
-        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#azurewebjobsstorage__accountname
+        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#azurewebjobsstorage
         {
-          name: 'AzureWebJobsStorage__accountName'
-          value: storageAccount.name
+          name: 'AzureWebJobsStorage'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
         }
         // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#applicationinsights_connection_string
         {
@@ -195,7 +195,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           type: 'blobContainer'
           value: '${storageAccount.properties.primaryEndpoints.blob}${functionAppBlob.name}'
           authentication: {
-            type: 'SystemAssignedIdentity'
+            storageAccountConnectionStringName: 'AzureWebJobsStorage'
+            type: 'StorageAccountConnectionString'
           }
         }
       }
@@ -205,68 +206,20 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         alwaysReady: [
           {
             instanceCount: 2
-            name: 'function:communicationservices_event_post'  // Handle conversation events
-          }
-          {
-            instanceCount: 1
-            name: 'function:call_event'  // "new call" event from Communication Services
-          }
-          {
-            instanceCount: 1
-            name: 'function:trainings_event'  // Preload trainings from AI Search
+            name: 'http'  // Handle "conversation" events
           }
         ]
+        triggers: {
+          http:{
+            perInstanceConcurrency: 4
+          }
+        }
       }
       runtime: {
         name: 'python'
         version: '3.11'
       }
     }
-  }
-}
-
-// Storage Account Contributor
-resource roleStorageAccountContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: '17d1049b-9a84-46fb-8f53-869881c3d3ab'
-}
-
-resource assignmentFunctionAppStorageAccountContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentFunctionAppStorageAccountContributor')
-  scope: storageAccount
-  properties: {
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: roleStorageAccountContributor.id
-  }
-}
-
-// Storage Blob Data Owner
-resource roleBlobDataOwner 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
-}
-
-resource assignmentFunctionAppBlobDataOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentFunctionAppBlobDataOwner')
-  scope: storageAccount
-  properties: {
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: roleBlobDataOwner.id
-  }
-}
-
-// Storage Queue Data Contributor
-resource roleQueueDataContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
-}
-
-resource assignmentFunctionAppQueueDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentFunctionAppQueueDataContributor')
-  scope: storageAccount
-  properties: {
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: roleQueueDataContributor.id
   }
 }
 
@@ -382,7 +335,7 @@ resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscr
       destination: {
         endpointType: 'StorageQueue'
         properties: {
-          queueMessageTimeToLiveInSeconds: 60  // Short lived messages, only new call events
+          queueMessageTimeToLiveInSeconds: 30  // Short lived messages, only new call events
           queueName: callQueue.name
           resourceId: storageAccount.id
         }
