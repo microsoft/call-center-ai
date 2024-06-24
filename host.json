@@ -13,14 +13,12 @@
   },
   "extensions": {
     "http": {
-      "maxConcurrentRequests": 8,
-      "maxOutstandingRequests": 2,
       "routePrefix": ""
     },
     "queues": {
-      "batchSize": 16,
-      "maxDequeueCount": 3,
-      "maxPollingInterval": "00:00:02",
+      "batchSize": 32,
+      "maxDequeueCount": 4,
+      "maxPollingInterval": "00:00:03",
       "visibilityTimeout": "00:00:01"
     }
   }
