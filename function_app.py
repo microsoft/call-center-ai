@@ -457,10 +457,10 @@ async def _communicationservices_event_worker(
                 await on_speech_recognized(
                     call=call,
                     client=automation_client,
-                    text=speech_text,
                     post_callback=lambda _call: _trigger_post_event(
                         call=_call, post=post
                     ),
+                    text=speech_text,
                     trainings_callback=lambda _call: _trigger_trainings_event(
                         call=_call, trainings=trainings
                     ),
@@ -649,16 +649,19 @@ async def twilio_sms_post(
     except Exception as e:
         return _validation_error(e)
     call = await _db.call_asearch_one(phone_number)
+
     if not call:
         logger.warning(f"Call for phone number {phone_number} not found")
+
     else:
         trace.get_current_span().set_attribute(
             SpanAttributes.ENDUSER_ID, call.initiate.phone_number
         )
+
         event_status = await on_sms_received(
             call=call,
-            message=message,
             client=await _use_automation_client(),
+            message=message,
             post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
             trainings_callback=lambda _call: _trigger_trainings_event(
                 call=_call, trainings=trainings
@@ -666,6 +669,7 @@ async def twilio_sms_post(
         )
         if not event_status:
             return func.HttpResponse(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+
     return func.HttpResponse(
         body=str(MessagingResponse()),  # Twilio expects an empty response everytime
         mimetype="application/xml",

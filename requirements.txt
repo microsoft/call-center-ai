@@ -1,6 +1,5 @@
 aiohttp==3.9.5  # Required for all Azure SDKs
 aiosqlite==0.20.0
-azure-ai-contentsafety==1.0.0
 azure-ai-translation-text==1.0.0
 azure-communication-callautomation==1.2.0
 azure-communication-sms==1.0.1

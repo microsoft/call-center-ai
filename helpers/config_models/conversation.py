@@ -182,7 +182,6 @@ class ConversationModel(BaseModel):
         default=2,  # 2 retries
         serialization_alias="max_voice_recognition_retry",  # Compatibility with v7
     )
-    content_safety_for_chat: bool = True
 
 
 def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseModel]:
