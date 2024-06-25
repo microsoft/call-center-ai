@@ -3,7 +3,7 @@ from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.claim import ClaimFieldModel, ClaimTypeEnum
 from pydantic import BaseModel, EmailStr, Field, create_model, ConfigDict
 from pydantic.fields import FieldInfo
-from typing import Annotated, Any, Optional, Tuple, Union
+from typing import Annotated, Any, Optional, Union
 
 
 class LanguageEntryModel(BaseModel):
@@ -189,7 +189,7 @@ def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseMo
 
 def _field_to_pydantic(
     field: ClaimFieldModel,
-) -> Union[Annotated[Any, ...], Tuple[type, FieldInfo]]:
+) -> Union[Annotated[Any, ...], tuple[type, FieldInfo]]:
     type = _type_to_pydantic(field.type)
     return (
         Optional[type],

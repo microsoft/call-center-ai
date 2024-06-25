@@ -1,4 +1,4 @@
-from typing import Awaitable, Callable, Optional, Tuple, Type
+from typing import Awaitable, Callable, Optional, Type
 from azure.communication.callautomation.aio import CallAutomationClient
 from helpers.config import CONFIG
 from helpers.logging import logger
@@ -310,7 +310,7 @@ async def _execute_llm_chat(
     post_callback: Callable[[CallStateModel], None],
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     use_tools: bool,
-) -> Tuple[bool, bool, CallStateModel]:
+) -> tuple[bool, bool, CallStateModel]:
     """
     Perform the chat with the LLM model.
 

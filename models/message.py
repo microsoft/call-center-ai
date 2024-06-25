@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -219,7 +219,7 @@ def remove_message_action(text: str) -> str:
     return content.strip() if content else ""
 
 
-def extract_message_style(text: str) -> Tuple[Optional[StyleEnum], str]:
+def extract_message_style(text: str) -> tuple[Optional[StyleEnum], str]:
     """
     Detect the style of a message.
     """

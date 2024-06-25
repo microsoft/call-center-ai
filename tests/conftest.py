@@ -6,7 +6,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
 from models.call import CallStateModel, CallInitiateModel
 from textwrap import dedent
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 import hashlib
 import pytest
 import random
@@ -165,11 +165,11 @@ class DeepEvalAzureOpenAI(GPTModel):
         self._cache = cache
         self._model = AzureChatOpenAI(**_langchain_kwargs)
 
-    def generate(self, prompt: str) -> Tuple[str, float]:
+    def generate(self, prompt: str) -> tuple[str, float]:
         prompt = dedent(prompt).strip()
         cache_key = self._cache_key(prompt)
         # Try cache
-        content: Tuple[str, float] = self._cache.get(cache_key, None)
+        content: tuple[str, float] = self._cache.get(cache_key, None)
         if content:
             return content
         # Try live
@@ -178,11 +178,11 @@ class DeepEvalAzureOpenAI(GPTModel):
         self._cache.set(cache_key, res)
         return res
 
-    async def a_generate(self, prompt: str) -> Tuple[str, float]:
+    async def a_generate(self, prompt: str) -> tuple[str, float]:
         prompt = dedent(prompt).strip()
         cache_key = self._cache_key(prompt)
         # Try cache
-        content: Tuple[str, float] = self._cache.get(cache_key, None)
+        content: tuple[str, float] = self._cache.get(cache_key, None)
         if content:
             return content
         # Try live

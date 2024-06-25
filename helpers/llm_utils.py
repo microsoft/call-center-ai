@@ -232,7 +232,7 @@ async def _parameters(
 
 def _missing_annotations(
     typed_signature: inspect.Signature, required_params: set[str]
-) -> Tuple[set[str], set[str]]:
+) -> tuple[set[str], set[str]]:
     """
     Get the missing annotations of a function and return them as a set.
 
