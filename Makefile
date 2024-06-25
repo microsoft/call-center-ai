@@ -8,7 +8,7 @@ tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*:/
 cognitive_communication_location := westeurope
 default_location := westeurope
 functionapp_location := swedencentral
-openai_location := southcentralus
+openai_location := swedencentral
 search_location := northeurope
 # App configuration
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_services.phone_number')

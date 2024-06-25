@@ -419,10 +419,10 @@ conversation:
       availables:
         - pronunciations_en: ["French", "FR", "France"]
           short_code: "fr-FR"
-          voice_name: "fr-FR-DeniseNeural"
+          voice: "fr-FR-DeniseNeural"
         - pronunciations_en: ["Chinese", "ZH", "China"]
           short_code: "zh-CN"
-          voice_name: "zh-CN-XiaoxiaoNeural"
+          voice: "zh-CN-XiaoxiaoNeural"
 ```
 
 ### Customize the moderation levels
