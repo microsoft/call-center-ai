@@ -112,7 +112,7 @@ async def completion_stream(
             *[retry_if_exception_type(exception) for exception in _retried_exceptions]
         ),
         stop=stop_after_attempt(3),  # Usage is short-lived, so stop after 3 attempts
-        wait=wait_random_exponential(multiplier=0.5, max=30),
+        wait=wait_random_exponential(multiplier=0.8, max=8),
     )
     async for attempt in retryed:
         with attempt:

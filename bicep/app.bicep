@@ -728,9 +728,11 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' = {
   tags: tags
   properties: {
     sku: {
-      capacity: 0
+      capacity: 0  // 250 MB of data
       family: 'C'
-      name: 'Basic'
+      name: 'Standard'  // First tier with SLA
     }
+    minimumTlsVersion: '1.2'
+    redisVersion: '6'  // v6.x
   }
 }

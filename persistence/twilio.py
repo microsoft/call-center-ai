@@ -1,12 +1,10 @@
-from aiohttp_retry import ExponentialRetry, RetryClient
-from helpers.http import aiohttp_session
 from helpers.config_models.sms import TwilioModel
+from helpers.http import twilio_http
 from helpers.logging import logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessStatus
 from persistence.isms import ISms
 from twilio.base.exceptions import TwilioRestException
-from twilio.http.async_http_client import AsyncTwilioHttpClient
 from twilio.rest import Client
 from typing import Optional
 
@@ -63,14 +61,9 @@ class TwilioSms(ISms):
 
     async def _use_client(self) -> Client:
         if not self._client:
-            http = AsyncTwilioHttpClient()
-            http.session = RetryClient(
-                client_session=await aiohttp_session(),
-                retry_options=ExponentialRetry(attempts=3),
-            )  # Use the same session as the rest of the application, and retry 3 times with exponential backoff with the same lib as Twilio
             self._client = Client(
                 # Performance
-                http_client=http,
+                http_client=await twilio_http(),
                 # Authentication
                 password=self._config.auth_token.get_secret_value(),
                 username=self._config.account_sid,

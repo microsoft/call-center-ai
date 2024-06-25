@@ -353,7 +353,7 @@ class LlmModel(BaseModel):
                 bot_phone_number=CONFIG.communication_services.phone_number,
                 date=datetime.now(call.tz()).strftime(
                     "%Y-%m-%d %H:%M (%Z)"
-                ),  # Don't include seconds to enhance cache during unit tests. Example: "2024-02-01 18:58".
+                ),  # Don't include secs to enhance cache during unit tests. Example: "2024-02-01 18:58".
                 phone_number=call.initiate.phone_number,
             )
         )
