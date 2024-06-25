@@ -29,11 +29,12 @@ class RedisCache(ICache):
             # Database location
             db=config.database,
             # Reliability
+            health_check_interval=10,  # Check the health of the connection every 10 secs
             retry_on_error=[BusyLoadingError, ConnectionError],
             retry_on_timeout=True,
             retry=_retry,
-            socket_connect_timeout=1,  # 1 second, timeout for connection, we want it to fail fast, that's cache
-            socket_timeout=10,  # 10 seconds, timeout for queries
+            socket_connect_timeout=5,  # Give the system sufficient time to connect even under higher CPU conditions
+            socket_timeout=1,  # Answer quickly or abort, this is a cache
             # Deployment
             host=config.host,
             port=config.port,
