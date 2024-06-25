@@ -315,10 +315,9 @@ async def _completion_sync_worker(
         )
     if choice.finish_reason == "length":
         raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
-    content = choice.message.content
 
-    if not content:
-        return None
+    content = choice.message.content
+    return content or None
 
 
 @retry(
