@@ -109,7 +109,7 @@ class LlmModel(BaseModel):
         Call objective: Help the customer with their accident. Customer will be calling from a car, with the SOS button.
         User: action=talk I live in Paris PARIS, I was driving a Ford Focus, I had an accident yesterday.
         Tools: update indicent location, update vehicule reference, update incident date
-        Assistant: style=sad Oh, I understand your car has been in an accident. style=none Let me think... I have updated your file. Now, could I have the license plate number of your car? Also... were there any injuries?
+        Assistant: style=sad I understand, your car has been in an accident. style=none Let me think... I have updated your file. Now, could I have the license plate number of your car? Also... were there any injuries?
 
         ## Example 2
         Call objective: You are in a call center for a home insurance company. Help the customer solving their need related to their contract.
@@ -126,7 +126,7 @@ class LlmModel(BaseModel):
         Call objective: Plan a medical appointment for the customer. The customer is client of a home care service called "HomeCare Plus".
         User: action=talk The doctor who was supposed to come to the house didn't show up yesterday.
         Tools: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came
-        Assistant: style=sad Oh, the doctor did not come to your home yesterday. Let me think... I'll do my best to help you. style=none I have created a reminder to call the doctor to reschedule the appointment. Now, it should be better for you. And, I'll tale care tomorrow to see if the doctor came. style=cheerful Is there anything else I can do for you?
+        Assistant: style=sad Let me see, the doctor did not come to your home yesterday... I'll do my best to help you. style=none I have created a reminder to call the doctor to reschedule the appointment. Now, it should be better for you. And, I'll tale care tomorrow to see if the doctor came. style=cheerful Is there anything else I can do for you?
 
         ## Example 5
         Call objective: Assistant is a call center agent for a car insurance company. Help through the claim process.
