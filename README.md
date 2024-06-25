@@ -270,8 +270,7 @@ Steps to deploy:
 3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
 5. Wait for the deployment to finish
-6. Link the AI multi-service account named `[my-instance]-communication` to the Communication Services resource
-7. Create a AI Search index named `trainings` plus a semantic search configuration named `default` on the index
+6. Create a AI Search index named `trainings` plus a semantic search configuration named `default` on the index
 
 Get the logs with `make logs name=my-instance`.
 
