@@ -119,7 +119,7 @@ async def load_llm_chat(
     """
     Handle the intelligence of the call, including: LLM chat, TTS, and media play.
 
-    Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after few seconds, play the timeout sound. If the intelligence is not processed after more seconds, stop the intelligence processing and play the error sound.
+    Play the loading sound while waiting for the intelligence to be processed. If the intelligence is not processed after few secs, play the timeout sound. If the intelligence is not processed after more secs, stop the intelligence processing and play the error sound.
 
     Returns the updated call model.
     """
@@ -167,7 +167,7 @@ async def load_llm_chat(
     def _loading_task() -> asyncio.Task:
         return asyncio.create_task(asyncio.sleep(loading_timer))
 
-    loading_timer = 5  # Play loading sound every 5 seconds
+    loading_timer = 5  # Play loading sound every 5 secs
     loading_task = _loading_task()
 
     # Timeouts

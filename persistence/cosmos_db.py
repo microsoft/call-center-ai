@@ -271,7 +271,7 @@ class CosmosDbStore(IStore):
                 # Usage
                 consistency_level=ConsistencyLevel.Eventual,
                 # Reliability
-                connection_timeout=10,  # 10 seconds
+                connection_timeout=10,  # 10 secs
                 retry_backoff_factor=0.8,
                 retry_backoff_max=8,
                 retry_total=3,

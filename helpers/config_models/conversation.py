@@ -159,11 +159,11 @@ class WorkflowInitiateModel(BaseModel):
 class ConversationModel(BaseModel):
     initiate: WorkflowInitiateModel
     answer_hard_timeout_sec: int = Field(
-        default=180,  # 3 minutes
+        default=180,  # 3 mins
         serialization_alias="intelligence_hard_timeout_sec",  # Compatibility with v7
     )
     answer_soft_timeout_sec: int = Field(
-        default=30,  # 30 seconds
+        default=30,  # 30 secs
         serialization_alias="intelligence_soft_timeout_sec",  # Compatibility with v7
     )
     callback_timeout_hour: int = Field(
