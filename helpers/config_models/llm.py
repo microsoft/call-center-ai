@@ -2,7 +2,7 @@ from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from enum import Enum
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import field_validator, SecretStr, BaseModel, ValidationInfo, Field
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 
 class ModeEnum(str, Enum):
@@ -27,7 +27,7 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
     deployment: str
     endpoint: str
 
-    def instance(self) -> Tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
+    def instance(self) -> tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
         if not self._client:
             api_key = self.api_key.get_secret_value() if self.api_key else None
             token_func = (
@@ -56,7 +56,7 @@ class OpenaiPlatformModel(AbstractPlatformModel):
     api_key: SecretStr
     endpoint: str
 
-    def instance(self) -> Tuple[AsyncOpenAI, AbstractPlatformModel]:
+    def instance(self) -> tuple[AsyncOpenAI, AbstractPlatformModel]:
         if not self._client:
             self._client = AsyncOpenAI(
                 **self._client_kwargs,

@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -16,8 +16,8 @@ import json
 
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
-_MESSAGE_ACTION_R = r"action(?:=)?([a-z_]*)( .*)?"
-_MESSAGE_STYLE_R = r"style(?:=)?([a-z_]*)( .*)?"
+_MESSAGE_ACTION_R = r"(?:action=*([a-z_]*))? *(.*)"
+_MESSAGE_STYLE_R = r"(?:style=*([a-z_]*))? *(.*)"
 
 
 class StyleEnum(str, Enum):
@@ -212,22 +212,28 @@ def remove_message_action(text: str) -> str:
     """
     Remove action from content. AI often adds it by mistake event if explicitly asked not to.
     """
+    # TODO: Use JSON as LLM response instead of using a regex to parse the text
     res = re.match(_MESSAGE_ACTION_R, text)
     if not res:
-        return text.strip()
-    content = res.group(2)
-    return content.strip() if content else ""
+        return text
+    try:
+        return res.group(2) or ""
+    except ValueError:  # Regex failed, return original text
+        return text
 
 
-def extract_message_style(text: str) -> Tuple[Optional[StyleEnum], str]:
+def extract_message_style(text: str) -> tuple[Optional[StyleEnum], str]:
     """
     Detect the style of a message.
     """
+    # TODO: Use JSON as LLM response instead of using a regex to parse the text
     res = re.match(_MESSAGE_STYLE_R, text)
     if not res:
         return None, text
     try:
-        content = res.group(2)
-        return StyleEnum(res.group(1)), (content.strip() if content else "")
-    except ValueError:
+        return (
+            StyleEnum(res.group(1)),  # style
+            (res.group(2) or ""),  # content
+        )
+    except ValueError:  # Regex failed, return original text
         return None, text

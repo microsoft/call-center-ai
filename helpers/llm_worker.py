@@ -39,7 +39,7 @@ from helpers.resources import resources_dir
 from models.message import MessageModel
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from os import environ
-from typing import AsyncGenerator, Optional, Tuple, Type, TypeVar, Union
+from typing import AsyncGenerator, Optional, Type, TypeVar, Union
 import json
 import tiktoken
 
@@ -315,10 +315,9 @@ async def _completion_sync_worker(
         )
     if choice.finish_reason == "length":
         raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
-    content = choice.message.content
 
-    if not content:
-        return None
+    content = choice.message.content
+    return content or None
 
 
 @retry(
@@ -423,7 +422,7 @@ def _count_tokens(content: str, model: str) -> int:
 
 def _use_llm(
     is_fast: bool,
-) -> Tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel]:
+) -> tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel]:
     """
     Returns an LLM client and platform model.
 
