@@ -401,9 +401,9 @@ class LlmPlugins:
         await self.tts_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
         logger.info(
-            f"Notifying {service}, location {location}, contact {contact}, reason {reason}."
+            f"Notifying {service}, location {location}, contact {contact}, reason {reason}"
         )
-        return f"Notifying {service} for {reason}."
+        return f"Notifying {service} for {reason}"
 
     async def send_sms(
         self,
