@@ -451,6 +451,47 @@ class LlmPlugins:
         )
         return "SMS sent"
 
+    async def speech_speed(
+        self,
+        customer_response: Annotated[
+            str,
+            """
+            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - 'I am slowing down the speech.'
+            - 'I am speeding up the voice.'
+            - 'My voice is now faster.'
+            """,
+        ],
+        speed: Annotated[
+            float,
+            "The new speed of the voice. Should be between 0.75 and 1.25, where 1.0 is the normal speed.",
+        ],
+    ) -> str:
+        """
+        Use this if the customer wants to change the speed of the voice.
+
+        # Behavior
+        1. Update the voice speed
+        2. Return a confirmation message
+
+        # Usage examples
+        - Customer has trouble understanding the voice
+        - Customer wants to speed up or slow down the voice
+        """
+        # Update voice
+        initial_speed = self.call.initiate.prosody_rate
+        self.call.initiate.prosody_rate = speed
+        # Customer confirmation (with new speed)
+        await self.tts_callback(customer_response, self.style)
+        # LLM confirmation
+        return f"Voice speed set to {speed} (was {initial_speed})"
+
     @staticmethod
     async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
         return await asyncio.gather(

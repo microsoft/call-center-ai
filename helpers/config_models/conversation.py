@@ -123,6 +123,11 @@ class WorkflowInitiateModel(BaseModel):
     task: str = """
         Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. Claim data is located in the customer file. Assistant role is not over until all the relevant data is gathered.
     """
+    prosody_rate: float = Field(
+        default=1.0,
+        ge=0.75,
+        le=1.25,
+    )
 
     def claim_model(self) -> type[BaseModel]:
         return _fields_to_pydantic(

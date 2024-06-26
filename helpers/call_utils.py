@@ -331,7 +331,7 @@ def _audio_from_text(
             <lexicon uri="{CONFIG.resources.public_url}/lexicon.xml" />
             <lang xml:lang="{call.lang.short_code}">
                 <mstts:express-as style="{style.value}" styledegree="0.5">
-                    <prosody rate="0.95">{text}</prosody>
+                    <prosody rate="{call.initiate.prosody_rate}">{text}</prosody>
                 </mstts:express-as>
             </lang>
         </voice>
