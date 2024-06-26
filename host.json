@@ -9,8 +9,16 @@
     "logLevel": {
       "default": "Warning",
       "Function": "Information"
+    },
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request"
+      },
+      "enableLiveMetricsFilters": true
     }
   },
+  "telemetryMode": "openTelemetry",
   "extensions": {
     "http": {
       "routePrefix": ""

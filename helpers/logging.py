@@ -4,7 +4,6 @@ from logging import getLogger, basicConfig
 from opentelemetry import trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from os import getenv
 
 
 APP_NAME = "call-center-ai"
@@ -15,9 +14,7 @@ logger = getLogger(APP_NAME)
 logger.setLevel(CONFIG.monitoring.logging.app_level.value)
 
 # OpenTelemetry
-configure_azure_monitor(
-    connection_string=getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
-)  # Configure Azure Application Insights exporter
+configure_azure_monitor()  # Configure Azure Application Insights exporter
 AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
 HTTPXClientInstrumentor().instrument()  # Instrument httpx
 tracer = trace.get_tracer(
