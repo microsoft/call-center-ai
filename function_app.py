@@ -346,14 +346,19 @@ async def sms_event(
     trace.get_current_span().set_attribute(
         SpanAttributes.ENDUSER_ID, call.initiate.phone_number
     )
+
+    async def _post_callback(_call: CallStateModel) -> None:
+        _trigger_post_event(call=_call, post=post)
+
+    async def _trainings_callback(_call: CallStateModel) -> None:
+        _trigger_trainings_event(call=_call, trainings=trainings)
+
     await on_sms_received(
         call=call,
         client=await _use_automation_client(),
         message=message,
-        post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
-        trainings_callback=lambda _call: _trigger_trainings_event(
-            call=_call, trainings=trainings
-        ),
+        post_callback=_post_callback,
+        trainings_callback=_trainings_callback,
     )
 
 
@@ -433,6 +438,12 @@ async def _communicationservices_event_worker(
     logger.debug(f"Call event received {event_type} for call {call}")
     logger.debug(event.data)
 
+    async def _post_callback(_call: CallStateModel) -> None:
+        _trigger_post_event(call=_call, post=post)
+
+    async def _trainings_callback(_call: CallStateModel) -> None:
+        _trigger_trainings_event(call=_call, trainings=trainings)
+
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
         await on_call_connected(
             call=call,
@@ -443,7 +454,7 @@ async def _communicationservices_event_worker(
         await on_call_disconnected(
             call=call,
             client=automation_client,
-            post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
+            post_callback=_post_callback,
         )
 
     elif (
@@ -457,13 +468,9 @@ async def _communicationservices_event_worker(
                 await on_speech_recognized(
                     call=call,
                     client=automation_client,
-                    post_callback=lambda _call: _trigger_post_event(
-                        call=_call, post=post
-                    ),
+                    post_callback=_post_callback,
                     text=speech_text,
-                    trainings_callback=lambda _call: _trigger_trainings_event(
-                        call=_call, trainings=trainings
-                    ),
+                    trainings_callback=_trainings_callback,
                 )
 
         elif recognition_result == "choices":  # Handle IVR
@@ -472,10 +479,8 @@ async def _communicationservices_event_worker(
                 call=call,
                 client=automation_client,
                 label=label_detected,
-                post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
-                trainings_callback=lambda _call: _trigger_trainings_event(
-                    call=_call, trainings=trainings
-                ),
+                post_callback=_post_callback,
+                trainings_callback=_trainings_callback,
             )
 
     elif (
@@ -509,7 +514,7 @@ async def _communicationservices_event_worker(
             call=call,
             client=automation_client,
             contexts=operation_contexts,
-            post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
+            post_callback=_post_callback,
         )
 
     elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
@@ -658,14 +663,18 @@ async def twilio_sms_post(
             SpanAttributes.ENDUSER_ID, call.initiate.phone_number
         )
 
+        async def _post_callback(_call: CallStateModel) -> None:
+            _trigger_post_event(call=_call, post=post)
+
+        async def _trainings_callback(_call: CallStateModel) -> None:
+            _trigger_trainings_event(call=_call, trainings=trainings)
+
         event_status = await on_sms_received(
             call=call,
             client=await _use_automation_client(),
             message=message,
-            post_callback=lambda _call: _trigger_post_event(call=_call, post=post),
-            trainings_callback=lambda _call: _trigger_trainings_event(
-                call=_call, trainings=trainings
-            ),
+            post_callback=_post_callback,
+            trainings_callback=_trainings_callback,
         )
         if not event_status:
             return func.HttpResponse(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)

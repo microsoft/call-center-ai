@@ -2,7 +2,7 @@ from azure.communication.callautomation import DtmfTone, RecognitionChoice
 from azure.communication.callautomation.aio import CallAutomationClient
 from helpers.config import CONFIG
 from helpers.logging import logger, tracer
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 from azure.core.exceptions import (
     ClientAuthenticationError,
     HttpResponseError,
@@ -100,7 +100,7 @@ async def on_call_connected(
 async def on_call_disconnected(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Call disconnected")
     await _handle_hangup(
@@ -114,9 +114,9 @@ async def on_call_disconnected(
 async def on_speech_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
     text: str,
-    trainings_callback: Callable[[CallStateModel], None],
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info(f"Voice recognition: {text}")
     call.messages.append(
@@ -234,7 +234,7 @@ async def on_play_completed(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: Optional[set[CallContextEnum]],
-    post_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.debug("Play completed")
 
@@ -284,8 +284,8 @@ async def on_ivr_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
     label: str,
-    post_callback: Callable[[CallStateModel], None],
-    trainings_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     call.recognition_retry = 0  # Reset recognition retry counter
     try:
@@ -362,8 +362,8 @@ async def on_sms_received(
     call: CallStateModel,
     client: CallAutomationClient,
     message: str,
-    post_callback: Callable[[CallStateModel], None],
-    trainings_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> bool:
     logger.info(f"SMS received from {call.initiate.phone_number}: {message}")
     call.messages.append(
@@ -390,7 +390,7 @@ async def on_sms_received(
 async def _handle_hangup(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_callback: Callable[[CallStateModel], None],
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     await handle_hangup(client=client, call=call)
     call.messages.append(
@@ -400,7 +400,7 @@ async def _handle_hangup(
             persona=MessagePersonaEnum.HUMAN,
         )
     )
-    post_callback(call)
+    await post_callback(call)
 
 
 async def on_end_call(
