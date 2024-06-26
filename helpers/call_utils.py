@@ -28,7 +28,7 @@ import json
 
 _SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"  # Split by sentence by punctuation
 _TTS_SANITIZER_R = re.compile(
-    r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/]"
+    r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&<>€$%=*]"
 )  # Sanitize text for TTS
 
 
@@ -318,6 +318,8 @@ def _audio_from_text(
     Generate an audio source that can be read by Azure Communication Services SDK.
 
     Text requires to be SVG escaped, and SSML tags are used to control the voice. Plus, text is slowed down by 5% to make it more understandable for elderly people. Text is also truncated to 400 characters, as this is the limit of Azure Communication Services TTS, but a warning is logged.
+
+    See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-structure
     """
     # Azure Speech Service TTS limit is 400 characters
     if len(text) > 400:
@@ -325,13 +327,16 @@ def _audio_from_text(
             f"Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
         )
         text = text[:400]
+    # Escape text for SSML
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    # Build SSML tree
     ssml = f"""
     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{call.lang.short_code}">
         <voice name="{call.lang.voice}" effect="eq_telecomhp8k">
             <lexicon uri="{CONFIG.resources.public_url}/lexicon.xml" />
             <lang xml:lang="{call.lang.short_code}">
                 <mstts:express-as style="{style.value}" styledegree="0.5">
-                    <prosody rate="0.95">{text}</prosody>
+                    <prosody rate="{call.initiate.prosody_rate}">{text}</prosody>
                 </mstts:express-as>
             </lang>
         </voice>
