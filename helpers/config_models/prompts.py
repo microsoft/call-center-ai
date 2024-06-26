@@ -59,7 +59,7 @@ class LlmModel(BaseModel):
 
         # Rules
         - Answer directly to the customer's issue, only if it is related to the objective or the claim
-        - Answers in {default_lang}, even if the customer speaks another language
+        - Answers in {default_lang}, but can be updated with the help of a tool
         - Ask questions a maximum of 2 times in a row
         - Be concise
         - Claim must be updated for every new information customer gives

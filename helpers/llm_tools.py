@@ -492,6 +492,69 @@ class LlmPlugins:
         # LLM confirmation
         return f"Voice speed set to {speed} (was {initial_speed})"
 
+    async def speech_lang(
+        self,
+        customer_response: Annotated[
+            str,
+            """
+            Phrase used to confirm the update, in the new selected language. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - For de-DE, 'Ich spreche jetzt auf Deutsch.'
+            - For en-ES, 'Espero que me entiendas mejor en español.'
+            - For fr-FR, 'Cela devrait être mieux en français.'
+            """,
+        ],
+        lang: Annotated[
+            str,
+            """
+            The new language of the conversation.
+
+            # Available short codes
+            {% for available in call.initiate.lang.availables %}
+            - {{ available.short_code }} ({{ available.pronunciations_en[0] }})
+            {% endfor %}
+
+            # Data format
+            short code
+
+            # Examples
+            - 'en-US'
+            - 'es-ES'
+            - 'zh-CN'
+            """,
+        ],
+    ) -> str:
+        """
+        Use this if the customer wants to speak in another language.
+
+        # Behavior
+        1. Update the conversation language
+        2. Return a confirmation message
+
+        # Usage examples
+        - A participant wants to speak in another language
+        - Customer made a mistake in the language selection
+        - Trouble understanding the voice in the current language
+        """
+        if not any(
+            lang == available.short_code
+            for available in self.call.initiate.lang.availables
+        ):  # Check if lang is available
+            return f"Language {lang} not available"
+
+        # Update lang
+        initial_lang = self.call.lang.short_code
+        self.call.lang = lang
+        # Customer confirmation (with new language)
+        await self.tts_callback(customer_response, self.style)
+        # LLM confirmation
+        return f"Voice language set to {lang} (was {initial_lang})"
+
     @staticmethod
     async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
         return await asyncio.gather(
