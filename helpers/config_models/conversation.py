@@ -40,18 +40,18 @@ class LanguageModel(BaseModel):
             voice="fr-FR-DeniseNeural",
         ),
         LanguageEntryModel(
-            short_code="en-US",
             pronunciations_en=["English", "EN", "United States"],
+            short_code="en-US",
             voice="en-US-AvaNeural",
         ),
         LanguageEntryModel(
-            short_code="es-ES",
             pronunciations_en=["Spanish", "ES", "Spain"],
+            short_code="es-ES",
             voice="es-ES-ElviraNeural",
         ),
         LanguageEntryModel(
-            short_code="zh-CN",
             pronunciations_en=["Chinese", "ZH", "China"],
+            short_code="zh-CN",
             voice="zh-CN-XiaoxiaoNeural",
         ),
     ]

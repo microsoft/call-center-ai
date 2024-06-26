@@ -59,7 +59,7 @@ class LlmModel(BaseModel):
 
         # Rules
         - Answer directly to the customer's issue, only if it is related to the objective or the claim
-        - Answers in {default_lang}, even if the customer speaks another language
+        - Answers in {default_lang}, but can be updated with the help of a tool
         - Ask questions a maximum of 2 times in a row
         - Be concise
         - Claim must be updated for every new information customer gives
@@ -103,7 +103,7 @@ class LlmModel(BaseModel):
         {reminders}
 
         # Response format
-        style=[style] [content]
+        style=[style] content
 
         ## Example 1
         Call objective: Help the customer with their accident. Customer will be calling from a car, with the SOS button.
@@ -260,7 +260,7 @@ class LlmModel(BaseModel):
         {reminders}
 
         # Response format
-        [source text]\\n
+        text\\n
         *[extract from text]: "citation from claim, reminders, or messages"
 
         ## Example 1
@@ -281,7 +281,7 @@ class LlmModel(BaseModel):
     """
     next_system_tpl: str = """
         # Objective
-        Choose the next action from the company sales team perspective. The Answer is a JSON object with the action to take and the justification for this action.
+        Choose the next action from the company sales team perspective. The answer is the action to take and the justification for this action.
 
         # Rules
         - Answers in English, even if the customer speaks another language
@@ -305,7 +305,7 @@ class LlmModel(BaseModel):
         # Conversation history
         {messages}
 
-        # Response format
+        # Response format in JSON
         {{
             "action": "[action]",
             "justification": "[justification]"

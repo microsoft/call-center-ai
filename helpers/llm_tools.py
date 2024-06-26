@@ -61,9 +61,9 @@ class LlmPlugins:
         - Requires an explicit verbal validation from the customer
         - Never use this action directly after a recall
 
-        # Examples
-        - 'Goodbye, see you tomorrow'
-        - 'I want to hangup'
+        # Usage examples
+        - All participants are satisfied and agree to end the call
+        - Customer said 'bye bye'
         """
         await handle_recognize_text(
             call=self.call,
@@ -102,6 +102,10 @@ class LlmPlugins:
         # Rules
         - Approval from the customer must be explicitely given (e.g. 'I want to create a new claim')
         - This should be used only when the subject is totally different
+
+        # Usage examples
+        - Customer wants explicitely to create a new claim
+        - Talking about a totally different subject
         """
         await self.tts_callback(customer_response, self.style)
         # Launch post-call intelligence for the current call
@@ -168,6 +172,11 @@ class LlmPlugins:
         - A reminder should be as specific as possible
         - If a reminder already exists, it will be updated with the new values
         - The due date should be in the future
+
+        # Usage examples
+        - Ask precisions to an expert or the backoffice
+        - Call back for a follow-up
+        - Wait for customer to send a document
         """
         await self.tts_callback(customer_response, self.style)
 
@@ -230,7 +239,7 @@ class LlmPlugins:
             - For dates, use YYYY-MM-DD HH:MM format (e.g. 2024-02-01 18:58)
             - For phone numbers, use E164 format (e.g. +33612345678)
 
-            # Response format
+            # Data format
             [{'field': '[field]', 'value': '[value]'}]
 
             # Examples
@@ -249,6 +258,12 @@ class LlmPlugins:
         # Rules
         - For values, it is OK to approximate dates if the customer is not precise (e.g., "last night" -> today 04h, "I'm stuck on the highway" -> now)
         - It is best to update multiple fields at once
+
+        # Usage examples
+        - Change the incident date
+        - Correct the name of the customer
+        - Store details about the conversation
+        - Update the claim with a new phone number
         """
         await self.tts_callback(customer_response, self.style)
         # Update all claim fields
@@ -281,9 +296,10 @@ class LlmPlugins:
         - Requires an explicit verbal validation from the customer
         - Never use this action directly after a recall
 
-        # Examples
-        - 'I want to talk to a human'
-        - 'I want to talk to a real person'
+        # Usage examples
+        - Customer wants to talk to a human
+        - No more information available and customer insists
+        - Not satisfied with the answers
         """
         await handle_recognize_text(
             call=self.call,
@@ -325,6 +341,11 @@ class LlmPlugins:
 
         # Searchable topics
         contract, law, regulation, article, procedure, guide
+
+        # Usage examples
+        - Find the article about the new law
+        - Know the procedure to declare a stolen luxury watch
+        - Understand the requirements to ask for a cyber attack insurance
         """
         await self.tts_callback(customer_response, self.style)
         # Execute in parallel
@@ -393,10 +414,10 @@ class LlmPlugins:
         # Rules
         - Use it only if the situation is critical and requires immediate intervention
 
-        # Examples
-        - 'A child is lying on the ground and is not moving'
-        - 'I am stuck in a car in fire'
-        - 'My neighbor is having a heart attack'
+        # Usage examples
+        - A child is lying on the ground and is not moving
+        - A neighbor is having a heart attack
+        - Someons is stuck in a car accident
         """
         await self.tts_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
@@ -481,9 +502,11 @@ class LlmPlugins:
         2. Return a confirmation message
 
         # Usage examples
-        - Customer has trouble understanding the voice
-        - Customer wants to speed up or slow down the voice
+        - Speed up or slow down the voice
+        - Trouble understanding the voice because it is too fast or too slow
         """
+        # Clamp speed between min and max
+        speed = max(0.75, min(speed, 1.25))
         # Update voice
         initial_speed = self.call.initiate.prosody_rate
         self.call.initiate.prosody_rate = speed
@@ -491,6 +514,69 @@ class LlmPlugins:
         await self.tts_callback(customer_response, self.style)
         # LLM confirmation
         return f"Voice speed set to {speed} (was {initial_speed})"
+
+    async def speech_lang(
+        self,
+        customer_response: Annotated[
+            str,
+            """
+            Phrase used to confirm the update, in the new selected language. This phrase will be spoken to the user.
+
+            # Rules
+            - Action should be rephrased in the present tense
+            - Must be in a single sentence
+
+            # Examples
+            - For de-DE, 'Ich spreche jetzt auf Deutsch.'
+            - For en-ES, 'Espero que me entiendas mejor en español.'
+            - For fr-FR, 'Cela devrait être mieux en français.'
+            """,
+        ],
+        lang: Annotated[
+            str,
+            """
+            The new language of the conversation.
+
+            # Available short codes
+            {% for available in call.initiate.lang.availables %}
+            - {{ available.short_code }} ({{ available.pronunciations_en[0] }})
+            {% endfor %}
+
+            # Data format
+            short code
+
+            # Examples
+            - 'en-US'
+            - 'es-ES'
+            - 'zh-CN'
+            """,
+        ],
+    ) -> str:
+        """
+        Use this if the customer wants to speak in another language.
+
+        # Behavior
+        1. Update the conversation language
+        2. Return a confirmation message
+
+        # Usage examples
+        - A participant wants to speak in another language
+        - Customer made a mistake in the language selection
+        - Trouble understanding the voice in the current language
+        """
+        if not any(
+            lang == available.short_code
+            for available in self.call.initiate.lang.availables
+        ):  # Check if lang is available
+            return f"Language {lang} not available"
+
+        # Update lang
+        initial_lang = self.call.lang.short_code
+        self.call.lang = lang
+        # Customer confirmation (with new language)
+        await self.tts_callback(customer_response, self.style)
+        # LLM confirmation
+        return f"Voice language set to {lang} (was {initial_lang})"
 
     @staticmethod
     async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
