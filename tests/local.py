@@ -12,13 +12,13 @@ from models.call import CallStateModel, CallInitiateModel
 from tests.conftest import CallAutomationClientMock
 from helpers.call_events import (
     on_call_connected,
+    on_call_disconnected,
+    on_end_call,
     on_ivr_recognized,
     on_play_completed,
     on_speech_recognized,
 )
 import asyncio
-from function_app import trainings_event, post_event
-from azure.functions import QueueMessage
 
 
 async def main() -> None:
@@ -53,6 +53,12 @@ async def main() -> None:
     )
     call_client = automation_client.get_call_connection()
 
+    async def _post_callback(_call: CallStateModel) -> None:
+        await on_end_call(call=_call)
+
+    async def _trainings_callback(_call: CallStateModel) -> None:
+        await _call.trainings(cache_only=False)
+
     # Connect call
     await on_call_connected(
         call=call,
@@ -64,8 +70,8 @@ async def main() -> None:
         call=call,
         client=automation_client,
         label=call.lang.short_code,
-        post_callback=lambda _: None,
-        trainings_callback=lambda _: None,
+        post_callback=_post_callback,
+        trainings_callback=_trainings_callback,
     )
 
     # Simulate conversation
@@ -77,23 +83,30 @@ async def main() -> None:
         await on_speech_recognized(
             call=call,
             client=automation_client,
-            post_callback=lambda _: None,
+            post_callback=_post_callback,
             text=message,
-            trainings_callback=lambda _: None,
+            trainings_callback=_trainings_callback,
         )
-        # Mock trainings callback
-        await call.trainings(cache_only=False)
         # Receip
         await on_play_completed(
             call=call,
             client=automation_client,
             contexts=call_client.last_contexts,
-            post_callback=lambda _: None,
+            post_callback=_post_callback,
         )
         # Reset contexts
         call_client.last_contexts.clear()
 
-    logger.info("Conversation ended, bye bye")
+    logger.info("Conversation ended, handling disconnection...")
+
+    # Disconnect call
+    await on_call_disconnected(
+        call=call,
+        client=automation_client,
+        post_callback=_post_callback,
+    )
+
+    logger.info("Bye bye!")
 
 
 if __name__ == "__main__":

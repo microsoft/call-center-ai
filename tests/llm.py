@@ -9,14 +9,14 @@ from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from helpers.call_events import (
     on_call_connected,
+    on_call_disconnected,
+    on_end_call,
     on_ivr_recognized,
     on_play_completed,
     on_speech_recognized,
 )
-from azure.functions import QueueMessage
 from datetime import datetime
 from deepeval.metrics import BaseMetric
-from function_app import trainings_event, post_event
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.reminder import ReminderModel
@@ -257,6 +257,12 @@ async def test_llm(
     # Mock call
     call.lang = lang
 
+    async def _post_callback(_call: CallStateModel) -> None:
+        await on_end_call(call=_call)
+
+    async def _trainings_callback(_call: CallStateModel) -> None:
+        await _call.trainings(cache_only=False)
+
     # Connect call
     await on_call_connected(
         call=call,
@@ -268,8 +274,8 @@ async def test_llm(
         call=call,
         client=automation_client,
         label=call.lang.short_code,
-        post_callback=lambda _: None,
-        trainings_callback=lambda _: None,
+        post_callback=_post_callback,
+        trainings_callback=_trainings_callback,
     )
 
     # Simulate conversation with speech recognition
@@ -278,21 +284,26 @@ async def test_llm(
         await on_speech_recognized(
             call=call,
             client=automation_client,
-            post_callback=lambda _: None,
+            post_callback=_post_callback,
             text=input,
-            trainings_callback=lambda _: None,
+            trainings_callback=_trainings_callback,
         )
-        # Mock trainings callback
-        await call.trainings(cache_only=False)
         # Receip
         await on_play_completed(
             call=call,
             client=automation_client,
             contexts=call_client.last_contexts,
-            post_callback=lambda _: None,
+            post_callback=_post_callback,
         )
         # Reset contexts
         call_client.last_contexts.clear()
+
+    # Disconnect call
+    await on_call_disconnected(
+        call=call,
+        client=automation_client,
+        post_callback=_post_callback,
+    )
 
     # Remove newlines for log comparison
     actual_output = _remove_newlines(actual_output)
@@ -314,6 +325,9 @@ async def test_llm(
             TypeAdapter(list[TrainingModel]).dump_json(await call.trainings()).decode(),
         ],
     )
+
+    assume(call.next, "No next action found")
+    assume(call.synthesis, "No synthesis found")
 
     # Define LLM metrics
     llm_metrics = [

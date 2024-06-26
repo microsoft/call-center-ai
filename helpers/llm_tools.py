@@ -33,7 +33,7 @@ class UpdateClaimDict(TypedDict):
 class LlmPlugins:
     call: CallStateModel
     client: CallAutomationClient
-    post_callback: Callable[[CallStateModel], None]
+    post_callback: Callable[[CallStateModel], Awaitable[None]]
     style: MessageStyleEnum = MessageStyleEnum.NONE
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]]
 
@@ -41,7 +41,7 @@ class LlmPlugins:
         self,
         call: CallStateModel,
         client: CallAutomationClient,
-        post_callback: Callable[[CallStateModel], None],
+        post_callback: Callable[[CallStateModel], Awaitable[None]],
         tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     ):
         self.call = call
@@ -105,7 +105,7 @@ class LlmPlugins:
         """
         await self.tts_callback(customer_response, self.style)
         # Launch post-call intelligence for the current call
-        self.post_callback(self.call)
+        await self.post_callback(self.call)
         # Store the last message and use it at first message of the new claim
         last_message = self.call.messages[-1]
         call = CallStateModel(
