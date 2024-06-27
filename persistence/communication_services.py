@@ -5,7 +5,7 @@ from helpers.http import azure_transport
 from helpers.config_models.communication_services import CommunicationServicesModel
 from helpers.logging import logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 from persistence.isms import ISms
 from typing import Optional
 
@@ -18,12 +18,12 @@ class CommunicationServicesSms(ISms):
         logger.info(f"Using Communication Services from number {config.phone_number}")
         self._config = config
 
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         """
         Check the readiness of the Communication Services SMS service.
         """
         # TODO: How to check the readiness of the SMS service? We could send a SMS for each test, but that would be damm expensive.
-        return ReadinessStatus.OK
+        return ReadinessEnum.OK
 
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
         logger.info(f"Sending SMS to {phone_number}")

@@ -4,7 +4,7 @@ from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
 from helpers.logging import logger
 from models.call import CallStateModel
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from persistence.icache import ICache
 from persistence.istore import IStore
@@ -39,7 +39,7 @@ class SqliteStore(IStore):
             os.makedirs(name=db_folder, exist_ok=True)
             self._first_run_done = True
 
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         """
         Check the readiness of the SQLite database.
 
@@ -48,10 +48,10 @@ class SqliteStore(IStore):
         try:
             async with self._use_db() as db:
                 await db.execute("SELECT 1")
-            return ReadinessStatus.OK
+            return ReadinessEnum.OK
         except Exception as e:
             logger.error(f"Error requesting SQLite, {e}")
-        return ReadinessStatus.FAIL
+        return ReadinessEnum.FAIL
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
         logger.debug(f"Loading call {call_id}")

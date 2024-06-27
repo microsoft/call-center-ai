@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from helpers.pydantic_types.phone_numbers import PhoneNumber
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 
 
 class ISms(ABC):
 
     @abstractmethod
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod
