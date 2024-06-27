@@ -88,25 +88,6 @@ async def completion_stream(
 
     Completion is first made with the fast LLM, then the slow LLM if the previous fails. Catch errors for a maximum of 3 times (internal + `RateLimitError`). If it fails again, raise the error.
     """
-    # Try a first time with primary LLM
-    try:
-        async for chunck in _completion_stream_worker(
-            is_fast=not CONFIG.conversation.slow_llm_for_chat,  # Let configuration decide
-            max_tokens=max_tokens,
-            messages=messages,
-            system=system,
-            tools=tools,
-        ):
-            yield chunck
-        return
-    except Exception as e:
-        if not any(isinstance(e, exception) for exception in _retried_exceptions):
-            raise e
-        logger.warning(
-            f"{e.__class__.__name__} error, trying with {'fast' if CONFIG.conversation.slow_llm_for_chat else 'slow'} LLM"
-        )
-
-    # Try more times with backup LLM, if it fails again, raise the error
     retryed = AsyncRetrying(
         reraise=True,
         retry=retry_any(
@@ -115,6 +96,28 @@ async def completion_stream(
         stop=stop_after_attempt(3),  # Usage is short-lived, so stop after 3 attempts
         wait=wait_random_exponential(multiplier=0.8, max=8),
     )
+
+    # Try first with primary LLM
+    try:
+        async for attempt in retryed:
+            with attempt:
+                async for chunck in _completion_stream_worker(
+                    is_fast=not CONFIG.conversation.slow_llm_for_chat,  # Let configuration decide
+                    max_tokens=max_tokens,
+                    messages=messages,
+                    system=system,
+                    tools=tools,
+                ):
+                    yield chunck
+                return
+    except Exception as e:
+        if not any(isinstance(e, exception) for exception in _retried_exceptions):
+            raise e
+        logger.warning(
+            f"{e.__class__.__name__} error, trying with the other LLM backend"
+        )
+
+    # Then try more times with backup LLM
     async for attempt in retryed:
         with attempt:
             async for chunck in _completion_stream_worker(

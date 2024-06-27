@@ -120,9 +120,9 @@ class WorkflowInitiateModel(BaseModel):
         ),
     ]  # Configured like in v4 for compatibility
     lang: LanguageModel = LanguageModel()  # Object is fully defined by default
-    task: str = """
-        Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. Claim data is located in the customer file. Assistant role is not over until all the relevant data is gathered.
-    """
+    task: str = (
+        "Helping the customer to file an insurance claim. The customer is probably calling because they have a problem with something covered by their policy, but it's not certain. The assistant needs information from the customer to complete the claim. The conversation is over when all the data relevant to the case has been collected. Filling in as much information as possible is important for further processing."
+    )
     prosody_rate: float = Field(
         default=1.0,
         ge=0.75,
