@@ -17,7 +17,7 @@ from azure.search.documents.models import (
 from helpers.http import azure_transport
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.logging import logger
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 from models.training import TrainingModel
 from persistence.icache import ICache
 from persistence.isearch import ISearch
@@ -44,19 +44,19 @@ class AiSearchSearch(ISearch):
         )
         self._config = config
 
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         """
         Check the readiness of the AI Search service.
         """
         try:
             async with await self._use_client() as client:
                 await client.get_document_count()
-            return ReadinessStatus.OK
+            return ReadinessEnum.OK
         except HttpResponseError as e:
             logger.error(f"Error requesting AI Search, {e}")
         except ServiceRequestError as e:
             logger.error(f"Error connecting to AI Search, {e}")
-        return ReadinessStatus.FAIL
+        return ReadinessEnum.FAIL
 
     @retry(
         reraise=True,

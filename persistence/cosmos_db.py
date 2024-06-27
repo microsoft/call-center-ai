@@ -7,7 +7,7 @@ from helpers.config_models.database import CosmosDbModel
 from helpers.http import azure_transport
 from helpers.logging import logger
 from models.call import CallStateModel
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 from persistence.icache import ICache
 from persistence.istore import IStore
 from pydantic import ValidationError
@@ -25,7 +25,7 @@ class CosmosDbStore(IStore):
         logger.info(f"Using Cosmos DB {config.database}/{config.container}")
         self._config = config
 
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         """
         Check the readiness of the Cosmos DB service.
 
@@ -43,7 +43,7 @@ class CosmosDbStore(IStore):
         try:
             # Test the item does not exist
             if await self._item_exists(test_id, test_partition):
-                return ReadinessStatus.FAIL
+                return ReadinessEnum.FAIL
             async with self._use_client() as db:
                 # Create a new item
                 await db.upsert_item(body=test_dict)
@@ -58,13 +58,13 @@ class CosmosDbStore(IStore):
                 await db.delete_item(item=test_id, partition_key=test_partition)
             # Test the item does not exist
             if await self._item_exists(test_id, test_partition):
-                return ReadinessStatus.FAIL
-            return ReadinessStatus.OK
+                return ReadinessEnum.FAIL
+            return ReadinessEnum.OK
         except AssertionError:
             logger.error("Readiness test failed", exc_info=True)
         except CosmosHttpResponseError as e:
             logger.error(f"Error requesting CosmosDB, {e}")
-        return ReadinessStatus.FAIL
+        return ReadinessEnum.FAIL
 
     async def _item_exists(self, test_id: str, partition_key: str) -> bool:
         exist = False

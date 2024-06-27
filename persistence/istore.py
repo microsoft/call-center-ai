@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from models.call import CallStateModel
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 from persistence.icache import ICache
 from typing import Optional
 from uuid import UUID
@@ -13,7 +13,7 @@ class IStore(ABC):
         self._cache = cache
 
     @abstractmethod
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod

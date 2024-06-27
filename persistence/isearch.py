@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 from models.training import TrainingModel
 from persistence.icache import ICache
 from typing import Optional
@@ -12,7 +12,7 @@ class ISearch(ABC):
         self._cache = cache
 
     @abstractmethod
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod

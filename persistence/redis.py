@@ -1,6 +1,6 @@
 from helpers.config_models.cache import RedisModel
 from helpers.logging import logger
-from models.readiness import ReadinessStatus
+from models.readiness import ReadinessEnum
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from persistence.icache import ICache
 from redis.asyncio import Redis
@@ -43,7 +43,7 @@ class RedisCache(ICache):
             password=config.password.get_secret_value(),
         )  # Redis manage by itself a low level connection pool with asyncio, but be warning to not use a generator while consuming the connection, it will close it
 
-    async def areadiness(self) -> ReadinessStatus:
+    async def areadiness(self) -> ReadinessEnum:
         """
         Check the readiness of the Redis cache.
 
@@ -62,12 +62,12 @@ class RedisCache(ICache):
             await self._client.delete(test_name)
             # Test the item does not exist
             assert await self._client.get(test_name) is None
-            return ReadinessStatus.OK
+            return ReadinessEnum.OK
         except AssertionError as e:
             logger.error(f"Readiness test failed, {e}")
         except RedisError as e:
             logger.error(f"Error requesting Redis, {e}")
-        return ReadinessStatus.FAIL
+        return ReadinessEnum.FAIL
 
     async def aget(self, key: str) -> Optional[bytes]:
         """

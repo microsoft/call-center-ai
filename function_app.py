@@ -41,7 +41,7 @@ from helpers.http import azure_transport
 from helpers.call_utils import ContextEnum as CallContextEnum
 from htmlmin.minify import html_minify
 from http import HTTPStatus
-from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessStatus
+from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessEnum
 from opentelemetry.semconv.trace import SpanAttributes
 from os import getenv
 from pydantic import TypeAdapter, ValidationError
@@ -101,11 +101,11 @@ async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
         _cache.areadiness(), _db.areadiness(), _search.areadiness(), _sms.areadiness()
     )
     readiness = ReadinessModel(
-        status=ReadinessStatus.OK,
+        status=ReadinessEnum.OK,
         checks=[
             ReadinessCheckModel(id="cache", status=cache_check),
             ReadinessCheckModel(id="index", status=db_check),
-            ReadinessCheckModel(id="startup", status=ReadinessStatus.OK),
+            ReadinessCheckModel(id="startup", status=ReadinessEnum.OK),
             ReadinessCheckModel(id="store", status=search_check),
             ReadinessCheckModel(id="stream", status=sms_check),
         ],
@@ -113,8 +113,8 @@ async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
     # If one of the checks fails, the whole readiness fails
     status_code = HTTPStatus.OK
     for check in readiness.checks:
-        if check.status != ReadinessStatus.OK:
-            readiness.status = ReadinessStatus.FAIL
+        if check.status != ReadinessEnum.OK:
+            readiness.status = ReadinessEnum.FAIL
             status_code = HTTPStatus.SERVICE_UNAVAILABLE
             break
     return func.HttpResponse(

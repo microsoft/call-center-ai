@@ -39,7 +39,7 @@ from helpers.resources import resources_dir
 from models.message import MessageModel
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from os import environ
-from typing import AsyncGenerator, Optional, Type, TypeVar, Union
+from typing import AsyncGenerator, Callable, Optional, TypeVar, Union
 import json
 import tiktoken
 
@@ -57,6 +57,7 @@ logger.info(
 )
 
 ModelType = TypeVar("ModelType", bound=BaseModel)
+T = TypeVar("T")
 
 
 class SafetyCheckError(Exception):
@@ -227,56 +228,77 @@ async def _completion_stream_worker(
         raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
 
 
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(ValidationError),
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=0.8, max=8),
+)
 @tracer.start_as_current_span("completion_sync")
 async def completion_sync(
-    max_tokens: int,
+    res_type: type[T],
     system: list[ChatCompletionSystemMessageParam],
-    json_output: bool = False,
-) -> Optional[str]:
-    """
-    Returns a completion.
+    validation_callback: Callable[
+        [Optional[str]], tuple[bool, Optional[str], Optional[T]]
+    ],
+    validate_json: bool = False,
+    _previous_result: Optional[str] = None,
+    _retries_remaining: int = 3,
+    _validation_error: Optional[str] = None,
+) -> Optional[T]:
+    # Initialize prompts
+    messages = system
+    if _validation_error:
+        messages.append(
+            ChatCompletionSystemMessageParam(
+                role="system",
+                content=f"""
+                    A validation error occurred during the previous attempt.
 
-    Catch errors for a maximum of 10 times (internal + `RateLimitError`). If the error persists, try with the fast LLM. If it fails again, raise the error.
-    """
-    # Try a first time with slow LLM
-    try:
-        return await _completion_sync_worker(
-            is_fast=False,
-            max_tokens=max_tokens,
-            system=system,
-            json_output=json_output,
-        )
-    except Exception as e:
-        if not any(isinstance(e, exception) for exception in _retried_exceptions):
-            raise e
-        logger.warning(f"{e.__class__.__name__} error, trying with fast LLM")
+                    # Previous result
+                    {_previous_result or "N/A"}
 
-    # Try more times with fast LLM, if it fails again, raise the error
-    retryed = AsyncRetrying(
-        reraise=True,
-        retry=retry_any(
-            *[retry_if_exception_type(exception) for exception in _retried_exceptions]
-        ),
-        stop=stop_after_attempt(
-            10
-        ),  # Usage is async and long-lived, so stop after 10 attempts
-        wait=wait_random_exponential(multiplier=0.8, max=8),
-    )
-    async for attempt in retryed:
-        with attempt:
-            return await _completion_sync_worker(
-                is_fast=True,
-                max_tokens=max_tokens,
-                system=system,
-                json_output=json_output,
+                    # Error details
+                    {_validation_error}
+                    """,
             )
+        )
+
+    # Generate
+    res_content = await _completion_sync_worker(
+        is_fast=False,
+        json_output=validate_json,
+        system=messages,
+    )
+
+    # Validate
+    is_valid, validation_error, res_object = validation_callback(res_content)
+    if not is_valid:  # Retry if validation failed
+        if _retries_remaining == 0:
+            logger.error(f"LLM validation error: {validation_error}")
+            return None
+        logger.warning(
+            f"LLM validation error, retrying ({_retries_remaining} retries left)"
+        )
+        return await completion_sync(
+            res_type=res_type,
+            system=system,
+            validate_json=validate_json,
+            validation_callback=validation_callback,
+            _previous_result=res_content,
+            _retries_remaining=_retries_remaining - 1,
+            _validation_error=validation_error,
+        )
+
+    # Return after validation or if failed too many times
+    return res_object
 
 
 async def _completion_sync_worker(
     is_fast: bool,
-    max_tokens: int,
     system: list[ChatCompletionSystemMessageParam],
     json_output: bool = False,
+    max_tokens: Optional[int] = None,
 ) -> Optional[str]:
     """
     Returns a completion.
@@ -295,61 +317,47 @@ async def _completion_sync_worker(
         system=system,
     )
 
-    try:
-        res = await client.chat.completions.create(
-            max_tokens=max_tokens,
-            messages=prompt,
-            model=platform.model,
-            seed=42,  # Reproducible results
-            temperature=0,  # Most focused and deterministic
-            **extra,
-        )
-    except BadRequestError as e:
-        if e.code == "content_filter":
-            raise SafetyCheckError("Issue detected in prompt")
-        raise e
-    choice = res.choices[0]
-    if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
-        raise SafetyCheckError(
-            f"Issue detected in generation: {choice.message.content}"
-        )
-    if choice.finish_reason == "length":
-        raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
+    # Try more times with fast LLM, if it fails again, raise the error
+    retryed = AsyncRetrying(
+        reraise=True,
+        retry=retry_any(
+            *[retry_if_exception_type(exception) for exception in _retried_exceptions]
+        ),
+        stop=stop_after_attempt(
+            10
+        ),  # Usage is async and long-lived, so stop after 10 attempts
+        wait=wait_random_exponential(multiplier=0.8, max=8),
+    )
+    async for attempt in retryed:
+        with attempt:
+            try:
+                res = await client.chat.completions.create(
+                    max_tokens=max_tokens,
+                    messages=prompt,
+                    model=platform.model,
+                    seed=42,  # Reproducible results
+                    temperature=0,  # Most focused and deterministic
+                    **extra,
+                )
+            except BadRequestError as e:
+                if e.code == "content_filter":
+                    raise SafetyCheckError("Issue detected in prompt")
+                raise e
+            choice = res.choices[0]
+            if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+                raise SafetyCheckError(
+                    f"Issue detected in generation: {choice.message.content}"
+                )
+            if choice.finish_reason == "length":
+                raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
 
     content = choice.message.content
     return content or None
 
 
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(ValidationError),
-    stop=stop_after_attempt(3),
-    wait=wait_random_exponential(multiplier=0.8, max=8),
-)
-@tracer.start_as_current_span("completion_model_sync")
-async def completion_model_sync(
-    max_tokens: int,
-    model: Type[ModelType],
-    system: list[ChatCompletionSystemMessageParam],
-) -> Optional[ModelType]:
-    """
-    Generate a Pydantic model from a completion.
-
-    Catch Pydantic validation errors for a maximum of 3 times, then raise the error.
-    """
-    res = await completion_sync(
-        json_output=True,
-        max_tokens=max_tokens,
-        system=system,
-    )
-    if not res:
-        return None
-    return model.model_validate_json(res)
-
-
 def _limit_messages(
     context_window: int,
-    max_tokens: int,
+    max_tokens: Optional[int],
     messages: list[MessageModel],
     model: str,
     system: list[ChatCompletionSystemMessageParam],
@@ -368,6 +376,8 @@ def _limit_messages(
 
     The context size is the maximum number of tokens allowed by the model. The messages are selected from the newest to the oldest, until the context or the maximum number of messages is reached.
     """
+    max_tokens = max_tokens or 0  # Default
+
     counter = 0
     max_context = context_window - max_tokens
     selected_messages = []

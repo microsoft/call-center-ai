@@ -143,6 +143,39 @@ Claim ({{ call.initiate.phone_number }})
     </p>
   </div>
 
+  <!-- Analysis -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
+    <h2 class="text-lg px-4 pt-4">🔎&nbsp;&nbsp;Analysis</h2>
+
+    {% if not call.synthesis %}
+    <p class="p-4 text-neutral-600 dark:text-neutral-400">No analysis for the moment.</p>
+    {% else %}
+    <table class="table-auto w-full">
+      <tbody>
+        {%
+          set details = [
+            {
+              'title': 'Satisfaction',
+              'value': ('🔴' if call.synthesis.satisfaction == 'terrible' else '🟠' if call.synthesis.satisfaction == 'low' else '🟢' if call.synthesis.satisfaction == 'partial' else '❤️' if call.synthesis.satisfaction == 'high' else '⚪️' if call.synthesis.satisfaction == 'unknow' ) ~ ' (' ~ call.synthesis.satisfaction.value ~ ')'
+            },
+            {
+              'title': 'Improvement',
+              'value': call.synthesis.improvement_suggestions
+            }
+          ]
+        %}
+        <!-- Disable shadow to avoid overlapping with the table border -->
+        {% for detail in details %}
+        <tr {% if not loop.last %}class="border-b border-neutral-200/60 dark:border-neutral-700/60"{% endif %}>
+          <td class="p-4 text-neutral-600 dark:text-neutral-400">{{ detail.title }}</td>
+          <td class="p-4">{{ detail.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
   <!-- Details -->
   <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
     <h2 class="text-lg px-4 pt-4">📁&nbsp;&nbsp;Details</h2>

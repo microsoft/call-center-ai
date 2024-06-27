@@ -1,5 +1,6 @@
 from azure.communication.callautomation import DtmfTone, RecognitionChoice
 from azure.communication.callautomation.aio import CallAutomationClient
+from pydantic import ValidationError
 from helpers.config import CONFIG
 from helpers.logging import logger, tracer
 from typing import Awaitable, Callable, Optional
@@ -26,7 +27,8 @@ from helpers.call_utils import (
     handle_recognize_text,
     handle_transfer,
 )
-from helpers.call_llm import llm_completion, llm_model, load_llm_chat
+from helpers.call_llm import load_llm_chat
+from helpers.llm_worker import completion_sync
 from models.next import NextModel
 import asyncio
 
@@ -431,9 +433,17 @@ async def _intelligence_sms(call: CallStateModel) -> None:
     """
     Send an SMS report to the customer.
     """
-    content = await llm_completion(
-        text=CONFIG.prompts.llm.sms_summary_system(call),
-        call=call,
+    def _validate(req: Optional[str]) -> tuple[bool, Optional[str], Optional[str]]:
+        if not req:
+            return False, "No SMS content", None
+        if len(req) < 10:
+            return False, "SMS content too short", None
+        return True, None, req
+
+    content = await completion_sync(
+        res_type=str,
+        system=CONFIG.prompts.llm.sms_summary_system(call),
+        validation_callback=_validate,
     )
 
     # Delete action and style from the message as they are in the history and LLM hallucinates them
@@ -474,38 +484,29 @@ async def _intelligence_synthesis(call: CallStateModel) -> None:
     """
     logger.debug("Synthesizing call")
 
-    short, long = await asyncio.gather(
-        llm_completion(
-            call=call,
-            text=CONFIG.prompts.llm.synthesis_short_system(call),
-        ),
-        llm_completion(
-            call=call,
-            text=CONFIG.prompts.llm.citations_system(
-                call=call,
-                text=await llm_completion(
-                    call=call,
-                    text=CONFIG.prompts.llm.synthesis_long_system(call),
-                ),
-            ),
-        ),
+    def _validate(
+        req: Optional[str],
+    ) -> tuple[bool, Optional[str], Optional[SynthesisModel]]:
+        if not req:
+            return False, "Empty response", None
+        try:
+            return True, None, SynthesisModel.model_validate_json(req)
+        except ValidationError as e:
+            return False, str(e), None
+
+    synthesis = await completion_sync(
+        res_type=SynthesisModel,
+        system=CONFIG.prompts.llm.synthesis_system(call),
+        validate_json=True,
+        validation_callback=_validate,
     )
 
-    # Delete action and style from the message as they are in the history and LLM hallucinates them
-    _, short = extract_message_style(remove_message_action(short or ""))
-    _, long = extract_message_style(remove_message_action(long or ""))
-
-    if not short or not long:
+    if not synthesis:
         logger.warning("Error generating synthesis")
         return
 
-    logger.info(f"Short synthesis: {short}")
-    logger.info(f"Long synthesis: {long}")
-
-    call.synthesis = SynthesisModel(
-        long=long,
-        short=short,
-    )
+    logger.info(f"Synthesis: {synthesis}")
+    call.synthesis = synthesis
     await _db.call_aset(call)
 
 
@@ -513,10 +514,23 @@ async def _intelligence_next(call: CallStateModel) -> None:
     """
     Generate next action for the call.
     """
-    next = await llm_model(
-        call=call,
-        model=NextModel,
-        text=CONFIG.prompts.llm.next_system(call),
+    logger.debug("Generating next action")
+
+    def _validate(
+        req: Optional[str],
+    ) -> tuple[bool, Optional[str], Optional[NextModel]]:
+        if not req:
+            return False, "Empty response", None
+        try:
+            return True, None, NextModel.model_validate_json(req)
+        except ValidationError as e:
+            return False, str(e), None
+
+    next = await completion_sync(
+        res_type=NextModel,
+        system=CONFIG.prompts.llm.next_system(call),
+        validate_json=True,
+        validation_callback=_validate,
     )
 
     if not next:

@@ -3,14 +3,14 @@ from pydantic import BaseModel
 from typing import List
 
 
-class ReadinessStatus(str, Enum):
+class ReadinessEnum(str, Enum):
     FAIL = "fail"
     OK = "ok"
 
 
 class ReadinessCheckModel(BaseModel):
     id: str
-    status: ReadinessStatus
+    status: ReadinessEnum
 
 
 class ReadinessModel(BaseModel):
