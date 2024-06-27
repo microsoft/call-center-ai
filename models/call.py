@@ -62,9 +62,7 @@ class CallGetModel(BaseModel):
         if not initiate:
             return {}
         return (
-            initiate.claim_model()
-            .model_validate(claim, strict=True)
-            .model_dump(exclude_none=True)
+            initiate.claim_model().model_validate(claim).model_dump(exclude_none=True)
         )
 
 
