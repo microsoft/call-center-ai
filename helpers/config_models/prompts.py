@@ -5,9 +5,11 @@ from html import escape
 from logging import Logger
 from models.call import CallStateModel
 from models.message import MessageModel
-from models.next import ActionEnum as NextActionEnum
+from models.next import NextModel
 from models.reminder import ReminderModel
+from models.synthesis import SynthesisModel
 from models.training import TrainingModel
+from openai.types.chat import ChatCompletionSystemMessageParam
 from pydantic import TypeAdapter, BaseModel
 from textwrap import dedent
 from typing import Optional
@@ -179,17 +181,15 @@ class LlmModel(BaseModel):
         ## Example 3
         Hello, I had difficulties to hear you. If you need help, let me know how I can help you. Have a nice day! {bot_name} from {bot_company}.
     """
-    synthesis_short_system_tpl: str = """
+    synthesis_system_tpl: str = """
         # Objective
-        Summarize the call with the customer in a few words. The customer cannot reply to this message, but will read it in their web portal.
+        Synthetize the call.
 
         # Rules
         - Answers in English, even if the customer speaks another language
         - Be concise
         - Consider all the conversation history, from the beginning
-        - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
-        - Prefix the answer with a determiner (e.g., "the theft of your car", "your broken window")
-        - Won't make any assumptions
+        - Don't make any assumptions
 
         # Initial call objective
         {task}
@@ -203,41 +203,8 @@ class LlmModel(BaseModel):
         # Conversation history
         {messages}
 
-        # Answer examples
-        - "the breakdown of your scooter"
-        - "the flooding in your field"
-        - "the theft of your car"
-        - "the water damage in your kitchen"
-        - "your broken window"
-    """
-    synthesis_long_system_tpl: str = """
-        # Objective
-        Summarize the call with the customer in a paragraph. The customer cannot reply to this message, but will read it in their web portal.
-
-        # Rules
-        - Answers in English, even if the customer speaks another language
-        - Be concise
-        - Consider all the conversation history, from the beginning
-        - Do not include details of the call process
-        - Do not include personal details (e.g., name, phone number, address)
-        - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
-        - Include details stored in the claim, to make the customer confident that the situation is understood
-        - Prefer including details about the situation (e.g., what, when, where, how)
-        - Say "you" to refer to the customer, and "I" to refer to the assistant
-        - Use Markdown syntax to format the message with paragraphs, bold text, and URL
-        - Won't make any assumptions
-
-        # Initial call objective
-        {task}
-
-        # Claim status
-        {claim}
-
-        # Reminders
-        {reminders}
-
-        # Conversation history
-        {messages}
+        # Response format in JSON
+        {format}
     """
     citations_system_tpl: str = """
         # Objective
@@ -293,9 +260,6 @@ class LlmModel(BaseModel):
         # Initial call objective
         {task}
 
-        # Allowed actions
-        {actions}
-
         # Claim status
         {claim}
 
@@ -306,47 +270,13 @@ class LlmModel(BaseModel):
         {messages}
 
         # Response format in JSON
-        {{
-            "action": "[action]",
-            "justification": "[justification]"
-        }}
-
-        ## Example 1
-        {{
-            "action": "in_depth_study",
-            "justification": "The customer has many questions about the insurance policy. They are not sure if they are covered for the incident. The contract seems not to be clear about this situation."
-        }}
-
-        ## Example 2
-        {{
-            "action": "commercial_offer",
-            "justification": "The company planned the customer taxi ride from the wrong address. The customer is not happy about this situation."
-        }}
-
-        ## Example 3
-        {{
-            "action": "customer_will_send_info",
-            "justification": "Document related to the damaged bike are missing. Documents are bike invoice, and the bike repair quote. The customer confirmed they will send them tomorrow by email."
-        }}
-
-        ## Example 4
-        {{
-            "action": "requires_expertise",
-            "justification": "Described damages on the roof are more important than expected. Plus, customer is not sure if the insurance policy covers this kind of damage. The company needs to send an expert to evaluate the situation."
-        }}
-
-        ## Example 5
-        {{
-            "action": "case_closed",
-            "justification": "Customer is satisfied with the service and confirmed the repair of the car is done. The case can be closed."
-        }}
+        {format}
     """
 
     def default_system(self, call: CallStateModel) -> str:
         from helpers.config import CONFIG
 
-        # TODO: Parse the date from the end-user timezone, allowing LLM to be used in multiple countries
-        return self._return(
+        return self._format(
             self.default_system_tpl.format(
                 bot_company=call.initiate.bot_company,
                 bot_name=call.initiate.bot_name,
@@ -358,110 +288,118 @@ class LlmModel(BaseModel):
             )
         )
 
-    def chat_system(self, call: CallStateModel, trainings: list[TrainingModel]) -> str:
+    def chat_system(
+        self, call: CallStateModel, trainings: list[TrainingModel]
+    ) -> list[ChatCompletionSystemMessageParam]:
         from models.message import (
             ActionEnum as MessageActionEnum,
             StyleEnum as MessageStyleEnum,
         )
 
-        return self._return(
-            self.chat_system_tpl,
-            actions=", ".join([action.value for action in MessageActionEnum]),
-            bot_company=call.initiate.bot_company,
-            claim=json.dumps(call.claim),
-            default_lang=call.lang.human_name,
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders, exclude_none=True)
-            .decode(),
-            styles=", ".join([style.value for style in MessageStyleEnum]),
-            task=call.initiate.task,
-            trainings=trainings,
+        return self._messages(
+            self._format(
+                self.chat_system_tpl,
+                actions=", ".join([action.value for action in MessageActionEnum]),
+                bot_company=call.initiate.bot_company,
+                claim=json.dumps(call.claim),
+                default_lang=call.lang.human_name,
+                reminders=TypeAdapter(list[ReminderModel])
+                .dump_json(call.reminders, exclude_none=True)
+                .decode(),
+                styles=", ".join([style.value for style in MessageStyleEnum]),
+                task=call.initiate.task,
+                trainings=trainings,
+            ),
+            call=call,
         )
 
-    def sms_summary_system(self, call: CallStateModel) -> str:
-        return self._return(
-            self.sms_summary_system_tpl,
-            bot_company=call.initiate.bot_company,
-            bot_name=call.initiate.bot_name,
-            claim=json.dumps(call.claim),
-            default_lang=call.lang.human_name,
-            messages=TypeAdapter(list[MessageModel])
-            .dump_json(call.messages, exclude_none=True)
-            .decode(),
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders, exclude_none=True)
-            .decode(),
-            task=call.initiate.task,
+    def sms_summary_system(
+        self, call: CallStateModel
+    ) -> list[ChatCompletionSystemMessageParam]:
+        return self._messages(
+            self._format(
+                self.sms_summary_system_tpl,
+                bot_company=call.initiate.bot_company,
+                bot_name=call.initiate.bot_name,
+                claim=json.dumps(call.claim),
+                default_lang=call.lang.human_name,
+                messages=TypeAdapter(list[MessageModel])
+                .dump_json(call.messages, exclude_none=True)
+                .decode(),
+                reminders=TypeAdapter(list[ReminderModel])
+                .dump_json(call.reminders, exclude_none=True)
+                .decode(),
+                task=call.initiate.task,
+            ),
+            call=call,
         )
 
-    def synthesis_short_system(self, call: CallStateModel) -> str:
-        return self._return(
-            self.synthesis_short_system_tpl,
-            claim=json.dumps(call.claim),
-            messages=TypeAdapter(list[MessageModel])
-            .dump_json(call.messages, exclude_none=True)
-            .decode(),
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders, exclude_none=True)
-            .decode(),
-            task=call.initiate.task,
-        )
-
-    def synthesis_long_system(self, call: CallStateModel) -> str:
-        return self._return(
-            self.synthesis_long_system_tpl,
-            claim=json.dumps(call.claim),
-            messages=TypeAdapter(list[MessageModel])
-            .dump_json(call.messages, exclude_none=True)
-            .decode(),
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders, exclude_none=True)
-            .decode(),
-            task=call.initiate.task,
+    def synthesis_system(
+        self, call: CallStateModel
+    ) -> list[ChatCompletionSystemMessageParam]:
+        return self._messages(
+            self._format(
+                self.synthesis_system_tpl,
+                claim=json.dumps(call.claim),
+                format=json.dumps(SynthesisModel.model_json_schema()),
+                messages=TypeAdapter(list[MessageModel])
+                .dump_json(call.messages, exclude_none=True)
+                .decode(),
+                reminders=TypeAdapter(list[ReminderModel])
+                .dump_json(call.reminders, exclude_none=True)
+                .decode(),
+                task=call.initiate.task,
+            ),
+            call=call,
         )
 
     def citations_system(
-        self, call: CallStateModel, text: Optional[str]
-    ) -> Optional[str]:
+        self, call: CallStateModel, text: str
+    ) -> list[ChatCompletionSystemMessageParam]:
         """
         Return the formatted prompt. Prompt is used to add citations to the text, without cluttering the content itself.
 
         The citations system is only used if `text` param is not empty, otherwise `None` is returned.
         """
-        if not text:
-            return None
-
-        return self._return(
-            self.citations_system_tpl,
-            claim=json.dumps(call.claim),
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders, exclude_none=True)
-            .decode(),
-            text=text,
+        return self._messages(
+            self._format(
+                self.citations_system_tpl,
+                claim=json.dumps(call.claim),
+                reminders=TypeAdapter(list[ReminderModel])
+                .dump_json(call.reminders, exclude_none=True)
+                .decode(),
+                text=text,
+            ),
+            call=call,
         )
 
-    def next_system(self, call: CallStateModel) -> str:
-        return self._return(
-            self.next_system_tpl,
-            actions=", ".join([action.value for action in NextActionEnum]),
-            claim=json.dumps(call.claim),
-            messages=TypeAdapter(list[MessageModel])
-            .dump_json(call.messages, exclude_none=True)
-            .decode(),
-            reminders=TypeAdapter(list[ReminderModel])
-            .dump_json(call.reminders, exclude_none=True)
-            .decode(),
-            task=call.initiate.task,
+    def next_system(
+        self, call: CallStateModel
+    ) -> list[ChatCompletionSystemMessageParam]:
+        return self._messages(
+            self._format(
+                self.next_system_tpl,
+                claim=json.dumps(call.claim),
+                format=json.dumps(NextModel.model_json_schema()),
+                messages=TypeAdapter(list[MessageModel])
+                .dump_json(call.messages, exclude_none=True)
+                .decode(),
+                reminders=TypeAdapter(list[ReminderModel])
+                .dump_json(call.reminders, exclude_none=True)
+                .decode(),
+                task=call.initiate.task,
+            ),
+            call=call,
         )
 
-    def _return(
+    def _format(
         self,
         prompt_tpl: str,
         trainings: Optional[list[TrainingModel]] = None,
         **kwargs: str,
     ) -> str:
         # Remove possible indentation then render the template
-        res = dedent(prompt_tpl.format(**kwargs)).strip()
+        formatted_prompt = dedent(prompt_tpl.format(**kwargs)).strip()
 
         # Format trainings, if any
         if trainings:
@@ -473,14 +411,32 @@ class LlmModel(BaseModel):
                     for training in trainings
                 ]
             )
-            res += "\n\n# Trusted data you can use"
-            res += f"\n{trainings_str}"
+            formatted_prompt += "\n\n# Trusted data you can use"
+            formatted_prompt += f"\n{trainings_str}"
 
         # Remove newlines to avoid hallucinations issues with GPT-4 Turbo
-        res = " ".join([line.strip() for line in res.splitlines()])
+        formatted_prompt = " ".join(
+            [line.strip() for line in formatted_prompt.splitlines()]
+        )
 
-        self.logger.debug(f"LLM prompt: {res}")
-        return res
+        self.logger.debug(f"Formatted prompt: {formatted_prompt}")
+        return formatted_prompt
+
+    def _messages(
+        self, system: str, call: CallStateModel
+    ) -> list[ChatCompletionSystemMessageParam]:
+        messages = [
+            ChatCompletionSystemMessageParam(
+                content=self.default_system(call),
+                role="system",
+            ),
+            ChatCompletionSystemMessageParam(
+                content=system,
+                role="system",
+            ),
+        ]
+        self.logger.debug(f"Messages: {messages}")
+        return messages
 
     @cached_property
     def logger(self) -> Logger:

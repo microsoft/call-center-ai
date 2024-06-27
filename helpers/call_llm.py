@@ -1,4 +1,4 @@
-from typing import Awaitable, Callable, Optional, Type
+from typing import Awaitable, Callable
 from azure.communication.callautomation.aio import CallAutomationClient
 from helpers.config import CONFIG
 from helpers.logging import logger
@@ -21,92 +21,16 @@ from helpers.call_utils import (
 from helpers.llm_tools import LlmPlugins
 import asyncio
 from helpers.llm_worker import (
-    completion_model_sync,
     completion_stream,
-    completion_sync,
     MaximumTokensReachedError,
-    ModelType,
     SafetyCheckError,
 )
 from openai import APIError
-from openai.types.chat import ChatCompletionSystemMessageParam
 import time
 
 
 _cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
-
-
-async def llm_completion(text: Optional[str], call: CallStateModel) -> Optional[str]:
-    """
-    Run LLM completion from a system prompt and a Call model.
-
-    If the system prompt is None, no completion will be run and None will be returned. Otherwise, the response of the LLM will be returned.
-    """
-    logger.info("Running LLM completion")
-
-    if not text:
-        return None
-
-    system = _llm_completion_system(text, call)
-    content = None
-
-    try:
-        content = await completion_sync(
-            max_tokens=1000,
-            system=system,
-        )
-    except APIError as e:
-        logger.warning(f"OpenAI API call error: {e}")
-    except SafetyCheckError as e:
-        logger.warning(f"Safety Check error: {e}")
-
-    return content
-
-
-async def llm_model(
-    text: Optional[str], call: CallStateModel, model: Type[ModelType]
-) -> Optional[ModelType]:
-    """
-    Run LLM completion from a system prompt, a Call model, and an expected model type as a return.
-
-    The logic will try its best to return a model of the expected type, but it is not guaranteed. It it fails, `None` will be returned.
-    """
-    logger.debug("Running LLM model")
-
-    if not text:
-        return None
-
-    system = _llm_completion_system(text, call)
-    res = None
-
-    try:
-        res = await completion_model_sync(
-            max_tokens=1000,
-            model=model,
-            system=system,
-        )
-    except APIError as e:
-        logger.warning(f"OpenAI API call error: {e}")
-
-    return res
-
-
-def _llm_completion_system(
-    system: str, call: CallStateModel
-) -> list[ChatCompletionSystemMessageParam]:
-    messages = [
-        ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.default_system(call),
-            role="system",
-        ),
-        ChatCompletionSystemMessageParam(
-            content=system,
-            role="system",
-        ),
-    ]
-    logger.debug(f"Messages: {messages}")
-    return messages
 
 
 async def load_llm_chat(
@@ -350,20 +274,11 @@ async def _execute_llm_chat(
     logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
     logger.debug(f"Trainings: {trainings}")
 
-    # Build system prompts
-    system = [
-        ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.default_system(call),
-            role="system",
-        ),
-        ChatCompletionSystemMessageParam(
-            content=CONFIG.prompts.llm.chat_system(
-                call=call,
-                trainings=trainings,
-            ),
-            role="system",
-        ),
-    ]
+    # System prompts
+    system = CONFIG.prompts.llm.chat_system(
+        call=call,
+        trainings=trainings,
+    )
 
     # Build plugins
     plugins = LlmPlugins(
