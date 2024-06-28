@@ -97,17 +97,25 @@ async def health_liveness_get(req: func.HttpRequest) -> func.HttpResponse:
 )
 async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
     # Check all components in parallel
-    cache_check, db_check, search_check, sms_check = await asyncio.gather(
-        _cache.areadiness(), _db.areadiness(), _search.areadiness(), _sms.areadiness()
+    (
+        cache_check,
+        store_check,
+        search_check,
+        sms_check,
+    ) = await asyncio.gather(
+        _cache.areadiness(),
+        _db.areadiness(),
+        _search.areadiness(),
+        _sms.areadiness(),
     )
     readiness = ReadinessModel(
         status=ReadinessEnum.OK,
         checks=[
             ReadinessCheckModel(id="cache", status=cache_check),
-            ReadinessCheckModel(id="index", status=db_check),
+            ReadinessCheckModel(id="store", status=store_check),
             ReadinessCheckModel(id="startup", status=ReadinessEnum.OK),
-            ReadinessCheckModel(id="store", status=search_check),
-            ReadinessCheckModel(id="stream", status=sms_check),
+            ReadinessCheckModel(id="search", status=search_check),
+            ReadinessCheckModel(id="sms", status=sms_check),
         ],
     )
     # If one of the checks fails, the whole readiness fails
