@@ -100,6 +100,8 @@ deploy:
 	@echo "🛠️ Deploying Function App..."
 	func azure functionapp publish $(function_app_name)
 
+	@echo "🚀 Call Center AI is running on $(app_url)"
+
 	@$(MAKE) post-deploy name=$(name)
 
 post-deploy:
@@ -109,7 +111,6 @@ post-deploy:
 	@$(MAKE) twilio-register \
 		endpoint=$(app_url)
 
-	@echo "🚀 Call Center AI is running on $(app_url)"
 	@$(MAKE) logs name=$(name)
 
 destroy:
