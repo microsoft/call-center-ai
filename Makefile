@@ -6,10 +6,10 @@ tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
 cognitive_communication_location := westeurope
-default_location := westeurope
+default_location := swedencentral
 functionapp_location := swedencentral
 openai_location := swedencentral
-search_location := northeurope
+search_location := francecentral
 # App configuration
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_services.phone_number')
 event_subscription_name ?= $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
@@ -100,6 +100,8 @@ deploy:
 	@echo "🛠️ Deploying Function App..."
 	func azure functionapp publish $(function_app_name)
 
+	@echo "🚀 Call Center AI is running on $(app_url)"
+
 	@$(MAKE) post-deploy name=$(name)
 
 post-deploy:
@@ -109,7 +111,6 @@ post-deploy:
 	@$(MAKE) twilio-register \
 		endpoint=$(app_url)
 
-	@echo "🚀 Call Center AI is running on $(app_url)"
 	@$(MAKE) logs name=$(name)
 
 destroy:

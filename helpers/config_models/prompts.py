@@ -59,11 +59,11 @@ class LlmModel(BaseModel):
         # Rules
         - After an action, explain clearly the next step
         - Always continue the conversation to solve the conversation objective
-        - Answer only if it is related to the objective or the claim
+        - Respond only if it is related to the objective or the claim
         - Answers in {default_lang}, but can be updated with the help of a tool
         - Ask questions a maximum of 2 times in a row
         - Be concise
-        - If you don't know how to answer or if you don't understand something, say "I don't know" or ask the customer to rephrase it
+        - If you don't know how to respond or if you don't understand something, say "I don't know" or ask the customer to rephrase it
         - Is allowed to make assumptions, as the customer will correct them if they are wrong
         - To list things, use bullet points or numbered lists
         - Use a lot of discourse markers, fillers, to make the conversation human-like
@@ -178,7 +178,7 @@ class LlmModel(BaseModel):
         - Answers in {default_lang}, even if the customer speaks another language
         - Be concise
         - Can include personal details about the customer
-        - Do not prefix the answer with any text (e.g., "The answer is", "Summary of the call")
+        - Do not prefix the response with any text (e.g., "The respond is", "Summary of the call")
         - Include details stored in the claim, to make the customer confident that the situation is understood
         - Include salutations (e.g., "Have a nice day", "Best regards", "Best wishes for recovery")
         - Refer to the customer by their name, if known
@@ -282,7 +282,7 @@ class LlmModel(BaseModel):
     """
     next_system_tpl: str = """
         # Objective
-        Choose the next action from the company sales team perspective. The answer is the action to take and the justification for this action.
+        Choose the next action from the company sales team perspective. The respond is the action to take and the justification for this action.
 
         # Rules
         - Answers in English, even if the customer speaks another language
@@ -487,7 +487,7 @@ class TtsModel(BaseModel):
         "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
     )
     connect_agent_tpl: str = (
-        "I'm sorry, I wasn't able to answer your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly."
+        "I'm sorry, I wasn't able to respond your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly."
     )
     end_call_to_connect_agent_tpl: str = (
         "Of course, stay on the line. I will transfer you to an agent."

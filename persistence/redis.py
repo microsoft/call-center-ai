@@ -34,7 +34,7 @@ class RedisCache(ICache):
             retry_on_timeout=True,
             retry=_retry,
             socket_connect_timeout=5,  # Give the system sufficient time to connect even under higher CPU conditions
-            socket_timeout=1,  # Answer quickly or abort, this is a cache
+            socket_timeout=1,  # Respond quickly or abort, this is a cache
             # Deployment
             host=config.host,
             port=config.port,

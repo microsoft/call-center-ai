@@ -64,7 +64,6 @@ async def load_llm_chat(
                 client=client,
                 style=style,
                 text=text,
-                timeout_error=False,  # Voice will continue, don't trigger
             ),  # First, recognize the next voice
             _db.call_aset(
                 call
@@ -165,7 +164,6 @@ async def load_llm_chat(
                         client=client,
                         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
                         text=await CONFIG.prompts.tts.timeout_loading(call),
-                        timeout_error=False,  # Voice will continue, don't trigger
                     )
 
                 elif (
@@ -221,6 +219,7 @@ async def load_llm_chat(
             await handle_recognize_text(
                 call=call,
                 client=client,
+                no_response_error=True,
                 style=MessageStyleEnum.NONE,
                 text=None,
             )  # Trigger an empty text to recognize and generate timeout error if user does not speak

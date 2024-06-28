@@ -65,7 +65,7 @@ class RagRelevancyMetric(BaseMetric):
             The document comes from a database. It has been stemmed. It may contains technical data and jargon a specialist would use.
 
             # Rules
-            - Answer only with the float value, never add other text
+            - Respond only with the float value, never add other text
             - Response 0.0 means not useful at all, 1.0 means totally useful
 
             # Message

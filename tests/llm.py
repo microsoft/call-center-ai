@@ -89,7 +89,7 @@ class ClaimRelevancyMetric(BaseMetric):
             # Rules
             - A high score means the real data is correct
             - A low score means the real data is not relevant and lacks details against the theoritical data
-            - Answer only with the score, nothing else
+            - Respond only with the score, nothing else
             - The score should be between 0 and 1
 
             # Data
@@ -155,11 +155,11 @@ class ClaimRelevancyMetric(BaseMetric):
             Conversation is coming from a call centre. Today is {datetime.now(self.call.tz()).strftime("%Y-%m-%d %H:%M (%Z)")}.
 
             # Objective
-            Extract fields from a conversation. The answer will be a JSON object with the key-value pairs.
+            Extract fields from a conversation. The respond will be a JSON object with the key-value pairs.
 
             # Rules
             - All data should be extracted
-            - Answer only with the JSON object, nothing else
+            - Respond only with the JSON object, nothing else
             - If there is no data to populate a field, do not include it
             - Limit fields to the ones listed
             - Values should be detailed, if data exists
@@ -280,7 +280,7 @@ async def test_llm(
 
     # Simulate conversation with speech recognition
     for input in inputs:
-        # Answer
+        # Respond
         await on_speech_recognized(
             call=call,
             client=automation_client,
@@ -342,11 +342,11 @@ async def test_llm(
 
     if not any(
         field == "answer_relevancy" for field in claim_tests_excl
-    ):  # Test answer relevancy from questions
+    ):  # Test respond relevancy from questions
         llm_metrics.append(AnswerRelevancyMetric(threshold=0.5, model=deepeval_model))
     if not any(
         field == "contextual_relevancy" for field in claim_tests_excl
-    ):  # Test answer relevancy from context
+    ):  # Test respond relevancy from context
         llm_metrics.append(
             ContextualRelevancyMetric(threshold=0.25, model=deepeval_model)
         )
