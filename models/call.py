@@ -62,7 +62,12 @@ class CallGetModel(BaseModel):
         if not initiate:
             return {}
         return (
-            initiate.claim_model().model_validate(claim).model_dump(exclude_none=True)
+            initiate.claim_model()
+            .model_validate(claim)
+            .model_dump(
+                exclude_none=True,
+                mode="json",  # Field must be serialized as JSON in other parts of the code
+            )
         )
 
 
