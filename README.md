@@ -156,7 +156,7 @@ graph LR
     tts["Text-to-Speech\n(Cognitive Services)"]
   end
 
-  app -- Answer with text --> communication_services
+  app -- Respond with text --> communication_services
   app -- Ask for translation --> translation
   app -- Ask to transfer --> communication_services
   app -- Few-shot training --> search
@@ -216,7 +216,7 @@ sequenceDiagram
     else Callback
         App->>AI Search: Gather training data
         App->>OpenAI GPT: Ask for a completion
-        OpenAI GPT-->>App: Answer (HTTP/2 SSE)
+        OpenAI GPT-->>App: Respond (HTTP/2 SSE)
         loop Over buffer
             loop Over multiple tools
                 alt Is this a claim data update?
@@ -265,7 +265,7 @@ prompts:
 
 Steps to deploy:
 
-1. Create an Communication Services resource, a Phone Number with inbound call capability, make sure the resource have a managed identity
+1. Create an Communication Services resource, a Phone Number (inbound + outbound, from an application), make sure the resource have a managed identity
 2. Create the local `config.yaml` file (like the example above)
 3. Connect to your Azure environment (e.g. `az login`)
 4. Run deployment with `make deploy name=my-instance`
@@ -421,7 +421,7 @@ conversation:
           voice: "fr-FR-DeniseNeural"
         - pronunciations_en: ["Chinese", "ZH", "China"]
           short_code: "zh-CN"
-          voice: "zh-CN-XiaoxiaoNeural"
+          voice: "zh-CN-XiaoqiuNeural"
 ```
 
 ### Customize the moderation levels

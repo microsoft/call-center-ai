@@ -32,7 +32,7 @@ class SynthesisModel(BaseModel):
         Summarize the call with the customer in a few words. The customer cannot reply to this message, but will read it in their web portal.
 
         # Rules
-        - Prefix the answer with a determiner (e.g., "the theft of your car", "your broken window")
+        - Prefix the response with a determiner (e.g., "the theft of your car", "your broken window")
 
         # Response examples
         - "the breakdown of your scooter"

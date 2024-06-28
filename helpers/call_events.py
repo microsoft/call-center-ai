@@ -141,8 +141,8 @@ async def on_speech_recognized(
         ),  # Second, the LLM should be loaded to continue the conversation
         _db.call_aset(
             call
-        ),  # Third, save in DB allowing SMS answers to be more "in-sync" if they are sent during the generation
-    )  # All in parallel to lower the answer latency
+        ),  # Third, save in DB allowing SMS responses to be more "in-sync" if they are sent during the generation
+    )  # All in parallel to lower the response latency
 
 
 @tracer.start_as_current_span("on_recognize_timeout_error")
@@ -318,7 +318,7 @@ async def on_ivr_recognized(
                 post_callback=post_callback,
                 trainings_callback=trainings_callback,
             ),  # Third, the LLM should be loaded to continue the conversation
-        )  # All in parallel to lower the answer latency
+        )  # All in parallel to lower the response latency
 
     else:  # Returning call
         await asyncio.gather(

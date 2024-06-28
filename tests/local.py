@@ -79,7 +79,7 @@ async def main() -> None:
         message = input("Customer: ")
         if message.strip().lower() == "exit":
             break
-        # Answer
+        # Respond
         await on_speech_recognized(
             call=call,
             client=automation_client,
