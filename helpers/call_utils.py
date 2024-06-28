@@ -27,7 +27,7 @@ import json
 
 
 _SENTENCE_PUNCTUATION_R = (
-    r"([!?;,]+|[\.\-:]+(?:$| ))"  # Split by sentence by punctuation
+    r"([!?;]+|[\.\-:]+(?:$| ))"  # Split by sentence by punctuation
 )
 _TTS_SANITIZER_R = re.compile(
     r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&<>€$%=*]"
