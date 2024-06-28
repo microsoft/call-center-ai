@@ -70,7 +70,6 @@ class LlmPlugins:
             client=self.client,
             context=CallContextEnum.GOODBYE,
             text=await CONFIG.prompts.tts.goodbye(self.call),
-            timeout_error=False,  # Shouldn't trigger anything, as call is ending
         )
         return "Call ended"
 
@@ -306,7 +305,6 @@ class LlmPlugins:
             client=self.client,
             context=CallContextEnum.CONNECT_AGENT,
             text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
-            timeout_error=False,  # Shouldn't trigger anything, as conversation with Assistant is ending
         )
         return "Transferring to human agent"
 

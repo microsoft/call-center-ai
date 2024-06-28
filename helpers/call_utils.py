@@ -176,9 +176,9 @@ async def handle_recognize_text(
     client: CallAutomationClient,
     text: Optional[str],
     context: Optional[ContextEnum] = None,
+    no_response_error: bool = False,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
-    timeout_error: bool = True,
 ) -> None:
     """
     Play a text to a call participant and start recognizing the response.
@@ -207,9 +207,9 @@ async def handle_recognize_text(
     for i, chunk in enumerate(chunks):
         end_silence = None
         if i == len(chunks) - 1:  # Last chunk
-            end_silence = CONFIG.conversation.phone_silence_timeout_sec
-            if timeout_error:
-                contexts.append(ContextEnum.LAST_CHUNK)
+            if no_response_error:
+                contexts.add(ContextEnum.LAST_CHUNK)
+                end_silence = CONFIG.conversation.phone_silence_timeout_sec
         await _handle_recognize_media(
             call=call,
             client=client,

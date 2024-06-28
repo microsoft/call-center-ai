@@ -192,9 +192,9 @@ async def on_recognize_timeout_error(
     await handle_recognize_text(
         call=call,
         client=client,
+        no_response_error=True,
         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
         text=await CONFIG.prompts.tts.timeout_silence(call),
-        timeout_error=True,  # Should re-trigger an error or the LLM
     )
 
 
@@ -226,6 +226,7 @@ async def on_recognize_unknown_error(
     await handle_recognize_text(
         call=call,
         client=client,
+        no_response_error=True,
         store=False,  # Do not store error prompt as it perturbs the LLM and makes it hallucinate
         text=await CONFIG.prompts.tts.error(call),
     )
@@ -326,7 +327,6 @@ async def on_ivr_recognized(
                 client=client,
                 style=MessageStyleEnum.CHEERFUL,
                 text=await CONFIG.prompts.tts.welcome_back(call),
-                timeout_error=False,  # Do not trigger timeout, as the chat will continue
             ),  # First, welcome back the user
             persist_coro,  # Second, persist language change for next messages, should be quick enough to be in sync with the next message
             load_llm_chat(
@@ -355,6 +355,7 @@ async def on_transfer_error(
         call=call,
         client=client,
         context=CallContextEnum.TRANSFER_FAILED,
+        no_response_error=True,
         text=await CONFIG.prompts.tts.calltransfer_failure(call),
     )
 
