@@ -49,8 +49,8 @@ class SqliteStore(IStore):
             async with self._use_db() as db:
                 await db.execute("SELECT 1")
             return ReadinessEnum.OK
-        except Exception as e:
-            logger.error(f"Error requesting SQLite: {e}")
+        except Exception:
+            logger.error("Unknown error while checking SQLite readiness", exc_info=True)
         return ReadinessEnum.FAIL
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
