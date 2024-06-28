@@ -178,12 +178,6 @@ async def on_recognize_timeout_error(
         )
         return
 
-    if not (
-        contexts and CallContextEnum.LAST_CHUNK in contexts
-    ):  # Not the last chunk, ignore
-        logger.debug("Ignoring timeout if bot is still speaking")
-        return
-
     # Retry voice recognition
     call.recognition_retry += 1
     logger.info(
@@ -434,6 +428,7 @@ async def _intelligence_sms(call: CallStateModel) -> None:
     """
     Send an SMS report to the customer.
     """
+
     def _validate(req: Optional[str]) -> tuple[bool, Optional[str], Optional[str]]:
         if not req:
             return False, "No SMS content", None
