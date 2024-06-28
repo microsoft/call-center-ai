@@ -1,6 +1,7 @@
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import (
     HttpResponseError,
+    ResourceNotFoundError,
     ServiceRequestError,
     ServiceResponseError,
 )
@@ -133,6 +134,8 @@ class AiSearchSearch(ISearch):
                         )
                     except ValidationError as e:
                         logger.debug(f"Parsing error: {e.errors()}")
+        except ResourceNotFoundError as e:
+            logger.warning(f'AI Search index "{self._config.index}" not found')
         except HttpResponseError as e:
             logger.error(f"Error requesting AI Search: {e}")
         except ServiceRequestError as e:
