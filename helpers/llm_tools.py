@@ -1,5 +1,5 @@
 from azure.communication.callautomation.aio import CallAutomationClient
-from helpers.call_utils import ContextEnum as CallContextEnum, handle_recognize_text
+from helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
 from helpers.logging import logger
@@ -65,7 +65,7 @@ class LlmPlugins:
         - All participants are satisfied and agree to end the call
         - Customer said 'bye bye'
         """
-        await handle_recognize_text(
+        await handle_play_text(
             call=self.call,
             client=self.client,
             context=CallContextEnum.GOODBYE,
@@ -300,7 +300,7 @@ class LlmPlugins:
         - No more information available and customer insists
         - Not satisfied with the answers
         """
-        await handle_recognize_text(
+        await handle_play_text(
             call=self.call,
             client=self.client,
             context=CallContextEnum.CONNECT_AGENT,
