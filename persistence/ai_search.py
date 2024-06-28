@@ -53,10 +53,14 @@ class AiSearchSearch(ISearch):
             async with await self._use_client() as client:
                 await client.get_document_count()
             return ReadinessEnum.OK
-        except HttpResponseError as e:
-            logger.error(f"Error requesting AI Search: {e}")
-        except ServiceRequestError as e:
-            logger.error(f"Error connecting to AI Search: {e}")
+        except HttpResponseError:
+            logger.error("Error requesting AI Search", exc_info=True)
+        except ServiceRequestError:
+            logger.error("Error connecting to AI Search", exc_info=True)
+        except Exception:
+            logger.error(
+                "Unknown error while checking AI Search readiness", exc_info=True
+            )
         return ReadinessEnum.FAIL
 
     @retry(

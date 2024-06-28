@@ -62,8 +62,12 @@ class CosmosDbStore(IStore):
             return ReadinessEnum.OK
         except AssertionError:
             logger.error("Readiness test failed", exc_info=True)
-        except CosmosHttpResponseError as e:
-            logger.error(f"Error requesting CosmosDB: {e}")
+        except CosmosHttpResponseError:
+            logger.error("Error requesting CosmosDB", exc_info=True)
+        except Exception:
+            logger.error(
+                "Unknown error while checking Cosmos DB readiness", exc_info=True
+            )
         return ReadinessEnum.FAIL
 
     async def _item_exists(self, test_id: str, partition_key: str) -> bool:

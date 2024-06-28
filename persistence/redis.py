@@ -63,10 +63,12 @@ class RedisCache(ICache):
             # Test the item does not exist
             assert await self._client.get(test_name) is None
             return ReadinessEnum.OK
-        except AssertionError as e:
-            logger.error(f"Readiness test failed: {e}")
+        except AssertionError:
+            logger.error("Readiness test failed", exc_info=True)
         except RedisError as e:
-            logger.error(f"Error requesting Redis: {e}")
+            logger.error("Error requesting Redis", exc_info=True)
+        except Exception:
+            logger.error("Unknown error while checking Redis readiness", exc_info=True)
         return ReadinessEnum.FAIL
 
     async def aget(self, key: str) -> Optional[bytes]:
