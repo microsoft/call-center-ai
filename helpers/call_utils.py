@@ -26,7 +26,9 @@ import re
 import json
 
 
-_SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"  # Split by sentence by punctuation
+_SENTENCE_PUNCTUATION_R = (
+    r"([!?;,]+|[\.\-:]+(?:$| ))"  # Split by sentence by punctuation
+)
 _TTS_SANITIZER_R = re.compile(
     r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&<>€$%=*]"
 )  # Sanitize text for TTS
@@ -53,15 +55,16 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
     # Split by sentence by punctuation
     splits = re.split(_SENTENCE_PUNCTUATION_R, text)
     for i, split in enumerate(splits):
+        split = split.strip()  # Remove leading/trailing spaces
         if i % 2 == 1:  # Skip punctuation
             continue
         if not split:  # Skip empty lines
             continue
         if i == len(splits) - 1:  # Skip last line in case of missing punctuation
             if include_last:
-                yield split
+                yield split + " "
         else:  # Add punctuation back
-            yield split + splits[i + 1]
+            yield split + splits[i + 1].strip() + " "
 
 
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
