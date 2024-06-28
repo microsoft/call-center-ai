@@ -42,17 +42,17 @@ class LanguageModel(BaseModel):
         LanguageEntryModel(
             pronunciations_en=["English", "EN", "United States"],
             short_code="en-US",
-            voice="en-US-AvaNeural",
+            voice="en-US-NancyNeural",
         ),
         LanguageEntryModel(
             pronunciations_en=["Spanish", "ES", "Spain"],
             short_code="es-ES",
-            voice="es-ES-ElviraNeural",
+            voice="es-ES-LiaNeural",
         ),
         LanguageEntryModel(
             pronunciations_en=["Chinese", "ZH", "China"],
             short_code="zh-CN",
-            voice="zh-CN-XiaoxiaoNeural",
+            voice="zh-CN-XiaoqiuNeural",
         ),
     ]
 
