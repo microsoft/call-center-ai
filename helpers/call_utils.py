@@ -89,7 +89,7 @@ async def _handle_recognize_media(
                 end_silence_timeout=end_silence,
                 input_type=RecognizeInputType.SPEECH,
                 interrupt_prompt=True,
-                operation_context=json.dumps(contexts) if contexts else None,
+                operation_context=json.dumps(list(contexts)) if contexts else None,
                 play_prompt=(
                     _audio_from_text(
                         call=call,
@@ -185,9 +185,9 @@ async def handle_recognize_text(
 
     If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    contexts = [context] if context else []
+    contexts = {context} if context else set()
     if not text:  # Only recognize
-        contexts.append(ContextEnum.LAST_CHUNK)
+        contexts.add(ContextEnum.LAST_CHUNK)
         await _handle_recognize_media(
             call=call,
             client=client,
