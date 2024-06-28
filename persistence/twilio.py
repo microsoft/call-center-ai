@@ -27,7 +27,7 @@ class TwilioSms(ISms):
         client = await self._use_client()
         try:
             account = await client.api.accounts(account_sid).fetch_async()
-            balance = account.balance.fetch()
+            balance = await account.balance.fetch_async()
             assert balance.balance and float(balance.balance) > 0
             return ReadinessEnum.OK
         except AssertionError:
