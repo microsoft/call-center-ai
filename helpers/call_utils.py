@@ -44,7 +44,6 @@ class ContextEnum(str, Enum):
     CONNECT_AGENT = "connect_agent"  # Transfer to agent
     GOODBYE = "goodbye"  # Hang up
     IVR_LANG_SELECT = "ivr_lang_select"  # IVR language selection
-    LAST_CHUNK = "last_chunk"  # Last chunk of text
     TRANSFER_FAILED = "transfer_failed"  # Transfer failed
 
 
@@ -71,8 +70,7 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
 async def _handle_recognize_media(
     call: CallStateModel,
     client: CallAutomationClient,
-    contexts: Optional[set[ContextEnum]],
-    end_silence: Optional[int],
+    context: Optional[ContextEnum],
     style: MessageStyleEnum,
     text: Optional[str],
 ) -> None:
@@ -86,10 +84,10 @@ async def _handle_recognize_media(
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.start_recognizing_media(
-                end_silence_timeout=end_silence,
+                end_silence_timeout=CONFIG.conversation.phone_silence_timeout_sec,
                 input_type=RecognizeInputType.SPEECH,
                 interrupt_prompt=True,
-                operation_context=json.dumps(list(contexts)) if contexts else None,
+                operation_context=_context_builder({context}),
                 play_prompt=(
                     _audio_from_text(
                         call=call,
@@ -128,7 +126,7 @@ async def _handle_play_text(
         assert call.voice_id, "Voice ID is required for playing text"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
-                operation_context=json.dumps([context]) if context else None,
+                operation_context=_context_builder({context}),
                 play_source=_audio_from_text(
                     call=call,
                     style=style,
@@ -159,7 +157,7 @@ async def handle_media(
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
-                operation_context=json.dumps([context]) if context else None,
+                operation_context=_context_builder({context}),
                 play_source=FileSource(url=sound_url),
             )
     except ResourceNotFoundError:
@@ -185,14 +183,11 @@ async def handle_recognize_text(
 
     If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    contexts = {context} if context else set()
     if not text:  # Only recognize
-        contexts.add(ContextEnum.LAST_CHUNK)
         await _handle_recognize_media(
             call=call,
             client=client,
-            contexts=contexts,
-            end_silence=CONFIG.conversation.phone_silence_timeout_sec,
+            context=context,
             style=style,
             text=None,
         )
@@ -205,16 +200,21 @@ async def handle_recognize_text(
         text=text,
     )
     for i, chunk in enumerate(chunks):
-        end_silence = None
         if i == len(chunks) - 1:  # Last chunk
             if no_response_error:
-                contexts.add(ContextEnum.LAST_CHUNK)
-                end_silence = CONFIG.conversation.phone_silence_timeout_sec
-        await _handle_recognize_media(
+                await _handle_recognize_media(
+                    call=call,
+                    client=client,
+                    context=context,
+                    style=style,
+                    text=chunk,
+                )
+                return
+
+        await _handle_play_text(
             call=call,
             client=client,
-            contexts=contexts,
-            end_silence=end_silence,
+            context=context,
             style=style,
             text=chunk,
         )
@@ -368,7 +368,7 @@ async def handle_recognize_ivr(
                 choices=choices,
                 input_type=RecognizeInputType.CHOICES,
                 interrupt_prompt=True,
-                operation_context=json.dumps([context]) if context else None,
+                operation_context=_context_builder({context}),
                 play_prompt=_audio_from_text(
                     call=call,
                     style=MessageStyleEnum.NONE,
@@ -410,7 +410,7 @@ async def handle_transfer(
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.transfer_call_to_participant(
-                operation_context=json.dumps([context]) if context else None,
+                operation_context=_context_builder({context}),
                 target_participant=PhoneNumberIdentifier(target),
             )
     except ResourceNotFoundError:
@@ -420,6 +420,12 @@ async def handle_transfer(
             logger.debug(f"Call hung up before transferring")
         else:
             raise e
+
+
+def _context_builder(contexts: Optional[set[Optional[ContextEnum]]]) -> Optional[str]:
+    if not contexts:
+        return None
+    return json.dumps([context.value for context in contexts if context])
 
 
 @asynccontextmanager
