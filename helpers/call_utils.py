@@ -81,7 +81,7 @@ async def _handle_recognize_media(
 
     If `context` is provided, it will be used to track the operation.
     """
-    logger.debug(f"Recognizing voice with text: {text}")
+    logger.info(f"Recognizing voice: {text}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -123,7 +123,7 @@ async def _handle_play_text(
 
     If `context` is provided, it will be used to track the operation.
     """
-    logger.debug(f"Playing text: {text}")
+    logger.info(f"Playing text: {text}")
     try:
         assert call.voice_id, "Voice ID is required for playing text"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -360,8 +360,7 @@ async def handle_recognize_ivr(
 
     Starts by playing text, then starts recognizing the response. The recognition will be interrupted by the user if they start speaking. The recognition will be played in the call language.
     """
-    logger.info(f"Playing text before IVR: {text}")
-    logger.debug(f"Recognizing IVR")
+    logger.info(f"Recognizing IVR: {text}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -386,7 +385,7 @@ async def handle_hangup(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
-    logger.debug("Hanging up call")
+    logger.info(f"Hanging up: {call.initiate.phone_number}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -406,7 +405,7 @@ async def handle_transfer(
     target: str,
     context: Optional[ContextEnum] = None,
 ) -> None:
-    logger.debug(f"Transferring call to {target}")
+    logger.info(f"Transferring call: {target}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
