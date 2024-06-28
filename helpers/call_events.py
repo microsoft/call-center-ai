@@ -428,6 +428,7 @@ async def _intelligence_sms(call: CallStateModel) -> None:
     """
     Send an SMS report to the customer.
     """
+
     def _validate(req: Optional[str]) -> tuple[bool, Optional[str], Optional[str]]:
         if not req:
             return False, "No SMS content", None

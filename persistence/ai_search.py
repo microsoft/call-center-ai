@@ -53,9 +53,9 @@ class AiSearchSearch(ISearch):
                 await client.get_document_count()
             return ReadinessEnum.OK
         except HttpResponseError as e:
-            logger.error(f"Error requesting AI Search, {e}")
+            logger.error(f"Error requesting AI Search: {e}")
         except ServiceRequestError as e:
-            logger.error(f"Error connecting to AI Search, {e}")
+            logger.error(f"Error connecting to AI Search: {e}")
         return ReadinessEnum.FAIL
 
     @retry(
@@ -134,9 +134,9 @@ class AiSearchSearch(ISearch):
                     except ValidationError as e:
                         logger.debug(f"Parsing error: {e.errors()}")
         except HttpResponseError as e:
-            logger.error(f"Error requesting AI Search, {e}")
+            logger.error(f"Error requesting AI Search: {e}")
         except ServiceRequestError as e:
-            logger.error(f"Error connecting to AI Search, {e}")
+            logger.error(f"Error connecting to AI Search: {e}")
 
         # Update cache
         if trainings:

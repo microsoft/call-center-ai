@@ -63,7 +63,7 @@ class CosmosDbStore(IStore):
         except AssertionError:
             logger.error("Readiness test failed", exc_info=True)
         except CosmosHttpResponseError as e:
-            logger.error(f"Error requesting CosmosDB, {e}")
+            logger.error(f"Error requesting CosmosDB: {e}")
         return ReadinessEnum.FAIL
 
     async def _item_exists(self, test_id: str, partition_key: str) -> bool:
@@ -74,7 +74,7 @@ class CosmosDbStore(IStore):
                 exist = True
             except CosmosHttpResponseError as e:
                 if e.status_code != 404:
-                    logger.error(f"Error requesting CosmosDB, {e}")
+                    logger.error(f"Error requesting CosmosDB: {e}")
                     exist = True
         return exist
 
@@ -106,7 +106,7 @@ class CosmosDbStore(IStore):
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB, {e}")
+            logger.error(f"Error accessing CosmosDB: {e}")
 
         # Update cache
         if call:
@@ -233,7 +233,7 @@ class CosmosDbStore(IStore):
                     except ValidationError as e:
                         logger.debug(f"Parsing error: {e.errors()}")
         except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB, {e}")
+            logger.error(f"Error accessing CosmosDB: {e}")
         return calls
 
     async def _call_asearch_all_total_worker(
@@ -258,7 +258,7 @@ class CosmosDbStore(IStore):
                 )
                 total: int = await anext(items)  # type: ignore
         except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB, {e}")
+            logger.error(f"Error accessing CosmosDB: {e}")
         return total if total else 0
 
     @asynccontextmanager
