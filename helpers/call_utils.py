@@ -26,7 +26,9 @@ import re
 import json
 
 
-_SENTENCE_PUNCTUATION_R = r"(\. |\.$|[!?;])"  # Split by sentence by punctuation
+_SENTENCE_PUNCTUATION_R = (
+    r"([!?;,]+|[\.\-:]+(?:$| ))"  # Split by sentence by punctuation
+)
 _TTS_SANITIZER_R = re.compile(
     r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&<>€$%=*]"
 )  # Sanitize text for TTS
@@ -53,15 +55,16 @@ def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, No
     # Split by sentence by punctuation
     splits = re.split(_SENTENCE_PUNCTUATION_R, text)
     for i, split in enumerate(splits):
+        split = split.strip()  # Remove leading/trailing spaces
         if i % 2 == 1:  # Skip punctuation
             continue
         if not split:  # Skip empty lines
             continue
         if i == len(splits) - 1:  # Skip last line in case of missing punctuation
             if include_last:
-                yield split
+                yield split + " "
         else:  # Add punctuation back
-            yield split + splits[i + 1]
+            yield split + splits[i + 1].strip() + " "
 
 
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
@@ -78,7 +81,7 @@ async def _handle_recognize_media(
 
     If `context` is provided, it will be used to track the operation.
     """
-    logger.debug(f"Recognizing voice with text: {text}")
+    logger.info(f"Recognizing voice: {text}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -120,7 +123,7 @@ async def _handle_play_text(
 
     If `context` is provided, it will be used to track the operation.
     """
-    logger.debug(f"Playing text: {text}")
+    logger.info(f"Playing text: {text}")
     try:
         assert call.voice_id, "Voice ID is required for playing text"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -357,8 +360,7 @@ async def handle_recognize_ivr(
 
     Starts by playing text, then starts recognizing the response. The recognition will be interrupted by the user if they start speaking. The recognition will be played in the call language.
     """
-    logger.info(f"Playing text before IVR: {text}")
-    logger.debug(f"Recognizing IVR")
+    logger.info(f"Recognizing IVR: {text}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -383,7 +385,7 @@ async def handle_hangup(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
-    logger.debug("Hanging up call")
+    logger.info(f"Hanging up: {call.initiate.phone_number}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
@@ -403,7 +405,7 @@ async def handle_transfer(
     target: str,
     context: Optional[ContextEnum] = None,
 ) -> None:
-    logger.debug(f"Transferring call to {target}")
+    logger.info(f"Transferring call: {target}")
     try:
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
