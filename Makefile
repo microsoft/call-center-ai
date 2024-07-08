@@ -101,7 +101,7 @@ deploy:
 	 	--name $(name_sanitized)
 
 	@echo "🛠️ Deploying Function App..."
-	func azure functionapp publish $(function_app_name)
+	func azure functionapp publish $(function_app_name) --python
 
 	@echo "🚀 Call Center AI is running on $(app_url)"
 
