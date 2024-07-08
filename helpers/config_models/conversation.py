@@ -120,13 +120,13 @@ class WorkflowInitiateModel(BaseModel):
         ),
     ]  # Configured like in v4 for compatibility
     lang: LanguageModel = LanguageModel()  # Object is fully defined by default
-    task: str = (
-        "Helping the customer to file an insurance claim. The customer is probably calling because they have a problem with something covered by their policy, but it's not certain. The assistant needs information from the customer to complete the claim. The conversation is over when all the data relevant to the case has been collected. Filling in as much information as possible is important for further processing."
-    )
     prosody_rate: float = Field(
         default=1.0,
         ge=0.75,
         le=1.25,
+    )
+    task: str = (
+        "Helping the customer to file an insurance claim. The customer is probably calling because they have a problem with something covered by their policy, but it's not certain. The assistant needs information from the customer to complete the claim. The conversation is over when all the data relevant to the case has been collected. Filling in as much information as possible is important for further processing."
     )
 
     def claim_model(self) -> type[BaseModel]:
