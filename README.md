@@ -242,6 +242,12 @@ sequenceDiagram
 
 Application is hosted by Azure Functions. Code will be pushed automatically `make deploy`, with after the deployment.
 
+Prerequisites:
+
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
+- [Azure Functions Core Tools](https://github.com/Azure/azure-functions-core-tools?tab=readme-ov-file#installing)
+- [Twilio CLI](https://www.twilio.com/docs/twilio-cli/getting-started/install) (optional)
+
 Steps to deploy:
 
 1. [Create a new resource group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal)
