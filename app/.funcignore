@@ -23,3 +23,5 @@ __pycache__/
 
 # GitHub
 .github/
+.old
+.python_packages

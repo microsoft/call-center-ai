@@ -242,37 +242,67 @@ sequenceDiagram
 
 Application is hosted by Azure Functions. Code will be pushed automatically `make deploy`, with after the deployment.
 
-Create a local `config.yaml` file (most of the fields are filled automatically by the deployment script):
+Prerequisites:
 
-```yaml
-# config.yaml
-conversation:
-  initiate:
-    agent_phone_number: "+33612345678"
-    bot_company: Contoso
-    bot_name: Amélie
-    lang: {}
-
-communication_services:
-  phone_number: "+33612345678"
-
-sms: {}
-
-prompts:
-  llm: {}
-  tts: {}
-```
+- Bash compatible shell, like `bash` or `zsh`
+- [yq](https://github.com/mikefarah/yq?tab=readme-ov-file#install)
+- Make, `apt install make` (Ubuntu), `yum install make` (CentOS), `brew install make` (macOS)
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
+- [Azure Functions Core Tools](https://github.com/Azure/azure-functions-core-tools?tab=readme-ov-file#installing)
+- [Twilio CLI](https://www.twilio.com/docs/twilio-cli/getting-started/install) (optional)
 
 Steps to deploy:
 
-1. Create an Communication Services resource, a Phone Number (inbound + outbound, from an application), make sure the resource have a managed identity
-2. Create the local `config.yaml` file (like the example above)
-3. Connect to your Azure environment (e.g. `az login`)
-4. Run deployment with `make deploy name=my-instance`
-5. Wait for the deployment to finish
-6. Create a AI Search index named `trainings` plus a semantic search configuration named `default` on the index
+1. [Create a new resource group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal)
 
-Get the logs with `make logs name=my-instance`.
+    - Prefer to use lowercase and no special characters other than dashes (e.g. `ccai-customer-a`)
+
+2. [Create a Communication Services resource](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/create-communication-resource?tabs=linux&pivots=platform-azp)
+
+    - Same name as the resource group
+    - Enable system managed identity (In `Settings -> Identity`)
+
+3. [Buy a phone number](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/telephony/get-phone-number?tabs=linux&pivots=platform-azp-new)
+
+    - From the Communication Services resource
+    - Allow inbound and outbound communication
+    - Enable voice (required) and SMS (optional) capabilities
+
+4. Create a local `configs/config.yaml` file
+
+    ```yaml
+    # configs/config.yaml
+    conversation:
+      initiate:
+        # Phone number the bot will transfer the call to if customer asks for a human agent
+        agent_phone_number: "+33612345678"
+        bot_company: Contoso
+        bot_name: Amélie
+        lang: {}
+
+    communication_services:
+      # Phone number purshased from Communication Services
+      phone_number: "+33612345678"
+
+    sms: {}
+
+    prompts:
+      llm: {}
+      tts: {}
+    ```
+
+5. Connect to your Azure environment (e.g. `az login`)
+6. Run deployment automation with `make deploy name=my-rg-name`
+
+    - `name` arg represents the resource group name created
+    - Wait for the deployment to finish
+
+7. [Finalize configuration of AI Search resource](https://learn.microsoft.com/en-us/azure/search/search-create-service-portal)
+
+    - An index named `trainings`
+    - A semantic search configuration on the index named `default`
+
+Get the logs with `make logs name=my-rg-name`.
 
 ## Local installation
 
@@ -333,7 +363,7 @@ ai_translation:
   endpoint: https://xxx.cognitiveservices.azure.com
 ```
 
-To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
+To use a Service Principal to authenticate to Azure, you can also add the following in a `app/.env` file:
 
 ```dotenv
 AZURE_CLIENT_ID=xxx
@@ -354,7 +384,7 @@ Then run:
 make install
 ```
 
-Also, a public file server is needed to host the audio files. Upload the files with `make copy-resources name=myinstance` (`myinstance` is the storage account name), or manually.
+Also, a public file server is needed to host the audio files. Upload the files with `make copy-resources name=my-rg-name` (`my-rg-name` is the storage account name), or manually.
 
 For your knowledge, this `resources` folder contains:
 
