@@ -242,48 +242,52 @@ sequenceDiagram
 
 Application is hosted by Azure Functions. Code will be pushed automatically `make deploy`, with after the deployment.
 
-Create a local `config.yaml` file (most of the fields are filled automatically by the deployment script):
-
-```yaml
-# config.yaml
-conversation:
-  initiate:
-    agent_phone_number: "+33612345678"
-    bot_company: Contoso
-    bot_name: Amélie
-    lang: {}
-
-communication_services:
-  phone_number: "+33612345678"
-
-sms: {}
-
-prompts:
-  llm: {}
-  tts: {}
-```
-
 Steps to deploy:
 
-1. Create a new resource group
+1. [Create a new resource group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal)
 
-    - Prefer to use lowercase and no special characters other than dashes  (e.g. `ccai-customer-a`)
+    - Prefer to use lowercase and no special characters other than dashes (e.g. `ccai-customer-a`)
 
-2. Create a Communication Services resource inside the new resource new
+2. [Create a Communication Services resource](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/create-communication-resource?tabs=linux&pivots=platform-azp)
 
     - Same name as the resource group
-    - Plus a phone number (inbound + outbound capabilities, from an application)
     - Enable system managed identity
 
-3. Create the local `config.yaml` file
+3. [Buy a phone number](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/telephony/get-phone-number?tabs=linux&pivots=platform-azp-new)
 
-    - Follow the example above
-    - Use the phone number from the Communication Services resource
+    - From the Communication Services resource
+    - Allow inbound and outbound communication
+    - Enable voice (required) and SMS (optional) capabilities
 
-4. Connect to your Azure environment (e.g. `az login`)
-5. Run deployment with `make deploy name=my-rg-name`
-6. Wait for the deployment to finish
-7. Create a AI Search
+4. Create a local `config.yaml` file
+
+    ```yaml
+    # config.yaml
+    conversation:
+      initiate:
+        # Phone number the bot will transfer the call to if customer asks for a human agent
+        agent_phone_number: "+33612345678"
+        bot_company: Contoso
+        bot_name: Amélie
+        lang: {}
+
+    communication_services:
+      # Phone number purshased from Communication Services
+      phone_number: "+33612345678"
+
+    sms: {}
+
+    prompts:
+      llm: {}
+      tts: {}
+    ```
+
+5. Connect to your Azure environment (e.g. `az login`)
+6. Run deployment automation with `make deploy name=my-rg-name`
+
+    - Wait for the deployment to finish
+
+7. [Create a AI Search resource](https://learn.microsoft.com/en-us/azure/search/search-create-service-portal)
 
     - An index named `trainings`
     - A semantic search configuration on the index named `default`
