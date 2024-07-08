@@ -4,7 +4,7 @@ param embeddingModel string = 'text-embedding-ada-002'
 param embeddingQuota int = 100
 param embeddingVersion string = '2'
 param functionappLocation string
-param instance string = deployment().name
+param instance string
 param llmFastContext int = 16385
 param llmFastDeploymentType string = 'Standard'  // Pay-as-you-go in a single region
 param llmFastModel string = 'gpt-35-turbo'

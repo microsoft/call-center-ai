@@ -10,16 +10,18 @@ default_location := swedencentral
 functionapp_location := swedencentral
 openai_location := swedencentral
 search_location := francecentral
+# Sanitize variables
+name_sanitized := $(shell echo $(name) | tr '[:upper:]' '[:lower:]')
 # App configuration
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_services.phone_number')
-event_subscription_name ?= $(shell echo '$(name)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
+event_subscription_name ?= $(shell echo '$(name_sanitized)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
 twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
 # Bicep outputs
-app_url ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["appUrl"].value')
-blob_storage_public_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["blobStoragePublicName"].value')
-communication_id ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["communicationId"].value')
-function_app_name ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["functionAppName"].value')
-log_analytics_workspace_customer_id ?= $(shell az deployment sub show --name $(name) | yq '.properties.outputs["logAnalyticsWorkspaceName"].value')
+app_url ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["appUrl"].value')
+blob_storage_public_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["blobStoragePublicName"].value')
+communication_id ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["communicationId"].value')
+function_app_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["functionAppName"].value')
+log_analytics_workspace_customer_id ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["logAnalyticsWorkspaceName"].value')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
@@ -91,18 +93,19 @@ deploy:
 		--parameters \
 			'cognitiveCommunicationLocation=$(cognitive_communication_location)' \
 			'functionappLocation=$(functionapp_location)' \
+			'instance=$(name)' \
 			'openaiLocation=$(openai_location)' \
 			'searchLocation=$(search_location)' \
 			'version=$(version_full)' \
 		--template-file bicep/main.bicep \
-	 	--name $(name)
+	 	--name $(name_sanitized)
 
 	@echo "🛠️ Deploying Function App..."
 	func azure functionapp publish $(function_app_name)
 
 	@echo "🚀 Call Center AI is running on $(app_url)"
 
-	@$(MAKE) post-deploy name=$(name)
+	@$(MAKE) post-deploy name=$(name_sanitized)
 
 post-deploy:
 	@$(MAKE) copy-resources \
@@ -111,17 +114,17 @@ post-deploy:
 	@$(MAKE) twilio-register \
 		endpoint=$(app_url)
 
-	@$(MAKE) logs name=$(name)
+	@$(MAKE) logs name=$(name_sanitized)
 
 destroy:
-	@echo "🧐 Are you sure you want to delete? Type 'delete now $(name)' to confirm."
-	@read -r confirm && [ "$$confirm" = "delete now $(name)" ] || (echo "Confirmation failed. Aborting."; exit 1)
+	@echo "🧐 Are you sure you want to delete? Type 'delete now $(name_sanitized)' to confirm."
+	@read -r confirm && [ "$$confirm" = "delete now $(name_sanitized)" ] || (echo "Confirmation failed. Aborting."; exit 1)
 
 	@echo "❗️ Deleting RG..."
-	az group delete --name $(name) --yes --no-wait
+	az group delete --name $(name_sanitized) --yes --no-wait
 
 	@echo "❗️ Deleting deployment..."
-	az deployment sub delete --name $(name)
+	az deployment sub delete --name $(name_sanitized)
 
 logs:
 	func azure functionapp logstream $(function_app_name) \
@@ -135,7 +138,7 @@ twilio-register:
 copy-resources:
 	@echo "📦 Copying resources to Azure storage account..."
 	az storage blob upload-batch \
-		--account-name $(name) \
+		--account-name $(name_sanitized) \
 		--destination '$$web' \
 		--no-progress \
 		--output none \

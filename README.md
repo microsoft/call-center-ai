@@ -265,14 +265,30 @@ prompts:
 
 Steps to deploy:
 
-1. Create an Communication Services resource, a Phone Number (inbound + outbound, from an application), make sure the resource have a managed identity
-2. Create the local `config.yaml` file (like the example above)
-3. Connect to your Azure environment (e.g. `az login`)
-4. Run deployment with `make deploy name=my-instance`
-5. Wait for the deployment to finish
-6. Create a AI Search index named `trainings` plus a semantic search configuration named `default` on the index
+1. Create a new resource group
 
-Get the logs with `make logs name=my-instance`.
+    - Prefer to use lowercase and no special characters other than dashes  (e.g. `ccai-customer-a`)
+
+2. Create a Communication Services resource inside the new resource new
+
+    - Same name as the resource group
+    - Plus a phone number (inbound + outbound capabilities, from an application)
+    - Enable system managed identity
+
+3. Create the local `config.yaml` file
+
+    - Follow the example above
+    - Use the phone number from the Communication Services resource
+
+4. Connect to your Azure environment (e.g. `az login`)
+5. Run deployment with `make deploy name=my-rg-name`
+6. Wait for the deployment to finish
+7. Create a AI Search
+
+    - An index named `trainings`
+    - A semantic search configuration on the index named `default`
+
+Get the logs with `make logs name=my-rg-name`.
 
 ## Local installation
 
@@ -354,7 +370,7 @@ Then run:
 make install
 ```
 
-Also, a public file server is needed to host the audio files. Upload the files with `make copy-resources name=myinstance` (`myinstance` is the storage account name), or manually.
+Also, a public file server is needed to host the audio files. Upload the files with `make copy-resources name=my-rg-name` (`my-rg-name` is the storage account name), or manually.
 
 For your knowledge, this `resources` folder contains:
 
