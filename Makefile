@@ -74,16 +74,16 @@ lint:
 
 tunnel:
 	@echo "➡️ Creating tunnel..."
-	devtunnel show $(tunnel_name) || devtunnel create $(tunnel_name) --allow-anonymous --expiration 1d
+	devtunnel.exe show $(tunnel_name) || devtunnel.exe create $(tunnel_name) --allow-anonymous --expiration 1d
 
 	@echo "➡️ Creating port forwarding..."
-	devtunnel port show $(tunnel_name) --port-number 8080 || devtunnel port create $(tunnel_name) --port-number 8080
+	devtunnel.exe port show $(tunnel_name) --port-number 8080 || devtunnel.exe port create $(tunnel_name) --port-number 8080
 
 	@echo "➡️ Starting tunnel..."
-	devtunnel host $(tunnel_name)
+	devtunnel.exe host $(tunnel_name)
 
 dev:
-	@cd ./app &&  VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url)  func start
+	@cd ./app &&  VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url)  func start --verbose --python
 
 deploy:
 	@echo "👀 Current subscription:"

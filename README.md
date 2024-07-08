@@ -250,6 +250,7 @@ Prerequisites:
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - [Azure Functions Core Tools](https://github.com/Azure/azure-functions-core-tools?tab=readme-ov-file#installing)
 - [Twilio CLI](https://www.twilio.com/docs/twilio-cli/getting-started/install) (optional)
+- [Devtunnel](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started?tabs=linux) (optional)
 
 Steps to deploy:
 
