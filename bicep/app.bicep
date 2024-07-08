@@ -224,7 +224,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: replace(prefix, '-', '')
+  name: replace(toLower(prefix), '-', '')
   location: location
   tags: tags
   sku: {
@@ -273,7 +273,7 @@ resource publicBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2
 
 resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
-  name: functionAppName
+  name: toLower(functionAppName)
 }
 
 // Contributor
