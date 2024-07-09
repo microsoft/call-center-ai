@@ -6,7 +6,7 @@ tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
 cognitive_communication_location := westeurope
-default_location := francecentral
+default_location := swedencentral
 functionapp_location := swedencentral
 openai_location := swedencentral
 search_location := francecentral
