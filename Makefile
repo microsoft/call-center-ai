@@ -83,7 +83,7 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	@cd ./app &&  VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url)  func start --verbose --python
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) && cd ./app &&  func start --verbose --python
 
 deploy:
 	@echo "👀 Current subscription:"
