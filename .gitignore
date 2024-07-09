@@ -6,7 +6,7 @@
 .pytest_cache/
 
 # Local app config file
-config*.yaml
+infra/configs/config*.yaml
 
 # Test reports
 test-reports/
@@ -16,10 +16,10 @@ test-reports/
 
 ### AzureFunctions ###
 # Azure Functions localsettings file
-local.settings.json
+app/local.settings.json
 
 ### dotenv ###
-.env
+app/.env
 
 ### Eclipse ###
 .metadata

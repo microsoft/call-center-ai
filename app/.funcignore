@@ -3,8 +3,8 @@
 *.sqlite*
 
 # Local app config file
-*.env
-config*.yaml
+app/*.env
+infra/configs/config*.yaml
 
 # Tests
 tests/
@@ -15,7 +15,7 @@ test-reports/
 
 # Documentation and examples
 docs/
-examples/
+app/examples/
 
 # Python cache
 __pycache__/
@@ -25,3 +25,4 @@ __pycache__/
 .github/
 .old
 .python_packages
+app/.python_packages
