@@ -30,7 +30,7 @@ _SENTENCE_PUNCTUATION_R = (
     r"([!?;]+|[\.\-:]+(?:$| ))"  # Split by sentence by punctuation
 )
 _TTS_SANITIZER_R = re.compile(
-    r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&<>€$%=*]"
+    r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&€$%=]"
 )  # Sanitize text for TTS
 
 
@@ -279,7 +279,8 @@ async def _chunk_before_tts(
     Split a text in chunks and store them in the call messages.
     """
     # Sanitize text for TTS
-    text = re.sub(_TTS_SANITIZER_R, "", text)
+    text = re.sub(_TTS_SANITIZER_R, " ", text)  # Remove unwanted characters
+    text = re.sub(r"\s+", " ", text)  # Remove multiple spaces
 
     # Store text in call messages
     if store:
