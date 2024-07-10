@@ -29,10 +29,26 @@ version:
 version-full:
 	@bash ./cicd/version/version.sh -g . -c -m
 
-install:
-	@echo "➡️ Installing Twilio CLI..."
-	twilio --version || brew tap twilio/brew && brew install twilio
+brew:
+	@echo "➡️ Installing yq..."
+	brew install yq
 
+	@echo "➡️ Installing Azure CLI..."
+	brew install azure-cli
+
+	@echo "➡️ Installing Azure Functions Core Tools..."
+	brew tap azure/functions && brew install azure-functions-core-tools@4
+
+	@echo "➡️ Installing Azure Dev tunnels..."
+	brew install devtunnel
+
+	@echo "➡️ Installing Snyk CLI..."
+	brew install snyk-cli
+
+	@echo "➡️ Installing Twilio CLI..."
+	brew tap twilio/brew && brew install twilio
+
+install:
 	@for f in $$(find . -name "requirements*.txt"); do \
 		echo "➡️ Installing Python dependencies in $$f..."; \
 		python3 -m pip install -r $$f; \
