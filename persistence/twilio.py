@@ -1,12 +1,14 @@
+from typing import Optional
+
+from twilio.base.exceptions import TwilioRestException
+from twilio.rest import Client
+
 from helpers.config_models.sms import TwilioModel
 from helpers.http import twilio_http
 from helpers.logging import logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessEnum
 from persistence.isms import ISms
-from twilio.base.exceptions import TwilioRestException
-from twilio.rest import Client
-from typing import Optional
 
 
 class TwilioSms(ISms):

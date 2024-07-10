@@ -1,31 +1,28 @@
-from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
-from deepeval.models.gpt_model import GPTModel
-from helpers.config import CONFIG
-from helpers.logging import logger
-from langchain_core.language_models import BaseChatModel
-from langchain_openai import AzureChatOpenAI
-from models.call import CallStateModel, CallInitiateModel
-from textwrap import dedent
-from typing import Any, Callable, Optional, Union
 import hashlib
-import pytest
 import random
 import string
 import xml.etree.ElementTree as ET
-from azure.communication.callautomation import (
-    FileSource,
-    SsmlSource,
-    TextSource,
-)
-from azure.communication.callautomation.aio import (
-    CallAutomationClient,
-    CallConnectionClient,
-)
+from textwrap import dedent
+from typing import Any, Callable, Optional, Union
+
+import pytest
+import yaml
 from _pytest.mark.structures import MarkDecorator
+from azure.communication.callautomation import (FileSource, SsmlSource,
+                                                TextSource)
+from azure.communication.callautomation.aio import (CallAutomationClient,
+                                                    CallConnectionClient)
+from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
+from deepeval.models.gpt_model import GPTModel
+from langchain_core.language_models import BaseChatModel
+from langchain_openai import AzureChatOpenAI
+from pydantic import BaseModel, ValidationError
+
 from function_app import _str_to_contexts
 from helpers.call_utils import ContextEnum as CallContextEnum
-from pydantic import BaseModel, ValidationError
-import yaml
+from helpers.config import CONFIG
+from helpers.logging import logger
+from models.call import CallInitiateModel, CallStateModel
 
 
 class CallConnectionClientMock(CallConnectionClient):

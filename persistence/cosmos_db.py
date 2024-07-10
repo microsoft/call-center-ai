@@ -1,7 +1,13 @@
-from azure.cosmos import ConsistencyLevel
-from azure.cosmos.aio import CosmosClient, ContainerProxy
-from azure.cosmos.exceptions import CosmosHttpResponseError
+import asyncio
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
+from uuid import UUID, uuid4
+
+from azure.cosmos import ConsistencyLevel
+from azure.cosmos.aio import ContainerProxy, CosmosClient
+from azure.cosmos.exceptions import CosmosHttpResponseError
+from pydantic import ValidationError
+
 from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
 from helpers.http import azure_transport
@@ -10,10 +16,6 @@ from models.call import CallStateModel
 from models.readiness import ReadinessEnum
 from persistence.icache import ICache
 from persistence.istore import IStore
-from pydantic import ValidationError
-from typing import AsyncGenerator, Optional
-from uuid import UUID, uuid4
-import asyncio
 
 
 class CosmosDbStore(IStore):

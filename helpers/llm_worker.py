@@ -1,48 +1,32 @@
-from helpers.config import CONFIG
-from helpers.logging import logger, tracer
-from openai import (
-    APIConnectionError,
-    APIResponseValidationError,
-    AsyncAzureOpenAI,
-    AsyncOpenAI,
-    AsyncStream,
-    BadRequestError,
-    InternalServerError,
-    RateLimitError,
-)
-from openai.types.chat import (
-    ChatCompletion,
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionChunk,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionToolMessageParam,
-    ChatCompletionToolParam,
-    ChatCompletionUserMessageParam,
-)
-from openai.types.chat.chat_completion_chunk import (
-    ChoiceDelta,
-    ChoiceDeltaToolCall,
-    ChoiceDeltaToolCallFunction,
-)
-from pydantic import BaseModel, ValidationError
-from tenacity import (
-    AsyncRetrying,
-    retry_any,
-    retry_if_exception_type,
-    retry,
-    stop_after_attempt,
-    wait_random_exponential,
-)
+import json
 from functools import lru_cache
-from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
-from helpers.resources import resources_dir
-from models.message import MessageModel
-from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from os import environ
 from typing import AsyncGenerator, Callable, Optional, TypeVar, Union
-import json
-import tiktoken
 
+import tiktoken
+from openai import (APIConnectionError, APIResponseValidationError,
+                    AsyncAzureOpenAI, AsyncOpenAI, AsyncStream,
+                    BadRequestError, InternalServerError, RateLimitError)
+from openai.types.chat import (ChatCompletion,
+                               ChatCompletionAssistantMessageParam,
+                               ChatCompletionChunk,
+                               ChatCompletionSystemMessageParam,
+                               ChatCompletionToolMessageParam,
+                               ChatCompletionToolParam,
+                               ChatCompletionUserMessageParam)
+from openai.types.chat.chat_completion_chunk import (
+    ChoiceDelta, ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction)
+from opentelemetry.instrumentation.openai import OpenAIInstrumentor
+from pydantic import BaseModel, ValidationError
+from tenacity import (AsyncRetrying, retry, retry_any, retry_if_exception_type,
+                      stop_after_attempt, wait_random_exponential)
+
+from helpers.config import CONFIG
+from helpers.config_models.llm import \
+    AbstractPlatformModel as LlmAbstractPlatformModel
+from helpers.logging import logger, tracer
+from helpers.resources import resources_dir
+from models.message import MessageModel
 
 environ["TRACELOOP_TRACE_CONTENT"] = str(
     True

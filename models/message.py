@@ -1,19 +1,17 @@
-from datetime import datetime, UTC
-from enum import Enum
-from pydantic import BaseModel, Field, field_validator
-from typing import Any, Optional, Union
-from openai.types.chat import (
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionMessageToolCallParam,
-    ChatCompletionToolMessageParam,
-    ChatCompletionUserMessageParam,
-)
-from inspect import getmembers, isfunction
-from json_repair import repair_json
-from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
-import re
 import json
+import re
+from datetime import UTC, datetime
+from enum import Enum
+from inspect import getmembers, isfunction
+from typing import Any, Optional, Union
 
+from json_repair import repair_json
+from openai.types.chat import (ChatCompletionAssistantMessageParam,
+                               ChatCompletionMessageToolCallParam,
+                               ChatCompletionToolMessageParam,
+                               ChatCompletionUserMessageParam)
+from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
+from pydantic import BaseModel, Field, field_validator
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 _MESSAGE_ACTION_R = r"(?:action=*([a-z_]*))? *(.*)"

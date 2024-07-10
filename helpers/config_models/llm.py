@@ -1,8 +1,10 @@
-from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from enum import Enum
-from openai import AsyncAzureOpenAI, AsyncOpenAI
-from pydantic import field_validator, SecretStr, BaseModel, ValidationInfo, Field
 from typing import Any, Optional, Union
+
+from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
+from openai import AsyncAzureOpenAI, AsyncOpenAI
+from pydantic import (BaseModel, Field, SecretStr, ValidationInfo,
+                      field_validator)
 
 
 class ModeEnum(str, Enum):

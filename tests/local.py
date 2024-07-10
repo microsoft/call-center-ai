@@ -1,24 +1,19 @@
 # Mock environment variables
 from os import environ
 
-
 environ["PUBLIC_DOMAIN"] = "dummy"
 
 
+import asyncio
+
+from helpers.call_events import (on_call_connected, on_call_disconnected,
+                                 on_end_call, on_ivr_recognized,
+                                 on_play_completed, on_speech_recognized)
 # General imports
 from helpers.config import CONFIG
 from helpers.logging import logger
-from models.call import CallStateModel, CallInitiateModel
+from models.call import CallInitiateModel, CallStateModel
 from tests.conftest import CallAutomationClientMock
-from helpers.call_events import (
-    on_call_connected,
-    on_call_disconnected,
-    on_end_call,
-    on_ivr_recognized,
-    on_play_completed,
-    on_speech_recognized,
-)
-import asyncio
 
 
 async def main() -> None:

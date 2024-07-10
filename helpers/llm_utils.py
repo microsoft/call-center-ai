@@ -4,24 +4,18 @@ See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd
 """
 
 import inspect
-from helpers.logging import logger
-from typing import (
-    Any,
-    Callable,
-    ForwardRef,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from textwrap import dedent
+from typing import Any, Callable, ForwardRef, Tuple, TypeVar, Union
+
 from jinja2 import Environment
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import eval_type_lenient
 from pydantic.json_schema import JsonSchemaValue
-from textwrap import dedent
 from typing_extensions import Annotated
 
+from helpers.logging import logger
 
 T = TypeVar("T")
 _jinja = Environment(

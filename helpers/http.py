@@ -1,9 +1,9 @@
-from aiohttp import ClientSession, DummyCookieJar, ClientTimeout
+from typing import Optional
+
+from aiohttp import ClientSession, ClientTimeout, DummyCookieJar
 from aiohttp_retry import JitterRetry, RetryClient
 from azure.core.pipeline.transport._aiohttp import AioHttpTransport
 from twilio.http.async_http_client import AsyncTwilioHttpClient
-from typing import Optional
-
 
 _cookie_jar: Optional[DummyCookieJar] = None
 _session: Optional[ClientSession] = None

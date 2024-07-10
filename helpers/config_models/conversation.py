@@ -1,9 +1,11 @@
 from datetime import datetime
+from typing import Annotated, Any, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, create_model
+from pydantic.fields import FieldInfo
+
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.claim import ClaimFieldModel, ClaimTypeEnum
-from pydantic import BaseModel, EmailStr, Field, create_model, ConfigDict
-from pydantic.fields import FieldInfo
-from typing import Annotated, Any, Optional, Union
 
 
 class LanguageEntryModel(BaseModel):

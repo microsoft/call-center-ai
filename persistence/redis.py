@@ -1,16 +1,17 @@
-from helpers.config_models.cache import RedisModel
-from helpers.logging import logger
-from models.readiness import ReadinessEnum
+import hashlib
+from typing import Optional, Union
+from uuid import uuid4
+
 from opentelemetry.instrumentation.redis import RedisInstrumentor
-from persistence.icache import ICache
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
 from redis.exceptions import BusyLoadingError, ConnectionError, RedisError
-from typing import Optional, Union
-from uuid import uuid4
-import hashlib
 
+from helpers.config_models.cache import RedisModel
+from helpers.logging import logger
+from models.readiness import ReadinessEnum
+from persistence.icache import ICache
 
 # Instrument redis
 RedisInstrumentor().instrument()

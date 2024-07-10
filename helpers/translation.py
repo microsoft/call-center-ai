@@ -1,18 +1,15 @@
+from typing import Optional
+
 from azure.ai.translation.text.aio import TextTranslationClient
 from azure.ai.translation.text.models import TranslatedTextItem
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
-from helpers.http import azure_transport
-from helpers.config import CONFIG
-from helpers.logging import logger
-from typing import Optional
-from tenacity import (
-    retry_if_exception_type,
-    retry,
-    stop_after_attempt,
-    wait_random_exponential,
-)
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_random_exponential)
 
+from helpers.config import CONFIG
+from helpers.http import azure_transport
+from helpers.logging import logger
 
 logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
 

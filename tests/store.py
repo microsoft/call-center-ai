@@ -1,8 +1,9 @@
+import pytest
+from pytest import assume
+
 from helpers.config import CONFIG
 from helpers.config_models.database import ModeEnum as DatabaseModeEnum
 from models.call import CallStateModel
-from pytest import assume
-import pytest
 
 
 @pytest.mark.parametrize(

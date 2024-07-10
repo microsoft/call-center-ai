@@ -1,10 +1,13 @@
 from enum import Enum
 from functools import cache
+from typing import Optional
+
+from pydantic import (BaseModel, Field, SecretStr, ValidationInfo,
+                      field_validator)
+
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from persistence.isms import ISms
 from persistence.istore import IStore
-from pydantic import field_validator, SecretStr, Field, BaseModel, ValidationInfo
-from typing import Optional
 
 
 class ModeEnum(str, Enum):
@@ -21,8 +24,8 @@ class CommunicationServiceModel(BaseModel, frozen=True):
 
     @cache
     def instance(self) -> ISms:
-        from persistence.communication_services import CommunicationServicesSms
         from helpers.config import CONFIG
+        from persistence.communication_services import CommunicationServicesSms
 
         return CommunicationServicesSms(CONFIG.communication_services)
 

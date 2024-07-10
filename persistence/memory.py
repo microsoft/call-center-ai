@@ -1,10 +1,11 @@
+import hashlib
 from collections import OrderedDict
+from typing import Optional, Union
+
 from helpers.config_models.cache import MemoryModel
 from helpers.logging import logger
 from models.readiness import ReadinessEnum
 from persistence.icache import ICache
-from typing import Optional, Union
-import hashlib
 
 
 class MemoryCache(ICache):

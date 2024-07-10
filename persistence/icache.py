@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from models.readiness import ReadinessEnum
 from typing import Optional, Union
+
+from models.readiness import ReadinessEnum
 
 
 class ICache(ABC):

@@ -1,25 +1,25 @@
+import asyncio
+from html import escape
+from inspect import getmembers, isfunction
+from typing import Annotated, Awaitable, Callable, Literal
+
 from azure.communication.callautomation.aio import CallAutomationClient
-from helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
+from openai.types.chat import ChatCompletionToolParam
+from pydantic import ValidationError
+from typing_extensions import TypedDict
+
+from helpers.call_utils import ContextEnum as CallContextEnum
+from helpers.call_utils import handle_play_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
 from helpers.logging import logger
-from inspect import getmembers, isfunction
 from models.call import CallStateModel
-from models.message import (
-    ActionEnum as MessageActionEnum,
-    MessageModel,
-    PersonaEnum as MessagePersonaEnum,
-    StyleEnum as MessageStyleEnum,
-)
-from html import escape
+from models.message import ActionEnum as MessageActionEnum
+from models.message import MessageModel
+from models.message import PersonaEnum as MessagePersonaEnum
+from models.message import StyleEnum as MessageStyleEnum
 from models.reminder import ReminderModel
 from models.training import TrainingModel
-from openai.types.chat import ChatCompletionToolParam
-from pydantic import ValidationError
-from typing import Awaitable, Callable, Annotated, Literal
-from typing_extensions import TypedDict
-import asyncio
-
 
 _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()

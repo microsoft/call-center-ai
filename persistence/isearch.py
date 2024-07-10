@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import Optional
+
 from models.readiness import ReadinessEnum
 from models.training import TrainingModel
 from persistence.icache import ICache
-from typing import Optional
 
 
 class ISearch(ABC):

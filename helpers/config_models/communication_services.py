@@ -1,5 +1,6 @@
+from pydantic import BaseModel, SecretStr, computed_field
+
 from helpers.pydantic_types.phone_numbers import PhoneNumber
-from pydantic import SecretStr, BaseModel, computed_field
 
 
 class CommunicationServicesModel(BaseModel):

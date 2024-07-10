@@ -1,19 +1,21 @@
-from azure.core.exceptions import HttpResponseError
+import json
 from datetime import datetime
 from functools import cached_property
 from html import escape
 from logging import Logger
+from textwrap import dedent
+from typing import Optional
+
+from azure.core.exceptions import HttpResponseError
+from openai.types.chat import ChatCompletionSystemMessageParam
+from pydantic import BaseModel, TypeAdapter
+
 from models.call import CallStateModel
 from models.message import MessageModel
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from models.training import TrainingModel
-from openai.types.chat import ChatCompletionSystemMessageParam
-from pydantic import TypeAdapter, BaseModel
-from textwrap import dedent
-from typing import Optional
-import json
 
 
 class SoundModel(BaseModel):
@@ -335,10 +337,8 @@ class LlmModel(BaseModel):
     def chat_system(
         self, call: CallStateModel, trainings: list[TrainingModel]
     ) -> list[ChatCompletionSystemMessageParam]:
-        from models.message import (
-            ActionEnum as MessageActionEnum,
-            StyleEnum as MessageStyleEnum,
-        )
+        from models.message import ActionEnum as MessageActionEnum
+        from models.message import StyleEnum as MessageStyleEnum
 
         return self._messages(
             self._format(

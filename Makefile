@@ -70,6 +70,9 @@ lint:
 	@echo "➡️ Running Black..."
 	python3 -m black .
 
+	@echo "➡️ Running isort..."
+	python3 -m isort .
+
 tunnel:
 	@echo "➡️ Creating tunnel..."
 	devtunnel show $(tunnel_name) || devtunnel create $(tunnel_name) --allow-anonymous --expiration 1d

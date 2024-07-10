@@ -1,8 +1,10 @@
 from datetime import tzinfo
 from functools import lru_cache
-from pydantic_extra_types.phone_numbers import PhoneNumber as PydanticPhoneNumber
-from pytz import country_timezones, timezone, utc
+
 import phonenumbers
+from pydantic_extra_types.phone_numbers import \
+    PhoneNumber as PydanticPhoneNumber
+from pytz import country_timezones, timezone, utc
 
 
 class PhoneNumber(PydanticPhoneNumber):

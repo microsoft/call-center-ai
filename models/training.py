@@ -1,6 +1,7 @@
 from datetime import datetime
 from functools import total_ordering
 from uuid import UUID
+
 from pydantic import BaseModel
 
 

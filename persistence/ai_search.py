@@ -1,36 +1,24 @@
+from typing import Optional
+
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import (
-    HttpResponseError,
-    ResourceNotFoundError,
-    ServiceRequestError,
-    ServiceResponseError,
-)
+from azure.core.exceptions import (HttpResponseError, ResourceNotFoundError,
+                                   ServiceRequestError, ServiceResponseError)
 from azure.search.documents.aio import SearchClient
-from azure.search.documents.models import (
-    HybridCountAndFacetMode,
-    HybridSearch,
-    QueryLanguage,
-    QueryType,
-    ScoringStatistics,
-    SearchMode,
-    VectorizableTextQuery,
-)
-from helpers.http import azure_transport
+from azure.search.documents.models import (HybridCountAndFacetMode,
+                                           HybridSearch, QueryLanguage,
+                                           QueryType, ScoringStatistics,
+                                           SearchMode, VectorizableTextQuery)
+from pydantic import TypeAdapter, ValidationError
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_random_exponential)
+
 from helpers.config_models.ai_search import AiSearchModel
+from helpers.http import azure_transport
 from helpers.logging import logger
 from models.readiness import ReadinessEnum
 from models.training import TrainingModel
 from persistence.icache import ICache
 from persistence.isearch import ISearch
-from pydantic import TypeAdapter
-from pydantic import ValidationError
-from typing import Optional
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_random_exponential,
-    retry_if_exception_type,
-)
 
 
 class AiSearchSearch(ISearch):

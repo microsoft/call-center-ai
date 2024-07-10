@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessEnum
 

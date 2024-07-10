@@ -1,19 +1,22 @@
+import asyncio
+import re
+from typing import Optional
+
+import pytest
 from deepeval import assert_test
 from deepeval.metrics import BaseMetric
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
+from pydantic import TypeAdapter
+from pytest import assume
+
 from helpers.config import CONFIG
 from helpers.logging import logger
 from models.call import CallStateModel
-from models.message import MessageModel, PersonaEnum as MessagePersonaEnum
+from models.message import MessageModel
+from models.message import PersonaEnum as MessagePersonaEnum
 from models.training import TrainingModel
-from pydantic import TypeAdapter
-from pytest import assume
 from tests.conftest import with_conversations
-from typing import Optional
-import asyncio
-import pytest
-import re
 
 
 class RagRelevancyMetric(BaseMetric):

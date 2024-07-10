@@ -1,53 +1,45 @@
 # First imports, to make sure the following logs are first
-from helpers.logging import logger, APP_NAME, trace
 from helpers.config import CONFIG
-
+from helpers.logging import APP_NAME, logger, trace
 
 logger.info(f"{APP_NAME} v{CONFIG.version}")
 
 
+import asyncio
+import json
+from http import HTTPStatus
+from os import getenv
+from typing import Any, Optional
+from urllib.parse import quote_plus, urljoin
+from uuid import UUID
+
+import azure.functions as func
+import mistune
 # General imports
 from azure.communication.callautomation import PhoneNumberIdentifier
 from azure.communication.callautomation.aio import CallAutomationClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
-from helpers.pydantic_types.phone_numbers import PhoneNumber
-from jinja2 import Environment, FileSystemLoader
-from models.call import CallStateModel, CallGetModel, CallInitiateModel
-from models.next import ActionEnum as NextActionEnum
-from twilio.twiml.messaging_response import MessagingResponse
-from typing import Any, Optional
-from urllib.parse import quote_plus, urljoin
-from uuid import UUID
-import asyncio
-import mistune
-from helpers.call_events import (
-    on_call_connected,
-    on_call_disconnected,
-    on_end_call,
-    on_ivr_recognized,
-    on_new_call,
-    on_play_completed,
-    on_play_error,
-    on_recognize_timeout_error,
-    on_recognize_unknown_error,
-    on_sms_received,
-    on_speech_recognized,
-    on_transfer_completed,
-    on_transfer_error,
-)
-from helpers.http import azure_transport
-from helpers.call_utils import ContextEnum as CallContextEnum
 from htmlmin.minify import html_minify
-from http import HTTPStatus
-from models.readiness import ReadinessModel, ReadinessCheckModel, ReadinessEnum
+from jinja2 import Environment, FileSystemLoader
 from opentelemetry.semconv.trace import SpanAttributes
-from os import getenv
 from pydantic import TypeAdapter, ValidationError
-import azure.functions as func
-import json
+from twilio.twiml.messaging_response import MessagingResponse
 
+from helpers.call_events import (on_call_connected, on_call_disconnected,
+                                 on_end_call, on_ivr_recognized, on_new_call,
+                                 on_play_completed, on_play_error,
+                                 on_recognize_timeout_error,
+                                 on_recognize_unknown_error, on_sms_received,
+                                 on_speech_recognized, on_transfer_completed,
+                                 on_transfer_error)
+from helpers.call_utils import ContextEnum as CallContextEnum
+from helpers.http import azure_transport
+from helpers.pydantic_types.phone_numbers import PhoneNumber
+from models.call import CallGetModel, CallInitiateModel, CallStateModel
+from models.next import ActionEnum as NextActionEnum
+from models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
 
 # Jinja configuration
 _jinja = Environment(

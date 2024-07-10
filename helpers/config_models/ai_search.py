@@ -1,6 +1,8 @@
 from functools import cache
+
+from pydantic import BaseModel, Field, SecretStr
+
 from persistence.isearch import ISearch
-from pydantic import SecretStr, BaseModel, Field
 
 
 class AiSearchModel(BaseModel, frozen=True):

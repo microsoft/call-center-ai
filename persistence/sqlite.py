@@ -1,19 +1,21 @@
-from aiosqlite import connect as sqlite_connect, Connection
+import asyncio
+import os
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
+from uuid import UUID
+
+from aiosqlite import Connection
+from aiosqlite import connect as sqlite_connect
+from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
+from pydantic import ValidationError
+
 from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.readiness import ReadinessEnum
-from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from persistence.icache import ICache
 from persistence.istore import IStore
-from pydantic import ValidationError
-from typing import AsyncGenerator, Optional
-from uuid import UUID
-import asyncio
-import os
-
 
 # Instrument sqlite
 SQLite3Instrumentor().instrument()

@@ -1,37 +1,27 @@
+import asyncio
+from typing import Awaitable, Callable, Optional
+
 from azure.communication.callautomation import DtmfTone, RecognitionChoice
 from azure.communication.callautomation.aio import CallAutomationClient
+from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 from pydantic import ValidationError
-from helpers.config import CONFIG
-from helpers.logging import logger, tracer
-from typing import Awaitable, Callable, Optional
-from azure.core.exceptions import (
-    ClientAuthenticationError,
-    HttpResponseError,
-)
-from models.synthesis import SynthesisModel
-from models.call import CallStateModel
-from models.message import (
-    ActionEnum as MessageActionEnum,
-    extract_message_style,
-    MessageModel,
-    PersonaEnum as MessagePersonaEnum,
-    remove_message_action,
-    StyleEnum as MessageStyleEnum,
-)
-from helpers.call_utils import (
-    ContextEnum as CallContextEnum,
-    handle_clear_queue,
-    handle_hangup,
-    handle_play_text,
-    handle_recognize_ivr,
-    handle_recognize_text,
-    handle_transfer,
-)
-from helpers.call_llm import load_llm_chat
-from helpers.llm_worker import completion_sync
-from models.next import NextModel
-import asyncio
 
+from helpers.call_llm import load_llm_chat
+from helpers.call_utils import ContextEnum as CallContextEnum
+from helpers.call_utils import (handle_clear_queue, handle_hangup,
+                                handle_play_text, handle_recognize_ivr,
+                                handle_recognize_text, handle_transfer)
+from helpers.config import CONFIG
+from helpers.llm_worker import completion_sync
+from helpers.logging import logger, tracer
+from models.call import CallStateModel
+from models.message import ActionEnum as MessageActionEnum
+from models.message import MessageModel
+from models.message import PersonaEnum as MessagePersonaEnum
+from models.message import StyleEnum as MessageStyleEnum
+from models.message import extract_message_style, remove_message_action
+from models.next import NextModel
+from models.synthesis import SynthesisModel
 
 _sms = CONFIG.sms.instance()
 _db = CONFIG.database.instance()

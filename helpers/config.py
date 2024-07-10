@@ -1,15 +1,16 @@
 # Load "CONFIG_JSON" for debug purposes
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Load recursively from relative, like "config.yaml"
 load_dotenv(find_dotenv())
 
+from os import environ
+
+import yaml
+from pydantic import ValidationError
+
 # Load deps
 from helpers.config_models.root import RootModel
-from os import environ
-from pydantic import ValidationError
-import yaml
-
 
 _CONFIG_ENV = "CONFIG_JSON"
 _CONFIG_FILE = "config.yaml"

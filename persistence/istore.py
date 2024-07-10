@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import Optional
+from uuid import UUID
+
 from models.call import CallStateModel
 from models.readiness import ReadinessEnum
 from persistence.icache import ICache
-from typing import Optional
-from uuid import UUID
 
 
 class IStore(ABC):

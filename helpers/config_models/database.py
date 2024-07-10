@@ -1,8 +1,11 @@
 from enum import Enum
 from functools import cache
-from persistence.istore import IStore
-from pydantic import field_validator, SecretStr, Field, BaseModel, ValidationInfo
 from typing import Optional
+
+from pydantic import (BaseModel, Field, SecretStr, ValidationInfo,
+                      field_validator)
+
+from persistence.istore import IStore
 
 
 class ModeEnum(str, Enum):

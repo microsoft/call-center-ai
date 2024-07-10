@@ -1,10 +1,12 @@
+from logging import basicConfig, getLogger
+
 from azure.monitor.opentelemetry import configure_azure_monitor
-from helpers.config import CONFIG
-from logging import getLogger, basicConfig
 from opentelemetry import trace
-from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
+from opentelemetry.instrumentation.aiohttp_client import \
+    AioHttpClientInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
+from helpers.config import CONFIG
 
 APP_NAME = "call-center-ai"
 

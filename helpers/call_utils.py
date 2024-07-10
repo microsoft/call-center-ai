@@ -1,30 +1,23 @@
+import json
+import re
 from contextlib import asynccontextmanager
 from enum import Enum
+from typing import AsyncGenerator, Generator, Optional
+
+from azure.communication.callautomation import (FileSource,
+                                                PhoneNumberIdentifier,
+                                                RecognitionChoice,
+                                                RecognizeInputType, SsmlSource)
+from azure.communication.callautomation.aio import (CallAutomationClient,
+                                                    CallConnectionClient)
+from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
+
 from helpers.config import CONFIG
 from helpers.logging import logger
 from models.call import CallStateModel
+from models.message import MessageModel
+from models.message import PersonaEnum as MessagePersonaEnum
 from models.message import StyleEnum as MessageStyleEnum
-from typing import AsyncGenerator, Generator, Optional
-from azure.communication.callautomation import (
-    FileSource,
-    PhoneNumberIdentifier,
-    RecognitionChoice,
-    RecognizeInputType,
-    SsmlSource,
-)
-from azure.communication.callautomation.aio import (
-    CallAutomationClient,
-    CallConnectionClient,
-)
-from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
-from models.message import (
-    MessageModel,
-    PersonaEnum as MessagePersonaEnum,
-    StyleEnum as MessageStyleEnum,
-)
-import re
-import json
-
 
 _SENTENCE_PUNCTUATION_R = (
     r"([!?;]+|[\.\-:]+(?:$| ))"  # Split by sentence by punctuation

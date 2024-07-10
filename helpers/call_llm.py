@@ -1,33 +1,24 @@
+import asyncio
+import time
 from typing import Awaitable, Callable
+
 from azure.communication.callautomation.aio import CallAutomationClient
+from openai import APIError
+
+from helpers.call_utils import (handle_clear_queue, handle_media,
+                                handle_recognize_text, tts_sentence_split)
 from helpers.config import CONFIG
+from helpers.llm_tools import LlmPlugins
+from helpers.llm_worker import (MaximumTokensReachedError, SafetyCheckError,
+                                completion_stream)
 from helpers.logging import logger
 from models.call import CallStateModel
-from models.message import (
-    ActionEnum as MessageAction,
-    extract_message_style,
-    MessageModel,
-    PersonaEnum as MessagePersonaEnum,
-    remove_message_action,
-    StyleEnum as MessageStyleEnum,
-    ToolModel as MessageToolModel,
-)
-from helpers.call_utils import (
-    handle_clear_queue,
-    handle_media,
-    handle_recognize_text,
-    tts_sentence_split,
-)
-from helpers.llm_tools import LlmPlugins
-import asyncio
-from helpers.llm_worker import (
-    completion_stream,
-    MaximumTokensReachedError,
-    SafetyCheckError,
-)
-from openai import APIError
-import time
-
+from models.message import ActionEnum as MessageAction
+from models.message import MessageModel
+from models.message import PersonaEnum as MessagePersonaEnum
+from models.message import StyleEnum as MessageStyleEnum
+from models.message import ToolModel as MessageToolModel
+from models.message import extract_message_style, remove_message_action
 
 _cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()

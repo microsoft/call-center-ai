@@ -1,34 +1,26 @@
+import asyncio
+import json
+import re
+from datetime import datetime
+from typing import Optional
+
+import pytest
 from deepeval import assert_test
-from deepeval.metrics import (
-    AnswerRelevancyMetric,
-    BiasMetric,
-    ContextualRelevancyMetric,
-    ToxicityMetric,
-)
+from deepeval.metrics import (AnswerRelevancyMetric, BaseMetric, BiasMetric,
+                              ContextualRelevancyMetric, ToxicityMetric)
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
-from helpers.call_events import (
-    on_call_connected,
-    on_call_disconnected,
-    on_end_call,
-    on_ivr_recognized,
-    on_play_completed,
-    on_speech_recognized,
-)
-from datetime import datetime
-from deepeval.metrics import BaseMetric
+from pydantic import TypeAdapter
+from pytest import assume
+
+from helpers.call_events import (on_call_connected, on_call_disconnected,
+                                 on_end_call, on_ivr_recognized,
+                                 on_play_completed, on_speech_recognized)
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.reminder import ReminderModel
 from models.training import TrainingModel
-from pydantic import TypeAdapter
-from pytest import assume
 from tests.conftest import CallAutomationClientMock, with_conversations
-from typing import Optional
-import asyncio
-import json
-import pytest
-import re
 
 
 class ClaimRelevancyMetric(BaseMetric):

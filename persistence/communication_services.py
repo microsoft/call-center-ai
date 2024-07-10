@@ -1,13 +1,16 @@
+from typing import Optional
+
 from azure.communication.sms import SmsSendResult
 from azure.communication.sms.aio import SmsClient
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
+
+from helpers.config_models.communication_services import \
+    CommunicationServicesModel
 from helpers.http import azure_transport
-from helpers.config_models.communication_services import CommunicationServicesModel
 from helpers.logging import logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessEnum
 from persistence.isms import ISms
-from typing import Optional
 
 
 class CommunicationServicesSms(ISms):
