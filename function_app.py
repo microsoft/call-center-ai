@@ -37,13 +37,14 @@ from helpers.call_events import (
 from helpers.call_utils import ContextEnum as CallContextEnum
 from helpers.config import CONFIG
 from helpers.http import azure_transport
-from helpers.logging import APP_NAME, logger, trace
+from helpers.logging import logger
+from helpers.monitoring import trace
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.call import CallGetModel, CallInitiateModel, CallStateModel
 from models.next import ActionEnum as NextActionEnum
 from models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
 
-logger.info("%s v%s", APP_NAME, CONFIG.version)
+logger.info("call-center-ai v%s", CONFIG.version)
 
 # Jinja configuration
 _jinja = Environment(

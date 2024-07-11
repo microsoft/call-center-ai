@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
 from helpers.config_models.conversation import LanguageEntryModel, WorkflowInitiateModel
+from helpers.monitoring import tracer
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.message import ActionEnum as MessageActionEnum, MessageModel
 from models.next import NextModel
@@ -114,7 +115,6 @@ class CallStateModel(CallGetModel, extra="ignore"):
         Is using query expansion from last messages. Then, data is sorted by score.
         """
         from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
-        from helpers.logging import tracer  # pylint: disable=import-outside-toplevel
 
         with tracer.start_as_current_span("trainings"):
             search = CONFIG.ai_search.instance()

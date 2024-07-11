@@ -15,6 +15,8 @@ from openai.types.chat import (
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
 
+from helpers.monitoring import tracer
+
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 _MESSAGE_ACTION_R = r"(?:action=*([a-z_]*))? *(.*)"
 _MESSAGE_STYLE_R = r"(?:style=*([a-z_]*))? *(.*)"
@@ -80,10 +82,7 @@ class ToolModel(BaseModel):
         return self
 
     async def execute_function(self, plugins: object) -> None:
-        from helpers.logging import (  # pylint: disable=import-outside-toplevel
-            logger,
-            tracer,
-        )
+        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
 
         json_str = self.function_arguments
         name = self.function_name

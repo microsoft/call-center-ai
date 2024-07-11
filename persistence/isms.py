@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from helpers.monitoring import tracer
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.readiness import ReadinessEnum
 

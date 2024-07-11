@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from uuid import UUID
 
+from helpers.monitoring import tracer
 from models.call import CallStateModel
 from models.readiness import ReadinessEnum
 from persistence.icache import ICache

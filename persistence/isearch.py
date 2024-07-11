@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from helpers.monitoring import tracer
 from models.readiness import ReadinessEnum
 from models.training import TrainingModel
 from persistence.icache import ICache

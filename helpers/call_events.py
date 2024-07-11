@@ -18,7 +18,8 @@ from helpers.call_utils import (
 )
 from helpers.config import CONFIG
 from helpers.llm_worker import completion_sync
-from helpers.logging import logger, tracer
+from helpers.logging import logger
+from helpers.monitoring import tracer
 from models.call import CallStateModel
 from models.message import (
     ActionEnum as MessageActionEnum,

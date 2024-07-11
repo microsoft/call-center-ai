@@ -41,7 +41,8 @@ from tenacity import (
 
 from helpers.config import CONFIG
 from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
-from helpers.logging import logger, tracer
+from helpers.logging import logger
+from helpers.monitoring import tracer
 from helpers.resources import resources_dir
 from models.message import MessageModel
 
