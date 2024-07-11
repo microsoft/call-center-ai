@@ -67,39 +67,38 @@ upgrade:
 	az bicep upgrade
 
 test:
-	@echo "➡️ Running Black..."
+	@echo "➡️ Test generic formatter (Black)..."
 	python3 -m black --check .
 
-	@echo "➡️ Running isort..."
+	@echo "➡️ Test import formatter (isort)..."
 	python3 -m isort --check .
 
-	@echo "➡️ Running Pylint..."
-	pylint \
-		--fail-under=8 \
-		--recursive=true \
-		.
-
-	@echo "➡️ Running deptry..."
+	@echo "➡️ Test dependencies issues (deptry)..."
 	python3 -m deptry \
 		--ignore-notebooks \
 		--per-rule-ignores "DEP002=aiohttp" \
 		--per-rule-ignores "DEP003=aiohttp_retry" \
 		.
 
-	@echo "➡️ Running Pytest..."
+	@echo "➡️ Test code smells (Pylint)..."
+	python3 -m pylint \
+		--fail-under=8 \
+		--recursive=true \
+		.
 
 	@echo "➡️ Test types (Pyright)..."
 	python3 -m pyright .
 
+	@echo "➡️ Unit tests (Pytest)..."
 	PUBLIC_DOMAIN=dummy pytest \
 		--junit-xml=test-reports/$$(date +%Y%m%d%H%M%S).xml \
 		tests/*.py
 
 lint:
-	@echo "➡️ Running Black..."
+	@echo "➡️ Fix with generic formatter (Black)..."
 	python3 -m black .
 
-	@echo "➡️ Running isort..."
+	@echo "➡️ Fix with import formatter (isort)..."
 	python3 -m isort .
 
 tunnel:
