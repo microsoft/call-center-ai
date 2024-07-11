@@ -2,7 +2,7 @@ from os import environ
 from typing import Optional
 
 import yaml
-from dotenv import find_dotenv, load_dotenv
+from dotenv import find_dotenv
 from pydantic import ValidationError
 
 from helpers.config_models.root import RootModel
@@ -14,15 +14,6 @@ class ConfigNotFound(Exception):
 
 class ConfigBadFormat(Exception):
     pass
-
-
-def init_env():
-    path = find_dotenv()
-    if not path:
-        print("Env file not found")
-        return
-    load_dotenv(path)
-    print(f'Env file loaded from "{path}"')
 
 
 def load_config() -> RootModel:
@@ -42,7 +33,7 @@ def load_config() -> RootModel:
     try:
         with open(path, encoding="utf-8") as f:
             config = RootModel.model_validate(yaml.safe_load(f))
-            print(f'Config loaded from "{path}"')
+            print(f'Config loaded from file "{path}"')
             return config
     except ValidationError as e:
         raise ConfigBadFormat("Config values are not valid") from e
@@ -50,5 +41,4 @@ def load_config() -> RootModel:
         raise ConfigBadFormat("Config YAML format is not valid") from e
 
 
-init_env()
 CONFIG = load_config()
