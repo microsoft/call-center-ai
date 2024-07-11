@@ -116,7 +116,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
         """
         from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
 
-        with tracer.start_as_current_span("trainings"):
+        with tracer.start_as_current_span("call_trainings"):
             search = CONFIG.ai_search.instance()
             tasks = await asyncio.gather(
                 *[

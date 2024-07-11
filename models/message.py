@@ -112,7 +112,7 @@ class ToolModel(BaseModel):
             return
 
         with tracer.start_as_current_span(
-            name="execute_function",
+            name="message_execute_function",
             attributes={
                 "args": json.dumps(args),
                 "name": name,

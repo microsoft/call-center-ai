@@ -79,7 +79,7 @@ _retried_exceptions = [
 ]
 
 
-@tracer.start_as_current_span("completion_stream")
+@tracer.start_as_current_span("llm_completion_stream")
 async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
@@ -241,7 +241,7 @@ async def _completion_stream_worker(
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.8, max=8),
 )
-@tracer.start_as_current_span("completion_sync")
+@tracer.start_as_current_span("llm_completion_sync")
 async def completion_sync(
     res_type: type[T],
     system: list[ChatCompletionSystemMessageParam],

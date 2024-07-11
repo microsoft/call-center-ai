@@ -8,9 +8,11 @@ from models.readiness import ReadinessEnum
 class ISms(ABC):
 
     @abstractmethod
+    @tracer.start_as_current_span("sms_areadiness")
     async def areadiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod
+    @tracer.start_as_current_span("sms_asend")
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
         pass

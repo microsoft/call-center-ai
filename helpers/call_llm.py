@@ -19,6 +19,7 @@ from helpers.llm_worker import (
     completion_stream,
 )
 from helpers.logging import logger
+from helpers.monitoring import tracer
 from models.call import CallStateModel
 from models.message import (
     ActionEnum as MessageAction,
@@ -34,6 +35,7 @@ _cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
 
 
+@tracer.start_as_current_span("call_load_llm_chat")
 async def load_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -231,6 +233,7 @@ async def load_llm_chat(
     return call
 
 
+@tracer.start_as_current_span("call_execute_llm_chat")
 async def _execute_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
