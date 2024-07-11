@@ -167,10 +167,10 @@ class ClaimRelevancyMetric(BaseMetric):
 
             # Rules
             - All data should be extracted
-            - Respond only with the JSON object, nothing else
-            - If there is no data to populate a field, do not include it
+            - Be concise
             - Limit fields to the ones listed
-            - Values should be detailed, if data exists
+            - Only add info which are explicitly mentioned
+            - Respond only with the JSON object, nothing else
 
             # Fields
             {", ".join([f"{field.name} ({field.type.value})" for field in self.call.initiate.claim])}
