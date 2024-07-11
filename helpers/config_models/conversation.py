@@ -15,6 +15,7 @@ class LanguageEntryModel(BaseModel):
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages
     """
 
+    custom_voice_endpoint_id: Optional[str] = None
     pronunciations_en: list[str]
     short_code: str
     voice: str

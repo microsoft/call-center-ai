@@ -348,7 +348,10 @@ def _audio_from_text(
         </voice>
     </speak>
     """
-    return SsmlSource(ssml_text=ssml.strip())
+    return SsmlSource(
+        custom_voice_endpoint_id=call.lang.custom_voice_endpoint_id,
+        ssml_text=ssml.strip(),
+    )
 
 
 async def handle_recognize_ivr(

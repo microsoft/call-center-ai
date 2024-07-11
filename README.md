@@ -453,6 +453,23 @@ conversation:
           voice: "zh-CN-XiaoqiuNeural"
 ```
 
+If you built and deployed an [Azure Speech Custom Neural Voice (CNV)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/custom-neural-voice), add field `custom_voice_endpoint_id` on the language configuration:
+
+```yaml
+# config.yaml
+[...]
+
+conversation:
+  initiate:
+    lang:
+      default_short_code: fr-FR
+      availables:
+        - pronunciations_en: ["French", "FR", "France"]
+          short_code: fr-FR
+          voice: xxx
+          custom_voice_endpoint_id: xxx
+```
+
 ### Customize the moderation levels
 
 Levels are defined for each category of Content Safety. The higher the score, the more strict the moderation is, from 0 to 7. Moderation is applied on all bot data, including the web page and the conversation. Configure them in Azure OpenAI Content Filters.
