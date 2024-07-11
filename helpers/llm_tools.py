@@ -64,7 +64,7 @@ class LlmPlugins:
 
         # Usage examples
         - All participants are satisfied and agree to end the call
-        - Customer said 'bye bye'
+        - Customer said "bye bye"
         """
         await handle_play_text(
             call=self.call,
@@ -86,9 +86,8 @@ class LlmPlugins:
             - Must be in a single sentence
 
             # Examples
-            - 'A new claim for a stolen watch is being created.'
-            - 'I am creating a new claim for a car accident.'
-            - 'Please wait while I create your new folder about the fire.'
+            - "I'am creating it right now."
+            - "We'll start a case."
             """,
         ],
     ) -> str:
@@ -139,9 +138,9 @@ class LlmPlugins:
             - Must be in a single sentence
 
             # Examples
-            - 'A todo for next week is planned.'
-            - 'I am creating a reminder for next week to call you back.'
-            - 'The rendez-vous is scheduled for tomorrow.'
+            - "A todo for next week is planned."
+            - "I'm creating a reminder for the company to manage this for you."
+            - "The rendez-vous is scheduled for tomorrow."
             """,
         ],
         description: Annotated[
@@ -216,9 +215,9 @@ class LlmPlugins:
             - Must be in a single sentence
 
             # Examples
-            - 'Both your name and the incident date are updated.'
-            - 'I am updating the your name to Marie-Jeanne Duchemin and your email to mariejeanne@gmail.com.'
-            - 'The incident date is now set to yesterday at 18h.'
+            - "I am updating the claim with your new address."
+            - "The phone number is now stored in the case."
+            - "Your birthdate is written down."
             """,
         ],
         updates: Annotated[
@@ -321,9 +320,10 @@ class LlmPlugins:
             - Must be in a single sentence
 
             # Examples
-            - 'I am looking for the article about the new law on cyber security.'
-            - 'I am looking in our database for your car insurance contract.'
-            - 'I am searching for the procedure to declare a stolen luxury watch.'
+            - "I am looking for the article about the new law on cyber security."
+            - "I am looking in our database for your car insurance contract."
+            - "I am searching for the procedure to declare a stolen luxury watch."
+            - "I'm looking for this document in our database."
             """,
         ],
         queries: Annotated[
@@ -441,9 +441,10 @@ class LlmPlugins:
             - Must be in a single sentence
 
             # Examples
-            - 'I am sending a SMS to your phone number.'
-            - 'I am texting you the information right now.'
-            - 'SMS with the details is sent.'
+            - "I am sending a SMS to your phone number."
+            - "I am texting you the information right now."
+            - "I'am sending it."
+            - "SMS with the details is sent."
             """,
         ],
         message: Annotated[
@@ -487,9 +488,9 @@ class LlmPlugins:
             - Must be in a single sentence
 
             # Examples
-            - 'I am slowing down the speech.'
-            - 'I am speeding up the voice.'
-            - 'My voice is now faster.'
+            - "I am slowing down the speech."
+            - "Is it better now that I am speaking slower?"
+            - "My voice is now faster."
             """,
         ],
         speed: Annotated[
@@ -530,9 +531,9 @@ class LlmPlugins:
             - Must be in a single sentence
 
             # Examples
-            - For de-DE, 'Ich spreche jetzt auf Deutsch.'
-            - For en-ES, 'Espero que me entiendas mejor en español.'
-            - For fr-FR, 'Cela devrait être mieux en français.'
+            - For de-DE, "Ich spreche jetzt auf Deutsch."
+            - For en-ES, "Espero que me entiendas mejor en español."
+            - For fr-FR, "Cela devrait être mieux en français."
             """,
         ],
         lang: Annotated[
