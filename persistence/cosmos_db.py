@@ -247,6 +247,7 @@ class CosmosDbStore(IStore):
         self,
         phone_number: Optional[str] = None,
     ) -> int:
+        total = 0
         try:
             async with self._use_client() as db:
                 where_clause = (
@@ -263,10 +264,11 @@ class CosmosDbStore(IStore):
                         },
                     ],
                 )
-                total: int = await anext(items)  # type: ignore
+                total: int = await anext(items)  # pyright: ignore
         except CosmosHttpResponseError:
             logger.error("Error accessing CosmosDB", exc_info=True)
-        return total if total else 0
+
+        return total
 
     @asynccontextmanager
     async def _use_client(self) -> AsyncGenerator[ContainerProxy, None]:

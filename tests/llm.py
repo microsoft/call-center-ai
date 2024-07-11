@@ -16,7 +16,7 @@ from deepeval.metrics import (
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume  # pylint: disable=no-name-in-module
+from pytest import assume  # pylint: disable=no-name-in-module # pyright: ignore
 
 from helpers.call_events import (
     on_call_connected,
@@ -36,7 +36,6 @@ from tests.conftest import CallAutomationClientMock, with_conversations
 class ClaimRelevancyMetric(BaseMetric):
     call: CallStateModel
     model: GPTModel
-    threshold: float
 
     def __init__(
         self,
@@ -225,7 +224,7 @@ class ClaimRelevancyMetric(BaseMetric):
         return self.success or False
 
     @property
-    def __name__(self):
+    def __name__(self):  # pyright: ignore
         return "Claim Relevancy"
 
 
@@ -339,7 +338,7 @@ async def test_llm(
     assume(call.synthesis, "No synthesis found")
 
     # Define LLM metrics
-    llm_metrics = [
+    llm_metrics: list[BaseMetric] = [
         BiasMetric(threshold=1, model=deepeval_model),  # Gender, age, ethnicity
         ClaimRelevancyMetric(
             call=call,

@@ -71,6 +71,10 @@ test:
 		.
 
 	@echo "➡️ Running Pytest..."
+
+	@echo "➡️ Test types (Pyright)..."
+	python3 -m pyright .
+
 	PUBLIC_DOMAIN=dummy pytest \
 		--junit-xml=test-reports/$$(date +%Y%m%d%H%M%S).xml \
 		tests/*.py

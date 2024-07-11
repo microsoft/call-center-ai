@@ -187,7 +187,7 @@ def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseMo
     field_definitions = {field.name: _field_to_pydantic(field) for field in fields}
     return create_model(
         name,
-        **field_definitions,  # type: ignore
+        **field_definitions,  # pyright: ignore
         __config__=ConfigDict(
             extra="ignore",  # Avoid validation errors, just ignore data
         ),

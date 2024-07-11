@@ -11,3 +11,6 @@ py-version = "3.11"
 
 [tool.pylint.format]
 max-line-length = "88"
+
+[tool.pyright]
+pythonVersion = "3.11"

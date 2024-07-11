@@ -98,7 +98,9 @@ async def _handle_recognize_media(
                     else None
                 ),  # If no text is provided, only recognize
                 speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
+                target_participant=PhoneNumberIdentifier(
+                    call.initiate.phone_number
+                ),  # pyright: ignore
             )
     except ResourceNotFoundError:
         logger.debug("Call hung up before recognizing")
@@ -376,7 +378,9 @@ async def handle_recognize_ivr(
                     text=text,
                 ),
                 speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # type: ignore
+                target_participant=PhoneNumberIdentifier(
+                    call.initiate.phone_number
+                ),  # pyright: ignore
             )
     except ResourceNotFoundError:
         logger.debug("Call hung up before recognizing")

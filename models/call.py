@@ -87,7 +87,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
 
     @computed_field
     @property
-    def lang(self) -> LanguageEntryModel:  # type: ignore
+    def lang(self) -> LanguageEntryModel:  # pyright: ignore
         from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
 
         lang = CONFIG.conversation.initiate.lang

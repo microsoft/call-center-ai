@@ -100,7 +100,7 @@ class ToolModel(BaseModel):
         args: dict[str, Any] = repair_json(
             json_str=json_str,
             return_objects=True,
-        )  # type: ignore
+        )  # pyright: ignore
 
         if not isinstance(args, dict):
             logger.warning(

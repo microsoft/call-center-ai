@@ -7,7 +7,7 @@ from deepeval.metrics import BaseMetric
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume  # pylint: disable=no-name-in-module
+from pytest import assume  # pylint: disable=no-name-in-module # pyright: ignore
 
 from helpers.config import CONFIG
 from helpers.logging import logger
@@ -19,7 +19,6 @@ from tests.conftest import with_conversations
 
 class RagRelevancyMetric(BaseMetric):
     model: GPTModel
-    threshold: float
 
     def __init__(
         self,
@@ -114,7 +113,7 @@ class RagRelevancyMetric(BaseMetric):
         return self.success or False
 
     @property
-    def __name__(self):
+    def __name__(self):  # pyright: ignore
         return "RAG Relevancy"
 
 
@@ -195,7 +194,7 @@ async def test_relevancy(
     )
 
     # Define LLM metrics
-    llm_metrics = [
+    llm_metrics: list[BaseMetric] = [
         RagRelevancyMetric(
             threshold=0.5, model=deepeval_model
         ),  # Compare speech to the retrieval context

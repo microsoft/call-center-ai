@@ -54,7 +54,9 @@ _jinja = Environment(
 )
 # Jinja custom functions
 _jinja.filters["quote_plus"] = lambda x: quote_plus(str(x)) if x else ""
-_jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", "speedup", "url"])(x) if x else ""  # type: ignore
+_jinja.filters["markdown"] = lambda x: (
+    mistune.create_markdown(plugins=["abbr", "speedup", "url"])(x) if x else ""
+)  # pyright: ignore
 
 # Azure Communication Services
 _automation_client: Optional[CallAutomationClient] = None
@@ -271,7 +273,9 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
         # deepcode ignore AttributeLoadOnNone: Phone number is validated with Pydantic
-        target_participant=PhoneNumberIdentifier(initiate.phone_number),  # type: ignore
+        target_participant=PhoneNumberIdentifier(
+            initiate.phone_number
+        ),  # pyright: ignore
     )
     logger.info(
         "Created call with connection id: %s",

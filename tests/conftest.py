@@ -9,6 +9,7 @@ import pytest
 import yaml
 from _pytest.mark.structures import MarkDecorator
 from azure.communication.callautomation import FileSource, SsmlSource, TextSource
+from azure.communication.callautomation._models import TransferCallResult
 from azure.communication.callautomation.aio import (
     CallAutomationClient,
     CallConnectionClient,
@@ -71,8 +72,9 @@ class CallConnectionClientMock(CallConnectionClient):
         self,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> TransferCallResult:
         self._transfer_callback()
+        return TransferCallResult()
 
     async def hang_up(
         self,
@@ -126,7 +128,7 @@ class CallAutomationClientMock(CallAutomationClient):
 class DeepEvalAzureOpenAI(GPTModel):
     _cache: pytest.Cache
     _langchain_kwargs: dict[str, Any]
-    _model: BaseChatModel
+    _model: AzureChatOpenAI
 
     def __init__(
         self,
@@ -148,7 +150,9 @@ class DeepEvalAzureOpenAI(GPTModel):
             "azure_endpoint": platform.endpoint,
             "model": platform.model,
             # Authentication, either RBAC or API
-            "api_key": platform.api_key.get_secret_value() if platform.api_key else None,  # type: ignore
+            "api_key": (
+                platform.api_key.get_secret_value() if platform.api_key else None
+            ),  # pyright: ignore
             "azure_ad_token_provider": (
                 get_bearer_token_provider(
                     ManagedIdentityCredential(),
@@ -192,7 +196,7 @@ class DeepEvalAzureOpenAI(GPTModel):
     def get_model_name(self) -> str:
         return "Azure OpenAI"
 
-    def load_model(self) -> BaseChatModel:
+    def load_model(self) -> AzureChatOpenAI:
         return self._model
 
     def should_use_azure_openai(self) -> bool:
@@ -249,7 +253,7 @@ def call() -> CallStateModel:
     call = CallStateModel(
         initiate=CallInitiateModel(
             **CONFIG.conversation.initiate.model_dump(),
-            phone_number="+33612345678",  # type: ignore
+            phone_number="+33612345678",  # pyright: ignore
         ),
         voice_id="dummy",
     )

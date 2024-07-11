@@ -185,7 +185,7 @@ class LlmPlugins:
             if reminder.title == title:
                 try:
                     reminder.description = description
-                    reminder.due_date_time = due_date_time  # type: ignore
+                    reminder.due_date_time = due_date_time  # pyright: ignore
                     reminder.owner = owner
                     return f'Reminder "{title}" updated.'
                 except ValidationError as e:
@@ -195,7 +195,7 @@ class LlmPlugins:
         try:
             reminder = ReminderModel(
                 description=description,
-                due_date_time=due_date_time,  # type: ignore
+                due_date_time=due_date_time,  # pyright: ignore
                 owner=owner,
                 title=title,
             )

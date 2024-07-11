@@ -335,6 +335,7 @@ async def _completion_sync_worker(
         ),  # Usage is async and long-lived, so stop after 10 attempts
         wait=wait_random_exponential(multiplier=0.8, max=8),
     )
+    choice = None
     async for attempt in retryed:
         with attempt:
             try:
@@ -358,8 +359,7 @@ async def _completion_sync_worker(
             if choice.finish_reason == "length":
                 raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
 
-    content = choice.message.content
-    return content or None
+    return choice.message.content if choice else None
 
 
 def _limit_messages(

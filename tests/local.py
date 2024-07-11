@@ -34,9 +34,9 @@ async def main() -> None:
     call = CallStateModel(
         initiate=CallInitiateModel(
             **CONFIG.conversation.initiate.model_dump(),
-            phone_number="+33612345678",  # type: ignore
+            phone_number="+33612345678",  # pyright: ignore
         ),
-        lang_shmediumort_code="fr-FR",
+        lang_short_code="fr-FR",
         voice_id="dummy",
     )
     automation_client = CallAutomationClientMock(
