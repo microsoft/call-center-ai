@@ -4,8 +4,7 @@ from azure.communication.sms import SmsSendResult
 from azure.communication.sms.aio import SmsClient
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 
-from helpers.config_models.communication_services import \
-    CommunicationServicesModel
+from helpers.config_models.communication_services import CommunicationServicesModel
 from helpers.http import azure_transport
 from helpers.logging import logger
 from helpers.pydantic_types.phone_numbers import PhoneNumber
@@ -18,7 +17,7 @@ class CommunicationServicesSms(ISms):
     _config: CommunicationServicesModel
 
     def __init__(self, config: CommunicationServicesModel):
-        logger.info(f"Using Communication Services from number {config.phone_number}")
+        logger.info("Using Communication Services from number %s", config.phone_number)
         self._config = config
 
     async def areadiness(self) -> ReadinessEnum:
@@ -29,9 +28,9 @@ class CommunicationServicesSms(ISms):
         return ReadinessEnum.OK
 
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
-        logger.info(f"Sending SMS to {phone_number}")
+        logger.info("Sending SMS to %s", phone_number)
         success = False
-        logger.info(f"SMS content: {content}")
+        logger.info("SMS content: %s", content)
         try:
             async with await self._use_client() as client:
                 responses: list[SmsSendResult] = await client.send(
@@ -41,20 +40,21 @@ class CommunicationServicesSms(ISms):
                 )
                 response = responses[0]
                 if response.successful:
-                    logger.debug(f"SMS sent {response.message_id} to {response.to}")
+                    logger.debug("SMS sent %s to %s", response.message_id, response.to)
                     success = True
                 else:
                     logger.warning(
-                        f"Failed SMS to {response.to}, status {response.http_status_code}, error {response.error_message}"
+                        "Failed SMS to %s, status %s, error %s",
+                        response.to,
+                        response.http_status_code,
+                        response.error_message,
                     )
         except ClientAuthenticationError:
             logger.error(
                 "Authentication error for SMS, check the credentials", exc_info=True
             )
-        except HttpResponseError as e:
-            logger.error(f"Error sending SMS: {e}")
-        except Exception:
-            logger.warning(f"Failed SMS to {phone_number}", exc_info=True)
+        except HttpResponseError:
+            logger.error("Error sending SMS to %s", phone_number, exc_info=True)
         return success
 
     async def _use_client(self) -> SmsClient:

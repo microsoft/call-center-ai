@@ -54,6 +54,15 @@ test:
 	@echo "➡️ Running Black..."
 	python3 -m black --check .
 
+	@echo "➡️ Running isort..."
+	python3 -m isort --check .
+
+	@echo "➡️ Running Pylint..."
+	pylint \
+		--fail-under=8 \
+		--recursive=true \
+		.
+
 	@echo "➡️ Running deptry..."
 	python3 -m deptry \
 		--ignore-notebooks \

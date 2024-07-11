@@ -4,8 +4,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 from uuid import UUID
 
-from aiosqlite import Connection
-from aiosqlite import connect as sqlite_connect
+from aiosqlite import Connection, connect as sqlite_connect
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from pydantic import ValidationError
 
@@ -28,7 +27,9 @@ class SqliteStore(IStore):
 
     def __init__(self, cache: ICache, config: SqliteModel):
         super().__init__(cache)
-        logger.info(f"Using SQLite database at {config.path} with table {config.table}")
+        logger.info(
+            "Using SQLite database at %s with table %s", config.path, config.table
+        )
         self._config = config
 
         # Create folder if does not exist
@@ -51,12 +52,12 @@ class SqliteStore(IStore):
             async with self._use_db() as db:
                 await db.execute("SELECT 1")
             return ReadinessEnum.OK
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.error("Unknown error while checking SQLite readiness", exc_info=True)
         return ReadinessEnum.FAIL
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
-        logger.debug(f"Loading call {call_id}")
+        logger.debug("Loading call %s", call_id)
 
         # Try cache
         cache_key = self._cache_key_call_id(call_id)
@@ -64,8 +65,8 @@ class SqliteStore(IStore):
         if call:
             try:
                 return CallStateModel.model_validate_json(call)
-            except ValidationError as e:
-                logger.debug(f"Parsing error: {e.errors()}")
+            except ValidationError:
+                logger.debug("Parsing error", exc_info=True)
 
         # Try live
         call = None
@@ -78,8 +79,8 @@ class SqliteStore(IStore):
             if row:
                 try:
                     call = CallStateModel.model_validate_json(row[0])
-                except ValidationError as e:
-                    logger.debug(f"Parsing error: {e.errors()}")
+                except ValidationError:
+                    logger.debug("Parsing error", exc_info=True)
 
         # Update cache
         if call:
@@ -92,7 +93,7 @@ class SqliteStore(IStore):
 
         # Update live
         data = call.model_dump_json(exclude_none=True)
-        logger.debug(f"Saving call {call.call_id}: {data}")
+        logger.debug("Saving call %s: %s", call.call_id, data)
         async with self._use_db() as db:
             await db.execute(
                 f"INSERT OR REPLACE INTO {self._config.table} VALUES (?, ?)",
@@ -116,7 +117,7 @@ class SqliteStore(IStore):
         return True
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
-        logger.debug(f"Loading last call for {phone_number}")
+        logger.debug("Loading last call for %s", phone_number)
 
         # Try cache
         cache_key = self._cache_key_phone_number(phone_number)
@@ -124,8 +125,8 @@ class SqliteStore(IStore):
         if call:
             try:
                 return CallStateModel.model_validate_json(call)
-            except ValidationError as e:
-                logger.debug(f"Parsing error: {e.errors()}")
+            except ValidationError:
+                logger.debug("Parsing error", exc_info=True)
 
         # Try live
         call = None
@@ -141,8 +142,8 @@ class SqliteStore(IStore):
             if row:
                 try:
                     call = CallStateModel.model_validate_json(row[0])
-                except ValidationError as e:
-                    logger.debug(f"Parsing error: {e.errors()}")
+                except ValidationError:
+                    logger.debug("Parsing error", exc_info=True)
 
         # Update cache
         if call:
@@ -155,7 +156,7 @@ class SqliteStore(IStore):
         count: int,
         phone_number: Optional[str] = None,
     ) -> tuple[Optional[list[CallStateModel]], int]:
-        logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        logger.debug("Searching calls, for %s and count %s", phone_number, count)
         # TODO: Cache results
         calls, total = await asyncio.gather(
             self._call_asearch_all_calls_worker(count, phone_number),
@@ -193,8 +194,8 @@ class SqliteStore(IStore):
                     continue
                 try:
                     calls.append(CallStateModel.model_validate_json(row[0]))
-                except ValidationError as e:
-                    logger.debug(f"Parsing error: {e.errors()}")
+                except ValidationError:
+                    logger.debug("Parsing error", exc_info=True)
         return calls
 
     async def _call_asearch_all_total_worker(

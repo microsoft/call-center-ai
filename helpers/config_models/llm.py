@@ -3,8 +3,7 @@ from typing import Any, Optional, Union
 
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from pydantic import (BaseModel, Field, SecretStr, ValidationInfo,
-                      field_validator)
+from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
 
 class ModeEnum(str, Enum):
@@ -76,6 +75,7 @@ class SelectedPlatformModel(BaseModel):
     openai: Optional[OpenaiPlatformModel] = None
 
     @field_validator("azure_openai")
+    @classmethod
     def _validate_azure_openai(
         cls,
         azure_openai: Optional[AzureOpenaiPlatformModel],
@@ -86,6 +86,7 @@ class SelectedPlatformModel(BaseModel):
         return azure_openai
 
     @field_validator("openai")
+    @classmethod
     def _validate_openai(
         cls,
         openai: Optional[OpenaiPlatformModel],

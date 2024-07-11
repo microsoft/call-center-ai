@@ -1,10 +1,3 @@
-# First imports, to make sure the following logs are first
-from helpers.config import CONFIG
-from helpers.logging import APP_NAME, logger, trace
-
-logger.info(f"{APP_NAME} v{CONFIG.version}")
-
-
 import asyncio
 import json
 from http import HTTPStatus
@@ -15,7 +8,6 @@ from uuid import UUID
 
 import azure.functions as func
 import mistune
-# General imports
 from azure.communication.callautomation import PhoneNumberIdentifier
 from azure.communication.callautomation.aio import CallAutomationClient
 from azure.core.credentials import AzureKeyCredential
@@ -27,19 +19,31 @@ from opentelemetry.semconv.trace import SpanAttributes
 from pydantic import TypeAdapter, ValidationError
 from twilio.twiml.messaging_response import MessagingResponse
 
-from helpers.call_events import (on_call_connected, on_call_disconnected,
-                                 on_end_call, on_ivr_recognized, on_new_call,
-                                 on_play_completed, on_play_error,
-                                 on_recognize_timeout_error,
-                                 on_recognize_unknown_error, on_sms_received,
-                                 on_speech_recognized, on_transfer_completed,
-                                 on_transfer_error)
+from helpers.call_events import (
+    on_call_connected,
+    on_call_disconnected,
+    on_end_call,
+    on_ivr_recognized,
+    on_new_call,
+    on_play_completed,
+    on_play_error,
+    on_recognize_timeout_error,
+    on_recognize_unknown_error,
+    on_sms_received,
+    on_speech_recognized,
+    on_transfer_completed,
+    on_transfer_error,
+)
 from helpers.call_utils import ContextEnum as CallContextEnum
+from helpers.config import CONFIG
 from helpers.http import azure_transport
+from helpers.logging import APP_NAME, logger, trace
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.call import CallGetModel, CallInitiateModel, CallStateModel
 from models.next import ActionEnum as NextActionEnum
 from models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
+
+logger.info("%s v%s", APP_NAME, CONFIG.version)
 
 # Jinja configuration
 _jinja = Environment(
@@ -55,7 +59,7 @@ _jinja.filters["markdown"] = lambda x: mistune.create_markdown(plugins=["abbr", 
 # Azure Communication Services
 _automation_client: Optional[CallAutomationClient] = None
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
-logger.info(f"Using phone number {str(CONFIG.communication_services.phone_number)}")
+logger.info("Using phone number %s", CONFIG.communication_services.phone_number)
 
 # Persistences
 _cache = CONFIG.cache.instance()
@@ -72,7 +76,7 @@ _COMMUNICATIONSERVICES_CALLABACK_TPL = urljoin(
     str(CONFIG.public_domain),
     "/communicationservices/event/{call_id}/{callback_secret}",
 )
-logger.info(f"Using call event URL {_COMMUNICATIONSERVICES_CALLABACK_TPL}")
+logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
 
 
 @app.route(
@@ -136,7 +140,7 @@ async def report_get(req: func.HttpRequest) -> func.HttpResponse:
             if "phone_number" in req.params
             else None
         )
-    except Exception as e:
+    except ValueError as e:
         return _validation_error(e)
     count = 100
     calls, total = (
@@ -174,7 +178,7 @@ async def report_get(req: func.HttpRequest) -> func.HttpResponse:
 async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
     try:
         call_id = UUID(req.route_params["call_id"])
-    except Exception as e:
+    except ValueError as e:
         return _validation_error(e)
     call = await _db.call_aget(call_id)
     if not call:
@@ -212,7 +216,7 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
 async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
     try:
         phone_number = PhoneNumber(req.route_params["phone_number"])
-    except Exception as e:
+    except ValueError as e:
         return _validation_error(e)
     calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=1)
     output = [CallGetModel.model_validate(call) for call in calls or []]
@@ -231,7 +235,7 @@ async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
 async def call_get(req: func.HttpRequest) -> func.HttpResponse:
     try:
         call_id = UUID(req.route_params["call_id"])
-    except Exception as e:
+    except ValueError as e:
         return _validation_error(e)
     call = await _db.call_aget(call_id)
     if not call:
@@ -255,7 +259,7 @@ async def call_get(req: func.HttpRequest) -> func.HttpResponse:
 async def call_post(req: func.HttpRequest) -> func.HttpResponse:
     try:
         initiate = CallInitiateModel.model_validate_json(req.get_body())
-    except Exception as e:
+    except ValidationError as e:
         return _validation_error(e)
     url, call = await _communicationservices_event_url(initiate.phone_number, initiate)
     trace.get_current_span().set_attribute(
@@ -270,7 +274,8 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         target_participant=PhoneNumberIdentifier(initiate.phone_number),  # type: ignore
     )
     logger.info(
-        f"Created call with connection id: {call_connection_properties.call_connection_id}"
+        "Created call with connection id: %s",
+        call_connection_properties.call_connection_id,
     )
     return func.HttpResponse(
         body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
@@ -290,9 +295,9 @@ async def call_event(
     event = EventGridEvent.from_json(call.get_body())
     event_type = event.event_type
 
-    logger.debug(f"Call event with data {event.data}")
+    logger.debug("Call event with data %s", event.data)
     if not event_type == SystemEventNames.AcsIncomingCallEventName:
-        logger.warning(f"Event {event_type} not supported")
+        logger.warning("Event %s not supported", event_type)
         return
 
     call_context: str = event.data["incomingCallContext"]
@@ -332,16 +337,16 @@ async def sms_event(
     event = EventGridEvent.from_json(sms.get_body())
     event_type = event.event_type
 
-    logger.debug(f"SMS event with data {event.data}")
+    logger.debug("SMS event with data %s", event.data)
     if not event_type == SystemEventNames.AcsSmsReceivedEventName:
-        logger.warning(f"Event {event_type} not supported")
+        logger.warning("Event %s not supported", event_type)
         return
 
     message: str = event.data["message"]
     phone_number: str = event.data["from"]
     call = await _db.call_asearch_one(phone_number)
     if not call:
-        logger.warning(f"Call for phone number {phone_number} not found")
+        logger.warning("Call for phone number %s not found", phone_number)
         return
     trace.get_current_span().set_attribute(
         SpanAttributes.ENDUSER_ID, call.initiate.phone_number
@@ -385,7 +390,7 @@ async def communicationservices_event_post(
     try:
         call_id = UUID(req.route_params["call_id"])
         secret: str = req.route_params["secret"]
-    except Exception as e:
+    except ValueError as e:
         return _validation_error(e)
     await asyncio.gather(
         *[
@@ -411,10 +416,10 @@ async def _communicationservices_event_worker(
 ) -> None:
     call = await _db.call_aget(call_id)
     if not call:
-        logger.warning(f"Call {call_id} not found")
+        logger.warning("Call %s not found", call_id)
         return
     if call.callback_secret != secret:
-        logger.warning(f"Secret for call {call_id} does not match")
+        logger.warning("Secret for call %s does not match", call_id)
         return
 
     # OpenTelemetry
@@ -435,7 +440,7 @@ async def _communicationservices_event_worker(
     # Client SDK
     automation_client = await _use_automation_client()
 
-    logger.debug(f"Call event received {event_type} for call {call}")
+    logger.debug("Call event received %s for call %s", event_type, call)
     logger.debug(event.data)
 
     async def _post_callback(_call: CallStateModel) -> None:
@@ -490,7 +495,9 @@ async def _communicationservices_event_worker(
         error_code: int = result_information["subCode"]
         error_message: str = result_information["message"]
         logger.debug(
-            f"Speech recognition failed with error code {error_code}: {error_message}"
+            "Speech recognition failed with error code %s: %s",
+            error_code,
+            error_message,
         )
         # Error codes:
         # 8510 = Action failed, initial silence timeout reached
@@ -552,7 +559,7 @@ async def trainings_event(
     trainings: func.QueueMessage,
 ) -> None:
     call = CallStateModel.model_validate_json(trainings.get_body())
-    logger.debug(f"Trainings event received for call {call}")
+    logger.debug("Trainings event received for call %s", call)
     trace.get_current_span().set_attribute(
         SpanAttributes.ENDUSER_ID, call.initiate.phone_number
     )
@@ -568,7 +575,7 @@ async def post_event(
     post: func.QueueMessage,
 ) -> None:
     call = CallStateModel.model_validate_json(post.get_body())
-    logger.debug(f"Post event received for call {call}")
+    logger.debug("Post event received for call %s", call)
     trace.get_current_span().set_attribute(
         SpanAttributes.ENDUSER_ID, call.initiate.phone_number
     )
@@ -651,12 +658,12 @@ async def twilio_sms_post(
     try:
         phone_number = PhoneNumber(req.form["From"])
         message: str = req.form["Body"]
-    except Exception as e:
+    except ValueError as e:
         return _validation_error(e)
     call = await _db.call_asearch_one(phone_number)
 
     if not call:
-        logger.warning(f"Call for phone number {phone_number} not found")
+        logger.warning("Call for phone number %s not found", phone_number)
 
     else:
         trace.get_current_span().set_attribute(
@@ -719,7 +726,7 @@ def _validation_error(
 
 
 async def _use_automation_client() -> CallAutomationClient:
-    global _automation_client
+    global _automation_client  # pylint: disable=global-statement
     if not isinstance(_automation_client, CallAutomationClient):
         _automation_client = CallAutomationClient(
             # Deployment

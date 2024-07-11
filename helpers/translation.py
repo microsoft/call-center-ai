@@ -4,14 +4,18 @@ from azure.ai.translation.text.aio import TextTranslationClient
 from azure.ai.translation.text.models import TranslatedTextItem
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_random_exponential)
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 from helpers.config import CONFIG
 from helpers.http import azure_transport
 from helpers.logging import logger
 
-logger.info(f"Using Translation {CONFIG.ai_translation.endpoint}")
+logger.info("Using Translation %s", CONFIG.ai_translation.endpoint)
 
 _cache = CONFIG.cache.instance()
 _client = Optional[TextTranslationClient]
@@ -60,7 +64,7 @@ async def _use_client() -> TextTranslationClient:
     """
     Generate the Translation client and close it after use.
     """
-    global _client
+    global _client  # pylint: disable=global-statement
     if not isinstance(_client, TextTranslationClient):
         _client = TextTranslationClient(
             # Performance

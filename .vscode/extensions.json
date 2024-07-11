@@ -13,6 +13,7 @@
     "redhat.vscode-yaml",
     "tomoki1207.pdf",
     "visualstudioexptteam.vscodeintellicode",
-    "wholroyd.jinja"
+    "wholroyd.jinja",
+    "ms-python.pylint"
   ]
 }

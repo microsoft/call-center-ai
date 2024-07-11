@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 from uuid import UUID, uuid4
@@ -24,7 +25,7 @@ class CosmosDbStore(IStore):
 
     def __init__(self, cache: ICache, config: CosmosDbModel):
         super().__init__(cache)
-        logger.info(f"Using Cosmos DB {config.database}/{config.container}")
+        logger.info("Using Cosmos DB %s/%s", config.database, config.container)
         self._config = config
 
     async def areadiness(self) -> ReadinessEnum:
@@ -66,7 +67,7 @@ class CosmosDbStore(IStore):
             logger.error("Readiness test failed", exc_info=True)
         except CosmosHttpResponseError:
             logger.error("Error requesting CosmosDB", exc_info=True)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.error(
                 "Unknown error while checking Cosmos DB readiness", exc_info=True
             )
@@ -80,12 +81,12 @@ class CosmosDbStore(IStore):
                 exist = True
             except CosmosHttpResponseError as e:
                 if e.status_code != 404:
-                    logger.error(f"Error requesting CosmosDB: {e}")
+                    logger.error("Error requesting CosmosDB: %s", e)
                     exist = True
         return exist
 
     async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
-        logger.debug(f"Loading call {call_id}")
+        logger.debug("Loading call %s", call_id)
 
         # Try cache
         cache_key = self._cache_key_call_id(call_id)
@@ -94,7 +95,7 @@ class CosmosDbStore(IStore):
             try:
                 return CallStateModel.model_validate_json(cached)
             except ValidationError as e:
-                logger.debug(f"Parsing error: {e.errors()}")
+                logger.debug("Parsing error: %s", e.errors())
 
         # Try live
         call = None
@@ -108,11 +109,11 @@ class CosmosDbStore(IStore):
                 try:
                     call = CallStateModel.model_validate(raw)
                 except ValidationError as e:
-                    logger.debug(f"Parsing error: {e.errors()}")
+                    logger.debug("Parsing error: %s", e.errors())
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB: {e}")
+            logger.error("Error accessing CosmosDB: %s", e)
 
         # Update cache
         if call:
@@ -121,19 +122,19 @@ class CosmosDbStore(IStore):
         return call
 
     async def call_aset(self, call: CallStateModel) -> bool:
-        logger.debug(f"Saving call {call.call_id}")
+        logger.debug("Saving call %s", call.call_id)
 
         # Update live
         data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
-        logger.debug(f"Saving call {call.call_id}: {data}")
+        logger.debug("Saving call %s: %s", call.call_id, data)
         res = False
         try:
             async with self._use_client() as db:
                 await db.upsert_item(body=data)
             res = True
         except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB: {e}")
+            logger.error("Error accessing CosmosDB: %s", e)
 
         # Update cache
         if res:
@@ -151,7 +152,7 @@ class CosmosDbStore(IStore):
         return res
 
     async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
-        logger.debug(f"Loading last call for {phone_number}")
+        logger.debug("Loading last call for %s", phone_number)
 
         # Try cache
         cache_key = self._cache_key_phone_number(phone_number)
@@ -159,8 +160,8 @@ class CosmosDbStore(IStore):
         if cached:
             try:
                 return CallStateModel.model_validate_json(cached)
-            except ValidationError as e:
-                logger.debug(f"Parsing error: {e.errors()}")
+            except ValidationError:
+                logger.debug("Parsing error", exc_info=True)
 
         # Try live
         call = None
@@ -179,12 +180,12 @@ class CosmosDbStore(IStore):
                 raw = await anext(items)
                 try:
                     call = CallStateModel.model_validate(raw)
-                except ValidationError as e:
-                    logger.debug(f"Parsing error: {e.errors()}")
+                except ValidationError:
+                    logger.debug("Parsing error", exc_info=True)
         except StopAsyncIteration:
             pass
-        except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB: {e}")
+        except CosmosHttpResponseError:
+            logger.error("Error accessing CosmosDB", exc_info=True)
 
         # Update cache
         if call:
@@ -197,7 +198,7 @@ class CosmosDbStore(IStore):
         count: int,
         phone_number: Optional[str] = None,
     ) -> tuple[Optional[list[CallStateModel]], int]:
-        logger.debug(f"Searching calls, for {phone_number} and count {count}")
+        logger.debug("Searching calls, for %s and count %s", phone_number, count)
         # TODO: Cache results
         calls, total = await asyncio.gather(
             self._call_asearch_all_calls_worker(count, phone_number),
@@ -236,10 +237,10 @@ class CosmosDbStore(IStore):
                         continue
                     try:
                         calls.append(CallStateModel.model_validate(raw))
-                    except ValidationError as e:
-                        logger.debug(f"Parsing error: {e.errors()}")
-        except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB: {e}")
+                    except ValidationError:
+                        logger.debug("Parsing error", exc_info=True)
+        except CosmosHttpResponseError:
+            logger.error("Error accessing CosmosDB", exc_info=True)
         return calls
 
     async def _call_asearch_all_total_worker(
@@ -263,8 +264,8 @@ class CosmosDbStore(IStore):
                     ],
                 )
                 total: int = await anext(items)  # type: ignore
-        except CosmosHttpResponseError as e:
-            logger.error(f"Error accessing CosmosDB: {e}")
+        except CosmosHttpResponseError:
+            logger.error("Error accessing CosmosDB", exc_info=True)
         return total if total else 0
 
     @asynccontextmanager

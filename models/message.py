@@ -6,10 +6,12 @@ from inspect import getmembers, isfunction
 from typing import Any, Optional, Union
 
 from json_repair import repair_json
-from openai.types.chat import (ChatCompletionAssistantMessageParam,
-                               ChatCompletionMessageToolCallParam,
-                               ChatCompletionToolMessageParam,
-                               ChatCompletionUserMessageParam)
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionMessageToolCallParam,
+    ChatCompletionToolMessageParam,
+    ChatCompletionUserMessageParam,
+)
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
 
@@ -78,7 +80,10 @@ class ToolModel(BaseModel):
         return self
 
     async def execute_function(self, plugins: object) -> None:
-        from helpers.logging import logger, tracer
+        from helpers.logging import (  # pylint: disable=import-outside-toplevel
+            logger,
+            tracer,
+        )
 
         json_str = self.function_arguments
         name = self.function_name
@@ -99,7 +104,10 @@ class ToolModel(BaseModel):
 
         if not isinstance(args, dict):
             logger.warning(
-                f"Error decoding JSON args for function {name}: {self.function_arguments[:20]}...{self.function_arguments[-20:]}"
+                "Error decoding JSON args for function %s: %s...%s",
+                name,
+                self.function_arguments[:20],
+                self.function_arguments[-20:],
             )
             self.content = f"Bad arguments, available are {ToolModel._available_function_names()}. Please try again."
             return
@@ -114,16 +122,22 @@ class ToolModel(BaseModel):
             try:
                 res = await getattr(plugins, name)(**args)
                 res_log = f"{res[:20]}...{res[-20:]}"
-                logger.info(f"Executing function {name} ({args}): {res_log}")
+                logger.info("Executing function %s (%s): %s", name, args, res_log)
             except TypeError as e:
                 logger.warning(
-                    f"Wrong arguments for function {name}: {args}. Error: {e}"
+                    "Wrong arguments for function %s: %s. Error: %s",
+                    name,
+                    args,
+                    e,
                 )
-                res = f"Wrong arguments, please fix them and try again."
+                res = "Wrong arguments, please fix them and try again."
                 res_log = res
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.warning(
-                    f"Error executing function {self.function_name} with args {args}: {e}"
+                    "Error executing function %s with args %s",
+                    self.function_name,
+                    args,
+                    exc_info=True,
                 )
                 res = f"Error: {e}."
                 res_log = res
@@ -132,7 +146,9 @@ class ToolModel(BaseModel):
 
     @staticmethod
     def _available_function_names() -> list[str]:
-        from helpers.llm_tools import LlmPlugins
+        from helpers.llm_tools import (  # pylint: disable=import-outside-toplevel
+            LlmPlugins,
+        )
 
         return [name for name, _ in getmembers(LlmPlugins, isfunction)]
 
@@ -148,6 +164,7 @@ class MessageModel(BaseModel):
     tool_calls: list[ToolModel] = []
 
     @field_validator("created_at")
+    @classmethod
     def _validate_created_at(cls, created_at: datetime) -> datetime:
         """
         Ensure the created_at field is timezone-aware.
@@ -178,7 +195,7 @@ class MessageModel(BaseModel):
                 )
             ]
 
-        elif self.persona == PersonaEnum.ASSISTANT:
+        if self.persona == PersonaEnum.ASSISTANT:
             if not self.tool_calls:
                 return [
                     ChatCompletionAssistantMessageParam(

@@ -22,7 +22,8 @@ class MemoryCache(ICache):
 
     def __init__(self, config: MemoryModel):
         logger.warning(
-            f"Using memory cache with {config.max_size} size limit, memory usage can be high, prefer an external cache like Redis"
+            "Using memory cache with %s size limit, memory usage can be high, prefer an external cache like Redis",
+            config.max_size,
         )
         self._config = config
 

@@ -6,16 +6,26 @@ from typing import Optional
 
 import pytest
 from deepeval import assert_test
-from deepeval.metrics import (AnswerRelevancyMetric, BaseMetric, BiasMetric,
-                              ContextualRelevancyMetric, ToxicityMetric)
+from deepeval.metrics import (
+    AnswerRelevancyMetric,
+    BaseMetric,
+    BiasMetric,
+    ContextualRelevancyMetric,
+    ToxicityMetric,
+)
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume
+from pytest import assume  # pylint: disable=no-name-in-module
 
-from helpers.call_events import (on_call_connected, on_call_disconnected,
-                                 on_end_call, on_ivr_recognized,
-                                 on_play_completed, on_speech_recognized)
+from helpers.call_events import (
+    on_call_connected,
+    on_call_disconnected,
+    on_end_call,
+    on_ivr_recognized,
+    on_play_completed,
+    on_speech_recognized,
+)
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.reminder import ReminderModel
@@ -39,6 +49,13 @@ class ClaimRelevancyMetric(BaseMetric):
         self.model = model
         self.threshold = threshold
 
+    def measure(
+        self,
+        *args,
+        **kwargs,
+    ):
+        raise NotImplementedError("Use a_measure instead")
+
     async def a_measure(
         self,
         test_case: LLMTestCase,
@@ -48,7 +65,7 @@ class ClaimRelevancyMetric(BaseMetric):
         assert test_case.input
         # Extract claim data
         extracts = await self._extract_claim_theory(test_case.input)
-        logger.info(f"Extracted claim data: {extracts}")
+        logger.info("Extracted claim data: %s", extracts)
         # Measure each claim in parallel
         scores = await asyncio.gather(
             *[
@@ -60,7 +77,7 @@ class ClaimRelevancyMetric(BaseMetric):
                 for key, value in extracts.items()
             ]
         )
-        logger.info(f"Claim scores: {scores}")
+        logger.info("Claim scores: %s", scores)
         # Score is the average
         self.score = sum(scores) / len(scores) if len(extracts) > 0 else 1
         # Test against the threshold
@@ -131,11 +148,11 @@ class ClaimRelevancyMetric(BaseMetric):
         )
         try:
             score = float(res)
-        except ValueError:
+        except ValueError as e:
             group = re.search(r"\d+\.\d+", res)
             if group:
                 return float(group.group())
-            raise ValueError(f"LLM response is not a number: {res}")
+            raise ValueError(f"LLM response is not a number: {res}") from e
         return score
 
     async def _extract_claim_theory(self, conversation: str) -> dict[str, str]:
@@ -219,14 +236,14 @@ async def test_llm(
     claim_tests_excl: list[str],
     deepeval_model: GPTModel,
     expected_output: str,
-    inputs: list[str],
+    speeches: list[str],
     lang: str,
 ) -> None:
     """
     Test the LLM with a mocked conversation against the expected output.
 
     Steps:
-    1. Run application with mocked inputs
+    1. Run application with mocked speeches
     2. Combine all outputs
     3. Test claim data exists
     4. Test LLM metrics
@@ -271,13 +288,13 @@ async def test_llm(
     )
 
     # Simulate conversation with speech recognition
-    for input in inputs:
+    for speech in speeches:
         # Respond
         await on_speech_recognized(
             call=call,
             client=automation_client,
             post_callback=_post_callback,
-            text=input,
+            text=speech,
             trainings_callback=_trainings_callback,
         )
         # Receip
@@ -299,18 +316,18 @@ async def test_llm(
 
     # Remove newlines for log comparison
     actual_output = _remove_newlines(actual_output)
-    full_input = _remove_newlines(" ".join(inputs))
+    full_speech = _remove_newlines(" ".join(speeches))
 
     # Log for dev review
-    logger.info(f"actual_output: {actual_output}")
-    logger.info(f"claim: {call.claim}")
-    logger.info(f"full_input: {full_input}")
+    logger.info("actual_output: %s", actual_output)
+    logger.info("claim: %s", call.claim)
+    logger.info("full_speech: %s", full_speech)
 
     # Configure LLM tests
     test_case = LLMTestCase(
         actual_output=actual_output,
         expected_output=expected_output,
-        input=full_input,
+        input=full_speech,
         retrieval_context=[
             json.dumps(call.claim),
             TypeAdapter(list[ReminderModel]).dump_json(call.reminders).decode(),

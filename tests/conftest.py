@@ -8,10 +8,11 @@ from typing import Any, Callable, Optional, Union
 import pytest
 import yaml
 from _pytest.mark.structures import MarkDecorator
-from azure.communication.callautomation import (FileSource, SsmlSource,
-                                                TextSource)
-from azure.communication.callautomation.aio import (CallAutomationClient,
-                                                    CallConnectionClient)
+from azure.communication.callautomation import FileSource, SsmlSource, TextSource
+from azure.communication.callautomation.aio import (
+    CallAutomationClient,
+    CallConnectionClient,
+)
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
 from langchain_core.language_models import BaseChatModel
@@ -45,8 +46,8 @@ class CallConnectionClientMock(CallConnectionClient):
     async def start_recognizing_media(
         self,
         play_prompt: Union[FileSource, TextSource, SsmlSource],
-        operation_context: Optional[str] = None,
         *args,
+        operation_context: Optional[str] = None,
         **kwargs,
     ) -> None:
         contexts = _str_to_contexts(operation_context)
@@ -57,8 +58,8 @@ class CallConnectionClientMock(CallConnectionClient):
     async def play_media(
         self,
         play_source: Union[FileSource, TextSource, SsmlSource],
-        operation_context: Optional[str] = None,
         *args,
+        operation_context: Optional[str] = None,
         **kwargs,
     ) -> None:
         contexts = _str_to_contexts(operation_context)
@@ -198,7 +199,9 @@ class DeepEvalAzureOpenAI(GPTModel):
         return True
 
     def _cache_key(self, prompt: str) -> str:
-        llm_string = self._model._get_llm_string(input=prompt)
+        llm_string = self._model._get_llm_string(
+            input=prompt
+        )  # pylint: disable=protected-access
         llm_hash = hashlib.sha256(llm_string.encode(), usedforsecurity=False).digest()
         return f"call-center-ai/{llm_hash}"
 
@@ -207,7 +210,7 @@ class Conversation(BaseModel):
     claim_tests_excl: list[str] = []
     expected_output: str
     id: str
-    inputs: list[str]
+    speeches: list[str]
     lang: str
 
 
@@ -218,8 +221,8 @@ def with_conversations(fn=None) -> MarkDecorator:
     for conv in file.get("conversations", []):
         try:
             conversations.append(Conversation.model_validate(conv))
-        except ValidationError as e:
-            logger.error(f"Failed to parse conversation: {e.errors()}")
+        except ValidationError:
+            logger.error("Failed to parse conversation", exc_info=True)
     print(f"Loaded {len(conversations)} conversations")
     keys = sorted(Conversation.model_fields.keys() - {"id"})
     values = [

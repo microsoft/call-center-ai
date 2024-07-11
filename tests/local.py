@@ -1,15 +1,13 @@
-# Mock environment variables
-from os import environ
-
-environ["PUBLIC_DOMAIN"] = "dummy"
-
-
 import asyncio
 
-from helpers.call_events import (on_call_connected, on_call_disconnected,
-                                 on_end_call, on_ivr_recognized,
-                                 on_play_completed, on_speech_recognized)
-# General imports
+from helpers.call_events import (
+    on_call_connected,
+    on_call_disconnected,
+    on_end_call,
+    on_ivr_recognized,
+    on_play_completed,
+    on_speech_recognized,
+)
 from helpers.config import CONFIG
 from helpers.logging import logger
 from models.call import CallInitiateModel, CallStateModel
@@ -20,7 +18,7 @@ async def main() -> None:
     continue_conversation = True
 
     def _play_media_callback(text: str) -> None:
-        logger.info(f"🤖 {text}")
+        logger.info("🤖 %s", text)
 
     def _hang_up_callback() -> None:
         nonlocal continue_conversation

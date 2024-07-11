@@ -1,4 +1,4 @@
-from pydantic import BaseModel, SecretStr, computed_field
+from pydantic import BaseModel, SecretStr
 
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 

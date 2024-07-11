@@ -16,7 +16,7 @@ class TwilioSms(ISms):
     _config: TwilioModel
 
     def __init__(self, config: TwilioModel):
-        logger.info(f"Using Twilio from number {config.phone_number}")
+        logger.info("Using Twilio from number %s", config.phone_number)
         self._config = config
 
     async def areadiness(self) -> ReadinessEnum:
@@ -34,14 +34,14 @@ class TwilioSms(ISms):
             return ReadinessEnum.OK
         except AssertionError:
             logger.error("Readiness test failed", exc_info=True)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.error("Unknown error while checking Twilio readiness", exc_info=True)
         return ReadinessEnum.FAIL
 
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
-        logger.info(f"Sending SMS to {phone_number}")
+        logger.info("Sending SMS to %s", phone_number)
         success = False
-        logger.info(f"SMS content: {content}")
+        logger.info("SMS content: %s", content)
         client = await self._use_client()
         try:
             res = await client.messages.create_async(
@@ -52,15 +52,16 @@ class TwilioSms(ISms):
             # TODO: How to check the delivery status? Seems present in "res.status" but not documented
             if res.error_message:
                 logger.warning(
-                    f"Failed SMS to {phone_number}, status {res.error_code}, error {res.error_message}"
+                    "Failed SMS to %s, status %s, error %s",
+                    phone_number,
+                    res.error_code,
+                    res.error_message,
                 )
             else:
-                logger.debug(f"SMS sent to {phone_number}")
+                logger.debug("SMS sent to %s", phone_number)
                 success = True
-        except TwilioRestException as e:
-            logger.error(f"Error sending SMS: {e}")
-        except Exception:
-            logger.warning(f"Failed SMS to {phone_number}", exc_info=True)
+        except TwilioRestException:
+            logger.error("Error sending SMS to %s", phone_number, exc_info=True)
         return success
 
     async def _use_client(self) -> Client:

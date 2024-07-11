@@ -197,9 +197,9 @@ def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseMo
 def _field_to_pydantic(
     field: ClaimFieldModel,
 ) -> Union[Annotated[Any, ...], tuple[type, FieldInfo]]:
-    type = _type_to_pydantic(field.type)
+    field_type = _type_to_pydantic(field.type)
     return (
-        Optional[type],
+        Optional[field_type],
         Field(
             default=None,
             description=field.description,
@@ -212,11 +212,10 @@ def _type_to_pydantic(
 ) -> Union[type, Annotated[Any, ...]]:
     if data == ClaimTypeEnum.DATETIME:
         return datetime
-    elif data == ClaimTypeEnum.EMAIL:
+    if data == ClaimTypeEnum.EMAIL:
         return EmailStr
-    elif data == ClaimTypeEnum.PHONE_NUMBER:
+    if data == ClaimTypeEnum.PHONE_NUMBER:
         return PhoneNumber
-    elif data == ClaimTypeEnum.TEXT:
+    if data == ClaimTypeEnum.TEXT:
         return str
-    else:
-        raise ValueError(f"Unsupported data: {data}")
+    raise ValueError(f"Unsupported data: {data}")

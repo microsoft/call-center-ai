@@ -1,6 +1,5 @@
 import asyncio
 import re
-from typing import Optional
 
 import pytest
 from deepeval import assert_test
@@ -8,13 +7,12 @@ from deepeval.metrics import BaseMetric
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume
+from pytest import assume  # pylint: disable=no-name-in-module
 
 from helpers.config import CONFIG
 from helpers.logging import logger
 from models.call import CallStateModel
-from models.message import MessageModel
-from models.message import PersonaEnum as MessagePersonaEnum
+from models.message import MessageModel, PersonaEnum as MessagePersonaEnum
 from models.training import TrainingModel
 from tests.conftest import with_conversations
 
@@ -31,6 +29,13 @@ class RagRelevancyMetric(BaseMetric):
         self.threshold = threshold
         self.model = model
 
+    def measure(
+        self,
+        *args,
+        **kwargs,
+    ):
+        raise NotImplementedError("Use a_measure instead")
+
     async def a_measure(
         self,
         test_case: LLMTestCase,
@@ -46,7 +51,7 @@ class RagRelevancyMetric(BaseMetric):
                 for document in test_case.retrieval_context
             ]
         )
-        logger.info(f"Scores: {scores}")
+        logger.info("Scores: %s", scores)
         # Res 1 is weighted 1, res 2 is weighted 0.5, res 3 is weighted 0.33, ...
         weights = [score / i for i, score in enumerate(scores, start=1)]
         # Score is the weighted average, top 1 result should be the most important
@@ -98,11 +103,11 @@ class RagRelevancyMetric(BaseMetric):
         )
         try:
             score = float(res)
-        except ValueError:
+        except ValueError as e:
             group = re.search(r"\d+\.\d+", res)
             if group:
                 return float(group.group())
-            raise ValueError(f"LLM response is not a number: {res}")
+            raise ValueError(f"LLM response is not a number: {res}") from e
         return score
 
     def is_successful(self) -> bool:
@@ -122,7 +127,7 @@ async def test_relevancy(
     claim_tests_incl: list[str],
     deepeval_model: GPTModel,
     expected_output: str,
-    inputs: list[str],
+    speeches: list[str],
     lang: str,
 ) -> None:
     """
@@ -139,10 +144,10 @@ async def test_relevancy(
     call.lang = lang
 
     # Fill call with messages
-    for input in inputs:
+    for speech in speeches:
         call.messages.append(
             MessageModel(
-                content=input,
+                content=speech,
                 persona=MessagePersonaEnum.HUMAN,
             )
         )
@@ -150,8 +155,8 @@ async def test_relevancy(
     # Get trainings
     trainings = await call.trainings(cache_only=False)
 
-    logger.info(f"Messages: {call.messages}")
-    logger.info(f"Trainings: {trainings}")
+    logger.info("Messages: %s", call.messages)
+    logger.info("Trainings: %s", trainings)
 
     if not trainings:
         logger.warning("No training data found, please add objects in AI Search")
@@ -177,10 +182,10 @@ async def test_relevancy(
         )
 
     # Configure LLM tests
-    full_input = " ".join([message.content for message in call.messages])
+    full_speech = " ".join([message.content for message in call.messages])
     test_case = LLMTestCase(
         actual_output="",  # Not used
-        input=full_input,
+        input=full_speech,
         retrieval_context=[
             TypeAdapter(TrainingModel)
             .dump_json(training, exclude=TrainingModel.excluded_fields_for_llm())
@@ -193,7 +198,7 @@ async def test_relevancy(
     llm_metrics = [
         RagRelevancyMetric(
             threshold=0.5, model=deepeval_model
-        ),  # Compare input to the retrieval context
+        ),  # Compare speech to the retrieval context
     ]
 
     # Execute LLM tests

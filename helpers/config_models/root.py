@@ -5,8 +5,7 @@ from helpers.config_models.ai_search import AiSearchModel
 from helpers.config_models.ai_translation import AiTranslationModel
 from helpers.config_models.cache import CacheModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
-from helpers.config_models.communication_services import \
-    CommunicationServicesModel
+from helpers.config_models.communication_services import CommunicationServicesModel
 from helpers.config_models.conversation import ConversationModel
 from helpers.config_models.database import DatabaseModel
 from helpers.config_models.llm import LlmModel

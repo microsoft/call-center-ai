@@ -57,8 +57,9 @@ async def function_schema(
             f"'{k}'" for k in sorted(unannotated_with_default)
         ]
         logger.warning(
-            f"The following parameters of the function '{f.__name__}' with default values are not annotated: "
-            + f"{', '.join(unannotated_with_default_s)}."
+            "The following parameters of the function '%s' with default values are not annotated: %s.",
+            f.__name__,
+            ", ".join(unannotated_with_default_s),
         )
 
     if missing != set():
@@ -155,12 +156,10 @@ async def _parameter_json_schema(
             retval = value.__metadata__[0]
             if isinstance(retval, str):
                 return retval
-            else:
-                raise ValueError(
-                    f"Invalid description {retval} for parameter {name}, should be a string."
-                )
-        else:
-            return name
+            raise ValueError(
+                f"Invalid description {retval} for parameter {name}, should be a string."
+            )
+        return name
 
     schema = TypeAdapter(value).json_schema()
     if name in default_values:

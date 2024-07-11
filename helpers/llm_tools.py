@@ -8,16 +8,17 @@ from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
 from typing_extensions import TypedDict
 
-from helpers.call_utils import ContextEnum as CallContextEnum
-from helpers.call_utils import handle_play_text
+from helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
 from helpers.logging import logger
 from models.call import CallStateModel
-from models.message import ActionEnum as MessageActionEnum
-from models.message import MessageModel
-from models.message import PersonaEnum as MessagePersonaEnum
-from models.message import StyleEnum as MessageStyleEnum
+from models.message import (
+    ActionEnum as MessageActionEnum,
+    MessageModel,
+    PersonaEnum as MessagePersonaEnum,
+    StyleEnum as MessageStyleEnum,
+)
 from models.reminder import ReminderModel
 from models.training import TrainingModel
 
@@ -274,8 +275,8 @@ class LlmPlugins:
     def _update_claim_field(self, update: UpdateClaimDict) -> str:
         field = update["field"]
         new_value = update["value"]
+        old_value = self.call.claim.get(field, None)
         try:
-            old_value = self.call.claim.get(field, None)
             self.call.claim[field] = new_value
             CallStateModel.model_validate(self.call)  # Force a re-validation
             return f'Updated claim field "{field}" with value "{new_value}".'
@@ -420,7 +421,11 @@ class LlmPlugins:
         await self.tts_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
         logger.info(
-            f"Notifying {service}, location {location}, contact {contact}, reason {reason}"
+            "Notifying %s, location %s, contact %s, reason %s",
+            service,
+            location,
+            contact,
+            reason,
         )
         return f"Notifying {service} for {reason}"
 

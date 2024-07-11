@@ -1,16 +1,29 @@
 from typing import Optional
 
 from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import (HttpResponseError, ResourceNotFoundError,
-                                   ServiceRequestError, ServiceResponseError)
+from azure.core.exceptions import (
+    HttpResponseError,
+    ResourceNotFoundError,
+    ServiceRequestError,
+    ServiceResponseError,
+)
 from azure.search.documents.aio import SearchClient
-from azure.search.documents.models import (HybridCountAndFacetMode,
-                                           HybridSearch, QueryLanguage,
-                                           QueryType, ScoringStatistics,
-                                           SearchMode, VectorizableTextQuery)
+from azure.search.documents.models import (
+    HybridCountAndFacetMode,
+    HybridSearch,
+    QueryLanguage,
+    QueryType,
+    ScoringStatistics,
+    SearchMode,
+    VectorizableTextQuery,
+)
 from pydantic import TypeAdapter, ValidationError
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_random_exponential)
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.http import azure_transport
@@ -27,9 +40,10 @@ class AiSearchSearch(ISearch):
 
     def __init__(self, cache: ICache, config: AiSearchModel):
         super().__init__(cache)
-        logger.info(f"Using AI Search {config.endpoint} with index {config.index}")
+        logger.info("Using AI Search %s with index %s", config.endpoint, config.index)
         logger.info(
-            f"Note: At ~300 chars /doc, each LLM call will use approx {300 * config.top_n_documents * config.expansion_n_messages / 4} tokens (without tools)"
+            "Note: At ~300 chars /doc, each LLM call will use approx %d tokens (without tools)",
+            300 * config.top_n_documents * config.expansion_n_messages / 4,
         )
         self._config = config
 
@@ -45,7 +59,7 @@ class AiSearchSearch(ISearch):
             logger.error("Error requesting AI Search", exc_info=True)
         except ServiceRequestError:
             logger.error("Error connecting to AI Search", exc_info=True)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.error(
                 "Unknown error while checking AI Search readiness", exc_info=True
             )
@@ -63,7 +77,7 @@ class AiSearchSearch(ISearch):
         text: str,
         cache_only: bool = False,
     ) -> Optional[list[TrainingModel]]:
-        logger.debug(f'Searching training data for "{text}"')
+        logger.debug('Searching training data for "%s"', text)
         if not text:
             return None
 
@@ -74,7 +88,7 @@ class AiSearchSearch(ISearch):
             try:
                 return TypeAdapter(list[TrainingModel]).validate_json(cached)
             except ValidationError as e:
-                logger.debug(f"Parsing error: {e.errors()}")
+                logger.debug("Parsing error: %s", e.errors())
 
         if cache_only:
             return None
@@ -125,13 +139,13 @@ class AiSearchSearch(ISearch):
                             )
                         )
                     except ValidationError as e:
-                        logger.debug(f"Parsing error: {e.errors()}")
+                        logger.debug("Parsing error: %s", e.errors())
         except ResourceNotFoundError as e:
-            logger.warning(f'AI Search index "{self._config.index}" not found')
+            logger.warning('AI Search index "%s" not found', self._config.index)
         except HttpResponseError as e:
-            logger.error(f"Error requesting AI Search: {e}")
+            logger.error("Error requesting AI Search: %s", e)
         except ServiceRequestError as e:
-            logger.error(f"Error connecting to AI Search: {e}")
+            logger.error("Error connecting to AI Search: %s", e)
 
         # Update cache
         if trainings:
