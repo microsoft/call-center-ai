@@ -47,23 +47,32 @@ class ContextEnum(str, Enum):
     TRANSFER_FAILED = "transfer_failed"  # Transfer failed
 
 
-def tts_sentence_split(text: str, include_last: bool) -> Generator[str, None, None]:
+def tts_sentence_split(
+    text: str, include_last: bool
+) -> Generator[tuple[str, int], None, None]:
     """
     Split a text into sentences.
+
+    Returns a generator of tuples with the sentence and the original sentence length.
     """
     # Split by sentence by punctuation
     splits = re.split(_SENTENCE_PUNCTUATION_R, text)
     for i, split in enumerate(splits):
-        split = split.strip()  # Remove leading/trailing spaces
         if i % 2 == 1:  # Skip punctuation
             continue
-        if not split:  # Skip empty lines
+        if not split.strip():  # Skip empty lines
             continue
         if i == len(splits) - 1:  # Skip last line in case of missing punctuation
             if include_last:
-                yield split
+                yield (
+                    split.strip(),
+                    len(split),
+                )
         else:  # Add punctuation back
-            yield "%s%s" % (split, splits[i + 1].strip())
+            yield (
+                "%s %s" % (split.strip(), splits[i + 1].strip()),
+                len(split) + len(splits[i + 1]),
+            )
 
 
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
@@ -304,7 +313,7 @@ async def _chunk_before_tts(
     # Split text in chunks of max 400 characters, separated by sentence
     chunks = []
     chunk = ""
-    for to_add in tts_sentence_split(text, True):
+    for to_add, _ in tts_sentence_split(text, True):
         if len(chunk) + len(to_add) >= 400:
             chunks.append(chunk.strip())  # Remove trailing space
             chunk = ""

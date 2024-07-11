@@ -318,10 +318,10 @@ async def _execute_llm_chat(
             else:
                 # Store whole content
                 content_full += delta.content
-                for sentence in tts_sentence_split(
+                for sentence, length in tts_sentence_split(
                     content_full[content_buffer_pointer:], False
                 ):
-                    content_buffer_pointer += len(sentence)
+                    content_buffer_pointer += length
                     plugins.style = await _content_callback(sentence, plugins.style)
     except MaximumTokensReachedError:  # Retry on maximum tokens reached
         logger.warning("Maximum tokens reached for this completion, retry asked")
