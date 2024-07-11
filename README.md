@@ -312,7 +312,7 @@ Place a file called `config.yaml` in the root of the project with the following 
 ```yaml
 # config.yaml
 resources:
-  public_url: "https://xxx.blob.core.windows.net/public"
+  public_url: https://xxx.blob.core.windows.net/public
 
 conversation:
   initiate:
@@ -443,14 +443,14 @@ See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai
 conversation:
   initiate:
     lang:
-      default_short_code: "fr-FR"
+      default_short_code: fr-FR
       availables:
         - pronunciations_en: ["French", "FR", "France"]
-          short_code: "fr-FR"
-          voice: "fr-FR-DeniseNeural"
+          short_code: fr-FR
+          voice: fr-FR-DeniseNeural
         - pronunciations_en: ["Chinese", "ZH", "China"]
-          short_code: "zh-CN"
-          voice: "zh-CN-XiaoqiuNeural"
+          short_code: zh-CN
+          voice: zh-CN-XiaoqiuNeural
 ```
 
 If you built and deployed an [Azure Speech Custom Neural Voice (CNV)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/custom-neural-voice), add field `custom_voice_endpoint_id` on the language configuration:
@@ -529,7 +529,8 @@ Default task, for inbound calls, is defined in the configuration:
 
 conversation:
   initiate:
-    task: "Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered."
+    task: |
+      Help the customer with their insurance claim. Assistant requires data from the customer to fill the claim. The latest claim data will be given. Assistant role is not over until all the relevant data is gathered.
 ```
 
 Task can be customized for each call, by adding the `task` field in the `POST /call` API call.
