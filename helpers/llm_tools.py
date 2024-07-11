@@ -1,9 +1,17 @@
+import asyncio
+from html import escape
+from inspect import getmembers, isfunction
+from typing import Annotated, Awaitable, Callable, Literal
+
 from azure.communication.callautomation.aio import CallAutomationClient
+from openai.types.chat import ChatCompletionToolParam
+from pydantic import ValidationError
+from typing_extensions import TypedDict
+
 from helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
 from helpers.config import CONFIG
 from helpers.llm_utils import function_schema
 from helpers.logging import logger
-from inspect import getmembers, isfunction
 from models.call import CallStateModel
 from models.message import (
     ActionEnum as MessageActionEnum,
@@ -11,15 +19,8 @@ from models.message import (
     PersonaEnum as MessagePersonaEnum,
     StyleEnum as MessageStyleEnum,
 )
-from html import escape
 from models.reminder import ReminderModel
 from models.training import TrainingModel
-from openai.types.chat import ChatCompletionToolParam
-from pydantic import ValidationError
-from typing import Awaitable, Callable, Annotated, Literal
-from typing_extensions import TypedDict
-import asyncio
-
 
 _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()
@@ -184,7 +185,7 @@ class LlmPlugins:
             if reminder.title == title:
                 try:
                     reminder.description = description
-                    reminder.due_date_time = due_date_time  # type: ignore
+                    reminder.due_date_time = due_date_time  # pyright: ignore
                     reminder.owner = owner
                     return f'Reminder "{title}" updated.'
                 except ValidationError as e:
@@ -194,7 +195,7 @@ class LlmPlugins:
         try:
             reminder = ReminderModel(
                 description=description,
-                due_date_time=due_date_time,  # type: ignore
+                due_date_time=due_date_time,  # pyright: ignore
                 owner=owner,
                 title=title,
             )
@@ -274,8 +275,8 @@ class LlmPlugins:
     def _update_claim_field(self, update: UpdateClaimDict) -> str:
         field = update["field"]
         new_value = update["value"]
+        old_value = self.call.claim.get(field, None)
         try:
-            old_value = self.call.claim.get(field, None)
             self.call.claim[field] = new_value
             CallStateModel.model_validate(self.call)  # Force a re-validation
             return f'Updated claim field "{field}" with value "{new_value}".'
@@ -420,7 +421,11 @@ class LlmPlugins:
         await self.tts_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
         logger.info(
-            f"Notifying {service}, location {location}, contact {contact}, reason {reason}"
+            "Notifying %s, location %s, contact %s, reason %s",
+            service,
+            location,
+            contact,
+            reason,
         )
         return f"Notifying {service} for {reason}"
 

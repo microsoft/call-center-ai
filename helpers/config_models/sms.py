@@ -1,10 +1,11 @@
 from enum import Enum
-from functools import cache
+from functools import lru_cache
+from typing import Optional
+
+from pydantic import BaseModel, SecretStr, ValidationInfo, field_validator
+
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from persistence.isms import ISms
-from persistence.istore import IStore
-from pydantic import field_validator, SecretStr, Field, BaseModel, ValidationInfo
-from typing import Optional
 
 
 class ModeEnum(str, Enum):
@@ -19,10 +20,12 @@ class CommunicationServiceModel(BaseModel, frozen=True):
     Model is purely empty to fit to the `ISms` interface and the "mode" enum code organization. As the Communication Services is also used as the only call interface, it is not necessary to duplicate the models.
     """
 
-    @cache
+    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
     def instance(self) -> ISms:
-        from persistence.communication_services import CommunicationServicesSms
-        from helpers.config import CONFIG
+        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from persistence.communication_services import (  # pylint: disable=import-outside-toplevel
+            CommunicationServicesSms,
+        )
 
         return CommunicationServicesSms(CONFIG.communication_services)
 
@@ -32,9 +35,11 @@ class TwilioModel(BaseModel, frozen=True):
     auth_token: SecretStr
     phone_number: PhoneNumber
 
-    @cache
+    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
     def instance(self) -> ISms:
-        from persistence.twilio import TwilioSms
+        from persistence.twilio import (  # pylint: disable=import-outside-toplevel
+            TwilioSms,
+        )
 
         return TwilioSms(self)
 
@@ -47,6 +52,7 @@ class SmsModel(BaseModel):
     twilio: Optional[TwilioModel] = None
 
     @field_validator("communication_services")
+    @classmethod
     def _validate_communication_services(
         cls,
         communication_services: Optional[CommunicationServiceModel],
@@ -60,6 +66,7 @@ class SmsModel(BaseModel):
         return communication_services
 
     @field_validator("twilio")
+    @classmethod
     def _validate_twilio(
         cls,
         twilio: Optional[TwilioModel],

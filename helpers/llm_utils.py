@@ -4,24 +4,18 @@ See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd
 """
 
 import inspect
-from helpers.logging import logger
-from typing import (
-    Any,
-    Callable,
-    ForwardRef,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from textwrap import dedent
+from typing import Any, Callable, ForwardRef, Tuple, TypeVar, Union
+
 from jinja2 import Environment
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import eval_type_lenient
 from pydantic.json_schema import JsonSchemaValue
-from textwrap import dedent
 from typing_extensions import Annotated
 
+from helpers.logging import logger
 
 T = TypeVar("T")
 _jinja = Environment(
@@ -63,8 +57,9 @@ async def function_schema(
             f"'{k}'" for k in sorted(unannotated_with_default)
         ]
         logger.warning(
-            f"The following parameters of the function '{f.__name__}' with default values are not annotated: "
-            + f"{', '.join(unannotated_with_default_s)}."
+            "The following parameters of the function '%s' with default values are not annotated: %s.",
+            f.__name__,
+            ", ".join(unannotated_with_default_s),
         )
 
     if missing != set():
@@ -161,12 +156,10 @@ async def _parameter_json_schema(
             retval = value.__metadata__[0]
             if isinstance(retval, str):
                 return retval
-            else:
-                raise ValueError(
-                    f"Invalid description {retval} for parameter {name}, should be a string."
-                )
-        else:
-            return name
+            raise ValueError(
+                f"Invalid description {retval} for parameter {name}, should be a string."
+            )
+        return name
 
     schema = TypeAdapter(value).json_schema()
     if name in default_values:

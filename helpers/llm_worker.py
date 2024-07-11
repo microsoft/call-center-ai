@@ -1,5 +1,9 @@
-from helpers.config import CONFIG
-from helpers.logging import logger, tracer
+import json
+from functools import lru_cache
+from os import environ
+from typing import AsyncGenerator, Callable, Optional, TypeVar, Union
+
+import tiktoken
 from openai import (
     APIConnectionError,
     APIResponseValidationError,
@@ -24,25 +28,23 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCall,
     ChoiceDeltaToolCallFunction,
 )
+from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from pydantic import BaseModel, ValidationError
 from tenacity import (
     AsyncRetrying,
+    retry,
     retry_any,
     retry_if_exception_type,
-    retry,
     stop_after_attempt,
     wait_random_exponential,
 )
-from functools import lru_cache
+
+from helpers.config import CONFIG
 from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
+from helpers.logging import logger
+from helpers.monitoring import tracer
 from helpers.resources import resources_dir
 from models.message import MessageModel
-from opentelemetry.instrumentation.openai import OpenAIInstrumentor
-from os import environ
-from typing import AsyncGenerator, Callable, Optional, TypeVar, Union
-import json
-import tiktoken
-
 
 environ["TRACELOOP_TRACE_CONTENT"] = str(
     True
@@ -53,10 +55,11 @@ OpenAIInstrumentor().instrument()  # Instrument OpenAI
 environ["TIKTOKEN_CACHE_DIR"] = resources_dir("tiktoken")
 
 logger.info(
-    f"Using LLM models {CONFIG.llm.selected(False).model} (slow) and {CONFIG.llm.selected(True).model} (fast)"
+    "Using LLM models %s (slow) and %s (fast)",
+    CONFIG.llm.selected(False).model,
+    CONFIG.llm.selected(True).model,
 )
 
-ModelType = TypeVar("ModelType", bound=BaseModel)
 T = TypeVar("T")
 
 
@@ -76,7 +79,7 @@ _retried_exceptions = [
 ]
 
 
-@tracer.start_as_current_span("completion_stream")
+@tracer.start_as_current_span("llm_completion_stream")
 async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
@@ -110,11 +113,12 @@ async def completion_stream(
                 ):
                     yield chunck
                 return
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
         logger.warning(
-            f"{e.__class__.__name__} error, trying with the other LLM backend"
+            "%s error, trying with the other LLM backend",
+            e.__class__.__name__,
         )
 
     # Then try more times with backup LLM
@@ -186,7 +190,7 @@ async def _completion_stream_worker(
                     raise SafetyCheckError(f"Issue detected in text: {delta.content}")
                 if choice.finish_reason == "length":
                     logger.warning(
-                        f"Maximum tokens reached {max_tokens}, should be fixed"
+                        "Maximum tokens reached %s, should be fixed", max_tokens
                     )
                     maximum_tokens_reached = True
                 if delta:
@@ -202,7 +206,7 @@ async def _completion_stream_worker(
                     f"Issue detected in generation: {choice.message.content}"
                 )
             if choice.finish_reason == "length":
-                logger.warning(f"Maximum tokens reached {max_tokens}, should be fixed")
+                logger.warning("Maximum tokens reached %s, should be fixed", max_tokens)
                 maximum_tokens_reached = True
             message = choice.message
             delta = ChoiceDelta(
@@ -224,7 +228,7 @@ async def _completion_stream_worker(
             yield delta
     except BadRequestError as e:
         if e.code == "content_filter":
-            raise SafetyCheckError("Issue detected in prompt")
+            raise SafetyCheckError("Issue detected in prompt") from e
         raise e
 
     if maximum_tokens_reached:
@@ -237,7 +241,7 @@ async def _completion_stream_worker(
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.8, max=8),
 )
-@tracer.start_as_current_span("completion_sync")
+@tracer.start_as_current_span("llm_completion_sync")
 async def completion_sync(
     res_type: type[T],
     system: list[ChatCompletionSystemMessageParam],
@@ -278,10 +282,11 @@ async def completion_sync(
     is_valid, validation_error, res_object = validation_callback(res_content)
     if not is_valid:  # Retry if validation failed
         if _retries_remaining == 0:
-            logger.error(f"LLM validation error: {validation_error}")
+            logger.error("LLM validation error: %s", validation_error)
             return None
         logger.warning(
-            f"LLM validation error, retrying ({_retries_remaining} retries left)"
+            "LLM validation error, retrying (%s retries left)",
+            _retries_remaining,
         )
         return await completion_sync(
             res_type=res_type,
@@ -331,6 +336,7 @@ async def _completion_sync_worker(
         ),  # Usage is async and long-lived, so stop after 10 attempts
         wait=wait_random_exponential(multiplier=0.8, max=8),
     )
+    choice = None
     async for attempt in retryed:
         with attempt:
             try:
@@ -344,7 +350,7 @@ async def _completion_sync_worker(
                 )
             except BadRequestError as e:
                 if e.code == "content_filter":
-                    raise SafetyCheckError("Issue detected in prompt")
+                    raise SafetyCheckError("Issue detected in prompt") from e
                 raise e
             choice = res.choices[0]
             if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
@@ -354,8 +360,7 @@ async def _completion_sync_worker(
             if choice.finish_reason == "length":
                 raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
 
-    content = choice.message.content
-    return content or None
+    return choice.message.content if choice else None
 
 
 def _limit_messages(
@@ -411,7 +416,7 @@ def _limit_messages(
         selected_messages += openai_message[::-1]
         tokens += new_tokens
 
-    logger.info(f"Using {counter}/{total} messages ({tokens} tokens) as context")
+    logger.info("Using %s/%s messages (%s tokens) as context", counter, total, tokens)
     return [
         *system,
         *selected_messages[::-1],
@@ -429,7 +434,7 @@ def _count_tokens(content: str, model: str) -> int:
         encoding_name = tiktoken.encoding_name_for_model(model)
     except KeyError:
         encoding_name = tiktoken.encoding_name_for_model("gpt-3.5")
-        logger.debug(f"Unknown model {model}, using {encoding_name} encoding")
+        logger.debug("Unknown model %s, using %s encoding", model, encoding_name)
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 

@@ -1,19 +1,21 @@
-from azure.core.exceptions import HttpResponseError
+import json
 from datetime import datetime
 from functools import cached_property
 from html import escape
 from logging import Logger
+from textwrap import dedent
+from typing import Optional
+
+from azure.core.exceptions import HttpResponseError
+from openai.types.chat import ChatCompletionSystemMessageParam
+from pydantic import BaseModel, TypeAdapter
+
 from models.call import CallStateModel
 from models.message import MessageModel
 from models.next import NextModel
 from models.reminder import ReminderModel
 from models.synthesis import SynthesisModel
 from models.training import TrainingModel
-from openai.types.chat import ChatCompletionSystemMessageParam
-from pydantic import TypeAdapter, BaseModel
-from textwrap import dedent
-from typing import Optional
-import json
 
 
 class SoundModel(BaseModel):
@@ -21,14 +23,14 @@ class SoundModel(BaseModel):
     ready_tpl: str = "{public_url}/ready.wav"
 
     def loading(self) -> str:
-        from helpers.config import CONFIG
+        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
 
         return self.loading_tpl.format(
             public_url=CONFIG.resources.public_url,
         )
 
     def ready(self) -> str:
-        from helpers.config import CONFIG
+        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
 
         return self.ready_tpl.format(
             public_url=CONFIG.resources.public_url,
@@ -318,7 +320,7 @@ class LlmModel(BaseModel):
     """
 
     def default_system(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG
+        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
 
         return self._format(
             self.default_system_tpl.format(
@@ -335,7 +337,7 @@ class LlmModel(BaseModel):
     def chat_system(
         self, call: CallStateModel, trainings: list[TrainingModel]
     ) -> list[ChatCompletionSystemMessageParam]:
-        from models.message import (
+        from models.message import (  # pylint: disable=import-outside-toplevel
             ActionEnum as MessageActionEnum,
             StyleEnum as MessageStyleEnum,
         )
@@ -463,7 +465,7 @@ class LlmModel(BaseModel):
             [line.strip() for line in formatted_prompt.splitlines()]
         )
 
-        self.logger.debug(f"Formatted prompt: {formatted_prompt}")
+        self.logger.debug("Formatted prompt: %s", formatted_prompt)
         return formatted_prompt
 
     def _messages(
@@ -479,12 +481,12 @@ class LlmModel(BaseModel):
                 role="system",
             ),
         ]
-        self.logger.debug(f"Messages: {messages}")
+        self.logger.debug("Messages: %s", messages)
         return messages
 
     @cached_property
     def logger(self) -> Logger:
-        from helpers.logging import logger
+        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
 
         return logger
 
@@ -549,7 +551,7 @@ class TtsModel(BaseModel):
         return await self._translate(self.timeout_silence_tpl, call)
 
     async def welcome_back(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG
+        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
 
         return await self._translate(
             self.welcome_back_tpl,
@@ -587,7 +589,9 @@ class TtsModel(BaseModel):
 
         If the translation fails, the initial prompt is returned.
         """
-        from helpers.translation import translate_text
+        from helpers.translation import (  # pylint: disable=import-outside-toplevel
+            translate_text,
+        )
 
         initial = self._return(prompt_tpl, **kwargs)
         translation = None
@@ -596,13 +600,13 @@ class TtsModel(BaseModel):
                 initial, self.tts_lang, call.lang.short_code
             )
         except HttpResponseError as e:
-            self.logger.warning(f"Failed to translate TTS prompt: {e}")
+            self.logger.warning("Failed to translate TTS prompt: %s", e)
             pass
         return translation or initial
 
     @cached_property
     def logger(self) -> Logger:
-        from helpers.logging import logger
+        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
 
         return logger
 

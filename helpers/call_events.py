@@ -1,23 +1,12 @@
+import asyncio
+from typing import Awaitable, Callable, Optional
+
 from azure.communication.callautomation import DtmfTone, RecognitionChoice
 from azure.communication.callautomation.aio import CallAutomationClient
+from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 from pydantic import ValidationError
-from helpers.config import CONFIG
-from helpers.logging import logger, tracer
-from typing import Awaitable, Callable, Optional
-from azure.core.exceptions import (
-    ClientAuthenticationError,
-    HttpResponseError,
-)
-from models.synthesis import SynthesisModel
-from models.call import CallStateModel
-from models.message import (
-    ActionEnum as MessageActionEnum,
-    extract_message_style,
-    MessageModel,
-    PersonaEnum as MessagePersonaEnum,
-    remove_message_action,
-    StyleEnum as MessageStyleEnum,
-)
+
+from helpers.call_llm import load_llm_chat
 from helpers.call_utils import (
     ContextEnum as CallContextEnum,
     handle_clear_queue,
@@ -27,11 +16,21 @@ from helpers.call_utils import (
     handle_recognize_text,
     handle_transfer,
 )
-from helpers.call_llm import load_llm_chat
+from helpers.config import CONFIG
 from helpers.llm_worker import completion_sync
+from helpers.logging import logger
+from helpers.monitoring import tracer
+from models.call import CallStateModel
+from models.message import (
+    ActionEnum as MessageActionEnum,
+    MessageModel,
+    PersonaEnum as MessagePersonaEnum,
+    StyleEnum as MessageStyleEnum,
+    extract_message_style,
+    remove_message_action,
+)
 from models.next import NextModel
-import asyncio
-
+from models.synthesis import SynthesisModel
 
 _sms = CONFIG.sms.instance()
 _db = CONFIG.database.instance()
@@ -44,7 +43,7 @@ async def on_new_call(
     incoming_context: str,
     phone_number: str,
 ) -> bool:
-    logger.debug(f"Incoming call handler caller ID: {phone_number}")
+    logger.debug("Incoming call handler caller ID: %s", phone_number)
 
     try:
         answer_call_result = await client.answer_call(
@@ -53,11 +52,13 @@ async def on_new_call(
             incoming_call_context=incoming_context,
         )
         logger.info(
-            f"Answered call with {phone_number} ({answer_call_result.call_connection_id})"
+            "Answered call with %s (%s)",
+            phone_number,
+            answer_call_result.call_connection_id,
         )
         return True
 
-    except ClientAuthenticationError as e:
+    except ClientAuthenticationError:
         logger.error(
             "Authentication error with Communication Services, check the credentials",
             exc_info=True,
@@ -68,7 +69,9 @@ async def on_new_call(
             logger.debug("Old call event received, ignoring")
         else:
             logger.error(
-                f"Unknown error answering call with {phone_number}", exc_info=True
+                "Unknown error answering call with %s",
+                phone_number,
+                exc_info=True,
             )
 
     return False
@@ -120,7 +123,7 @@ async def on_speech_recognized(
     text: str,
     trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
-    logger.info(f"Voice recognition: {text}")
+    logger.info("Voice recognition: %s", text)
     call.messages.append(
         MessageModel(
             content=text,
@@ -157,7 +160,9 @@ async def on_recognize_timeout_error(
         if call.recognition_retry < CONFIG.conversation.voice_recognition_retry_max:
             call.recognition_retry += 1
             logger.info(
-                f"Timeout, retrying language selection ({call.recognition_retry}/{CONFIG.conversation.voice_recognition_retry_max})"
+                "Timeout, retrying language selection (%s/%s)",
+                call.recognition_retry,
+                CONFIG.conversation.voice_recognition_retry_max,
             )
             await _handle_ivr_language(call=call, client=client)
         else:  # IVR retries are exhausted, end call
@@ -181,7 +186,9 @@ async def on_recognize_timeout_error(
     # Retry voice recognition
     call.recognition_retry += 1
     logger.info(
-        f"Timeout, retrying voice recognition ({call.recognition_retry}/{CONFIG.conversation.voice_recognition_retry_max})"
+        "Timeout, retrying voice recognition (%s/%s)",
+        call.recognition_retry,
+        CONFIG.conversation.voice_recognition_retry_max,
     )
     await handle_recognize_text(
         call=call,
@@ -215,7 +222,8 @@ async def on_recognize_unknown_error(
         logger.warning("Failed to play prompt")
     else:
         logger.warning(
-            f"Recognition failed with unknown error code {error_code}, answering with default error"
+            "Recognition failed with unknown error code %s, answering with default error",
+            error_code,
         )
     await handle_recognize_text(
         call=call,
@@ -273,7 +281,7 @@ async def on_play_error(error_code: int) -> None:
     elif error_code == 9999:  # Unknown
         logger.warning("Error during media play, unknown internal server error")
     else:
-        logger.warning(f"Error during media play, unknown error code {error_code}")
+        logger.warning("Error during media play, unknown error code %s", error_code)
 
 
 @tracer.start_as_current_span("on_ivr_recognized")
@@ -291,10 +299,10 @@ async def on_ivr_recognized(
             call.initiate.lang.default_lang,
         )
     except ValueError:
-        logger.warning(f"Unknown IVR {label}, code not implemented")
+        logger.warning("Unknown IVR %s, code not implemented", label)
         return
 
-    logger.info(f"Setting call language to {lang}")
+    logger.info("Setting call language to %s", lang)
     call.lang = lang.short_code
     persist_coro = _db.call_aset(call)
 
@@ -344,7 +352,7 @@ async def on_transfer_error(
     client: CallAutomationClient,
     error_code: int,
 ) -> None:
-    logger.info(f"Error during call transfer, subCode {error_code}")
+    logger.info("Error during call transfer, subCode %s", error_code)
     await handle_recognize_text(
         call=call,
         client=client,
@@ -362,7 +370,7 @@ async def on_sms_received(
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> bool:
-    logger.info(f"SMS received from {call.initiate.phone_number}: {message}")
+    logger.info("SMS received from %s: %s", call.initiate.phone_number, message)
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.SMS,
@@ -448,7 +456,7 @@ async def _intelligence_sms(call: CallStateModel) -> None:
     if not content:
         logger.warning("Error generating SMS report")
         return
-    logger.info(f"SMS report: {content}")
+    logger.info("SMS report: %s", content)
 
     # Send the SMS to both the current caller and the policyholder
     success = False
@@ -459,7 +467,7 @@ async def _intelligence_sms(call: CallStateModel) -> None:
             continue
         res = await _sms.asend(content, number)
         if not res:
-            logger.warning(f"Failed sending SMS report to {number}")
+            logger.warning("Failed sending SMS report to %s", number)
             continue
         success = True
 
@@ -490,19 +498,19 @@ async def _intelligence_synthesis(call: CallStateModel) -> None:
         except ValidationError as e:
             return False, str(e), None
 
-    synthesis = await completion_sync(
+    model = await completion_sync(
         res_type=SynthesisModel,
         system=CONFIG.prompts.llm.synthesis_system(call),
         validate_json=True,
         validation_callback=_validate,
     )
 
-    if not synthesis:
+    if not model:
         logger.warning("Error generating synthesis")
         return
 
-    logger.info(f"Synthesis: {synthesis}")
-    call.synthesis = synthesis
+    logger.info("Synthesis: %s", model)
+    call.synthesis = model
     await _db.call_aset(call)
 
 
@@ -522,19 +530,19 @@ async def _intelligence_next(call: CallStateModel) -> None:
         except ValidationError as e:
             return False, str(e), None
 
-    next = await completion_sync(
+    model = await completion_sync(
         res_type=NextModel,
         system=CONFIG.prompts.llm.next_system(call),
         validate_json=True,
         validation_callback=_validate,
     )
 
-    if not next:
+    if not model:
         logger.warning("Error generating next action")
         return
 
-    logger.info(f"Next action: {next}")
-    call.next = next
+    logger.info("Next action: %s", model)
+    call.next = model
     await _db.call_aset(call)
 
 

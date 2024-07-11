@@ -1,9 +1,11 @@
 from datetime import datetime
+from typing import Annotated, Any, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, create_model
+from pydantic.fields import FieldInfo
+
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.claim import ClaimFieldModel, ClaimTypeEnum
-from pydantic import BaseModel, EmailStr, Field, create_model, ConfigDict
-from pydantic.fields import FieldInfo
-from typing import Annotated, Any, Optional, Union
 
 
 class LanguageEntryModel(BaseModel):
@@ -13,6 +15,7 @@ class LanguageEntryModel(BaseModel):
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages
     """
 
+    custom_voice_endpoint_id: Optional[str] = None
     pronunciations_en: list[str]
     short_code: str
     voice: str
@@ -185,7 +188,7 @@ def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseMo
     field_definitions = {field.name: _field_to_pydantic(field) for field in fields}
     return create_model(
         name,
-        **field_definitions,  # type: ignore
+        **field_definitions,  # pyright: ignore
         __config__=ConfigDict(
             extra="ignore",  # Avoid validation errors, just ignore data
         ),
@@ -195,9 +198,9 @@ def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseMo
 def _field_to_pydantic(
     field: ClaimFieldModel,
 ) -> Union[Annotated[Any, ...], tuple[type, FieldInfo]]:
-    type = _type_to_pydantic(field.type)
+    field_type = _type_to_pydantic(field.type)
     return (
-        Optional[type],
+        Optional[field_type],
         Field(
             default=None,
             description=field.description,
@@ -210,11 +213,10 @@ def _type_to_pydantic(
 ) -> Union[type, Annotated[Any, ...]]:
     if data == ClaimTypeEnum.DATETIME:
         return datetime
-    elif data == ClaimTypeEnum.EMAIL:
+    if data == ClaimTypeEnum.EMAIL:
         return EmailStr
-    elif data == ClaimTypeEnum.PHONE_NUMBER:
+    if data == ClaimTypeEnum.PHONE_NUMBER:
         return PhoneNumber
-    elif data == ClaimTypeEnum.TEXT:
+    if data == ClaimTypeEnum.TEXT:
         return str
-    else:
-        raise ValueError(f"Unsupported data: {data}")
+    raise ValueError(f"Unsupported data: {data}")

@@ -1,31 +1,30 @@
-from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
-from deepeval.models.gpt_model import GPTModel
-from helpers.config import CONFIG
-from helpers.logging import logger
-from langchain_core.language_models import BaseChatModel
-from langchain_openai import AzureChatOpenAI
-from models.call import CallStateModel, CallInitiateModel
-from textwrap import dedent
-from typing import Any, Callable, Optional, Union
 import hashlib
-import pytest
 import random
 import string
 import xml.etree.ElementTree as ET
-from azure.communication.callautomation import (
-    FileSource,
-    SsmlSource,
-    TextSource,
-)
+from textwrap import dedent
+from typing import Any, Callable, Optional, Union
+
+import pytest
+import yaml
+from _pytest.mark.structures import MarkDecorator
+from azure.communication.callautomation import FileSource, SsmlSource, TextSource
+from azure.communication.callautomation._models import TransferCallResult
 from azure.communication.callautomation.aio import (
     CallAutomationClient,
     CallConnectionClient,
 )
-from _pytest.mark.structures import MarkDecorator
+from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
+from deepeval.models.gpt_model import GPTModel
+from langchain_core.language_models import BaseChatModel
+from langchain_openai import AzureChatOpenAI
+from pydantic import BaseModel, ValidationError
+
 from function_app import _str_to_contexts
 from helpers.call_utils import ContextEnum as CallContextEnum
-from pydantic import BaseModel, ValidationError
-import yaml
+from helpers.config import CONFIG
+from helpers.logging import logger
+from models.call import CallInitiateModel, CallStateModel
 
 
 class CallConnectionClientMock(CallConnectionClient):
@@ -48,8 +47,8 @@ class CallConnectionClientMock(CallConnectionClient):
     async def start_recognizing_media(
         self,
         play_prompt: Union[FileSource, TextSource, SsmlSource],
-        operation_context: Optional[str] = None,
         *args,
+        operation_context: Optional[str] = None,
         **kwargs,
     ) -> None:
         contexts = _str_to_contexts(operation_context)
@@ -60,8 +59,8 @@ class CallConnectionClientMock(CallConnectionClient):
     async def play_media(
         self,
         play_source: Union[FileSource, TextSource, SsmlSource],
-        operation_context: Optional[str] = None,
         *args,
+        operation_context: Optional[str] = None,
         **kwargs,
     ) -> None:
         contexts = _str_to_contexts(operation_context)
@@ -73,8 +72,9 @@ class CallConnectionClientMock(CallConnectionClient):
         self,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> TransferCallResult:
         self._transfer_callback()
+        return TransferCallResult()
 
     async def hang_up(
         self,
@@ -128,7 +128,7 @@ class CallAutomationClientMock(CallAutomationClient):
 class DeepEvalAzureOpenAI(GPTModel):
     _cache: pytest.Cache
     _langchain_kwargs: dict[str, Any]
-    _model: BaseChatModel
+    _model: AzureChatOpenAI
 
     def __init__(
         self,
@@ -150,7 +150,9 @@ class DeepEvalAzureOpenAI(GPTModel):
             "azure_endpoint": platform.endpoint,
             "model": platform.model,
             # Authentication, either RBAC or API
-            "api_key": platform.api_key.get_secret_value() if platform.api_key else None,  # type: ignore
+            "api_key": (
+                platform.api_key.get_secret_value() if platform.api_key else None
+            ),  # pyright: ignore
             "azure_ad_token_provider": (
                 get_bearer_token_provider(
                     ManagedIdentityCredential(),
@@ -194,14 +196,16 @@ class DeepEvalAzureOpenAI(GPTModel):
     def get_model_name(self) -> str:
         return "Azure OpenAI"
 
-    def load_model(self) -> BaseChatModel:
+    def load_model(self) -> AzureChatOpenAI:
         return self._model
 
     def should_use_azure_openai(self) -> bool:
         return True
 
     def _cache_key(self, prompt: str) -> str:
-        llm_string = self._model._get_llm_string(input=prompt)
+        llm_string = self._model._get_llm_string(
+            input=prompt
+        )  # pylint: disable=protected-access
         llm_hash = hashlib.sha256(llm_string.encode(), usedforsecurity=False).digest()
         return f"call-center-ai/{llm_hash}"
 
@@ -210,7 +214,7 @@ class Conversation(BaseModel):
     claim_tests_excl: list[str] = []
     expected_output: str
     id: str
-    inputs: list[str]
+    speeches: list[str]
     lang: str
 
 
@@ -221,8 +225,8 @@ def with_conversations(fn=None) -> MarkDecorator:
     for conv in file.get("conversations", []):
         try:
             conversations.append(Conversation.model_validate(conv))
-        except ValidationError as e:
-            logger.error(f"Failed to parse conversation: {e.errors()}")
+        except ValidationError:
+            logger.error("Failed to parse conversation", exc_info=True)
     print(f"Loaded {len(conversations)} conversations")
     keys = sorted(Conversation.model_fields.keys() - {"id"})
     values = [
@@ -249,7 +253,7 @@ def call() -> CallStateModel:
     call = CallStateModel(
         initiate=CallInitiateModel(
             **CONFIG.conversation.initiate.model_dump(),
-            phone_number="+33612345678",  # type: ignore
+            phone_number="+33612345678",  # pyright: ignore
         ),
         voice_id="dummy",
     )

@@ -1,18 +1,11 @@
-# Load "CONFIG_JSON" for debug purposes
-from dotenv import load_dotenv, find_dotenv
-
-# Load recursively from relative, like "config.yaml"
-load_dotenv(find_dotenv())
-
-# Load deps
-from helpers.config_models.root import RootModel
 from os import environ
-from pydantic import ValidationError
+from typing import Optional
+
 import yaml
+from dotenv import find_dotenv, load_dotenv
+from pydantic import ValidationError
 
-
-_CONFIG_ENV = "CONFIG_JSON"
-_CONFIG_FILE = "config.yaml"
+from helpers.config_models.root import RootModel
 
 
 class ConfigNotFound(Exception):
@@ -23,20 +16,39 @@ class ConfigBadFormat(Exception):
     pass
 
 
-if _CONFIG_ENV in environ:
-    CONFIG = RootModel.model_validate_json(environ[_CONFIG_ENV])
-    print(f'Config from env "{_CONFIG_ENV}" loaded')
-
-else:
-    print(f'Config from env "{_CONFIG_ENV}" not found')
-    path = find_dotenv(filename=_CONFIG_FILE)
+def init_env():
+    path = find_dotenv()
     if not path:
-        raise ConfigNotFound(f'Cannot find config file "{_CONFIG_FILE}"')
+        print("Env file not found")
+        return
+    load_dotenv(path)
+    print(f'Env file loaded from "{path}"')
+
+
+def load_config() -> RootModel:
+    config: Optional[RootModel] = None
+    config_env = "CONFIG_JSON"
+    config_file = "config.yaml"
+
+    if config_env in environ:
+        config = RootModel.model_validate_json(environ[config_env])
+        print(f'Config loaded from env "{config_env}"')
+        return config
+
+    print(f'Cannot find env "{config_env}", trying to load from file')
+    path = find_dotenv(filename=config_file)
+    if not path:
+        raise ConfigNotFound(f'Cannot find config file "{config_file}"')
     try:
         with open(path, encoding="utf-8") as f:
-            CONFIG = RootModel.model_validate(yaml.safe_load(f))
+            config = RootModel.model_validate(yaml.safe_load(f))
+            print(f'Config loaded from "{path}"')
+            return config
     except ValidationError as e:
-        raise ConfigBadFormat(f"Config values are not valid: {e.errors()}")
+        raise ConfigBadFormat("Config values are not valid") from e
     except Exception as e:
-        raise ConfigBadFormat(f"Config YAML format is not valid") from e
-    print(f'Config "{path}" loaded')
+        raise ConfigBadFormat("Config YAML format is not valid") from e
+
+
+init_env()
+CONFIG = load_config()

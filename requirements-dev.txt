@@ -1,7 +1,10 @@
 black[jupyter]==24.4.2
 deepeval==0.21.59
 deptry==0.16.1
+isort==5.13.2
 pur==7.3.2
+pylint==3.2.5
+pyright==1.1.371
 pytest-assume==2.4.3
 pytest-asyncio==0.23.7  # Required for pytest
 pytest-repeat==0.9.3  # Required for pytest

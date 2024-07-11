@@ -29,10 +29,26 @@ version:
 version-full:
 	@bash ./cicd/version/version.sh -g . -c -m
 
-install:
-	@echo "➡️ Installing Twilio CLI..."
-	twilio --version || brew tap twilio/brew && brew install twilio
+brew:
+	@echo "➡️ Installing yq..."
+	brew install yq
 
+	@echo "➡️ Installing Azure CLI..."
+	brew install azure-cli
+
+	@echo "➡️ Installing Azure Functions Core Tools..."
+	brew tap azure/functions && brew install azure-functions-core-tools@4
+
+	@echo "➡️ Installing Azure Dev tunnels..."
+	brew install devtunnel
+
+	@echo "➡️ Installing Snyk CLI..."
+	brew install snyk-cli
+
+	@echo "➡️ Installing Twilio CLI..."
+	brew tap twilio/brew && brew install twilio
+
+install:
 	@for f in $$(find . -name "requirements*.txt"); do \
 		echo "➡️ Installing Python dependencies in $$f..."; \
 		python3 -m pip install -r $$f; \
@@ -51,24 +67,39 @@ upgrade:
 	az bicep upgrade
 
 test:
-	@echo "➡️ Running Black..."
+	@echo "➡️ Test generic formatter (Black)..."
 	python3 -m black --check .
 
-	@echo "➡️ Running deptry..."
+	@echo "➡️ Test import formatter (isort)..."
+	python3 -m isort --check .
+
+	@echo "➡️ Test dependencies issues (deptry)..."
 	python3 -m deptry \
 		--ignore-notebooks \
 		--per-rule-ignores "DEP002=aiohttp" \
 		--per-rule-ignores "DEP003=aiohttp_retry" \
 		.
 
-	@echo "➡️ Running Pytest..."
+	@echo "➡️ Test code smells (Pylint)..."
+	python3 -m pylint \
+		--fail-under=8 \
+		--recursive=true \
+		.
+
+	@echo "➡️ Test types (Pyright)..."
+	python3 -m pyright .
+
+	@echo "➡️ Unit tests (Pytest)..."
 	PUBLIC_DOMAIN=dummy pytest \
 		--junit-xml=test-reports/$$(date +%Y%m%d%H%M%S).xml \
 		tests/*.py
 
 lint:
-	@echo "➡️ Running Black..."
+	@echo "➡️ Fix with generic formatter (Black)..."
 	python3 -m black .
+
+	@echo "➡️ Fix with import formatter (isort)..."
+	python3 -m isort .
 
 tunnel:
 	@echo "➡️ Creating tunnel..."

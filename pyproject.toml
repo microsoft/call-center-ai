@@ -1,0 +1,16 @@
+[tool.black]
+target-version = ["py311"]
+
+[tool.isort]
+combine_as_imports = true
+profile = "black"
+
+[tool.pylint.MAIN]
+init-hook='import sys; sys.path.append(".")'
+py-version = "3.11"
+
+[tool.pylint.format]
+max-line-length = "88"
+
+[tool.pyright]
+pythonVersion = "3.11"

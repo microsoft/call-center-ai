@@ -1,15 +1,5 @@
-# Mock environment variables
-from os import environ
+import asyncio
 
-
-environ["PUBLIC_DOMAIN"] = "dummy"
-
-
-# General imports
-from helpers.config import CONFIG
-from helpers.logging import logger
-from models.call import CallStateModel, CallInitiateModel
-from tests.conftest import CallAutomationClientMock
 from helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
@@ -18,14 +8,17 @@ from helpers.call_events import (
     on_play_completed,
     on_speech_recognized,
 )
-import asyncio
+from helpers.config import CONFIG
+from helpers.logging import logger
+from models.call import CallInitiateModel, CallStateModel
+from tests.conftest import CallAutomationClientMock
 
 
 async def main() -> None:
     continue_conversation = True
 
     def _play_media_callback(text: str) -> None:
-        logger.info(f"🤖 {text}")
+        logger.info("🤖 %s", text)
 
     def _hang_up_callback() -> None:
         nonlocal continue_conversation
@@ -41,9 +34,9 @@ async def main() -> None:
     call = CallStateModel(
         initiate=CallInitiateModel(
             **CONFIG.conversation.initiate.model_dump(),
-            phone_number="+33612345678",  # type: ignore
+            phone_number="+33612345678",  # pyright: ignore
         ),
-        lang_shmediumort_code="fr-FR",
+        lang_short_code="fr-FR",
         voice_id="dummy",
     )
     automation_client = CallAutomationClientMock(

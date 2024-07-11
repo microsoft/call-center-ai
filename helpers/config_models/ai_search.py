@@ -1,6 +1,8 @@
-from functools import cache
+from functools import lru_cache
+
+from pydantic import BaseModel, Field, SecretStr
+
 from persistence.isearch import ISearch
-from pydantic import SecretStr, BaseModel, Field
 
 
 class AiSearchModel(BaseModel, frozen=True):
@@ -12,9 +14,11 @@ class AiSearchModel(BaseModel, frozen=True):
     strictness: float = Field(default=2, ge=0, le=5)
     top_n_documents: int = Field(default=5, ge=1)
 
-    @cache
+    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
     def instance(self) -> ISearch:
-        from helpers.config import CONFIG
-        from persistence.ai_search import AiSearchSearch
+        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from persistence.ai_search import (  # pylint: disable=import-outside-toplevel
+            AiSearchSearch,
+        )
 
         return AiSearchSearch(CONFIG.cache.instance(), self)

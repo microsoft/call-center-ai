@@ -1,38 +1,41 @@
+import asyncio
+import time
 from typing import Awaitable, Callable
+
 from azure.communication.callautomation.aio import CallAutomationClient
-from helpers.config import CONFIG
-from helpers.logging import logger
-from models.call import CallStateModel
-from models.message import (
-    ActionEnum as MessageAction,
-    extract_message_style,
-    MessageModel,
-    PersonaEnum as MessagePersonaEnum,
-    remove_message_action,
-    StyleEnum as MessageStyleEnum,
-    ToolModel as MessageToolModel,
-)
+from openai import APIError
+
 from helpers.call_utils import (
     handle_clear_queue,
     handle_media,
     handle_recognize_text,
     tts_sentence_split,
 )
+from helpers.config import CONFIG
 from helpers.llm_tools import LlmPlugins
-import asyncio
 from helpers.llm_worker import (
-    completion_stream,
     MaximumTokensReachedError,
     SafetyCheckError,
+    completion_stream,
 )
-from openai import APIError
-import time
-
+from helpers.logging import logger
+from helpers.monitoring import tracer
+from models.call import CallStateModel
+from models.message import (
+    ActionEnum as MessageAction,
+    MessageModel,
+    PersonaEnum as MessagePersonaEnum,
+    StyleEnum as MessageStyleEnum,
+    ToolModel as MessageToolModel,
+    extract_message_style,
+    remove_message_action,
+)
 
 _cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
 
 
+@tracer.start_as_current_span("call_load_llm_chat")
 async def load_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -118,7 +121,7 @@ async def load_llm_chat(
     continue_chat = True
     try:
         while True:
-            logger.debug(f"Chat task status: {chat_task.done()}")
+            logger.debug("Chat task status: %s", chat_task.done())
 
             if pointer_current < float(
                 (await _cache.aget(pointer_cache_key) or b"0").decode()
@@ -145,7 +148,8 @@ async def load_llm_chat(
 
             if hard_timeout_task.done():  # Break when hard timeout is reached
                 logger.warning(
-                    f"Hard timeout of {CONFIG.conversation.answer_hard_timeout_sec}s reached"
+                    "Hard timeout of %ss reached",
+                    CONFIG.conversation.answer_hard_timeout_sec,
                 )
                 # Clean up
                 _clear_tasks()
@@ -156,7 +160,8 @@ async def load_llm_chat(
                     soft_timeout_task.done() and not soft_timeout_triggered
                 ):  # Speak when soft timeout is reached
                     logger.warning(
-                        f"Soft timeout of {CONFIG.conversation.answer_soft_timeout_sec}s reached"
+                        "Soft timeout of %ss reached",
+                        CONFIG.conversation.answer_soft_timeout_sec,
                     )
                     soft_timeout_triggered = True
                     await handle_recognize_text(
@@ -179,7 +184,7 @@ async def load_llm_chat(
             # Wait to not block the event loop for other requests
             await asyncio.sleep(1)
 
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("Error loading intelligence", exc_info=True)
 
     if is_error:  # Error during chat
@@ -197,7 +202,7 @@ async def load_llm_chat(
             )
 
         else:  # Retry chat after an error
-            logger.info(f"Retrying chat, {_iterations_remaining - 1} remaining")
+            logger.info("Retrying chat, %s remaining", _iterations_remaining - 1)
             return await load_llm_chat(
                 call=call,
                 client=client,
@@ -207,7 +212,7 @@ async def load_llm_chat(
             )
     else:
         if continue_chat and _iterations_remaining > 0:  # Contiue chat
-            logger.info(f"Continuing chat, {_iterations_remaining - 1} remaining")
+            logger.info("Continuing chat, %s remaining", _iterations_remaining - 1)
             return await load_llm_chat(
                 call=call,
                 client=client,
@@ -215,18 +220,20 @@ async def load_llm_chat(
                 trainings_callback=trainings_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )  # Recursive chat (like for for retry or tools)
-        else:  # End chat
-            await handle_recognize_text(
-                call=call,
-                client=client,
-                no_response_error=True,
-                style=MessageStyleEnum.NONE,
-                text=None,
-            )  # Trigger an empty text to recognize and generate timeout error if user does not speak
+
+        # End chat
+        await handle_recognize_text(
+            call=call,
+            client=client,
+            no_response_error=True,
+            style=MessageStyleEnum.NONE,
+            text=None,
+        )  # Trigger an empty text to recognize and generate timeout error if user does not speak
 
     return call
 
 
+@tracer.start_as_current_span("call_execute_llm_chat")
 async def _execute_llm_chat(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -270,8 +277,8 @@ async def _execute_llm_chat(
 
     # Build RAG
     trainings = await call.trainings()
-    logger.info(f"Enhancing LLM chat with {len(trainings)} trainings")
-    logger.debug(f"Trainings: {trainings}")
+    logger.info("Enhancing LLM chat with %s trainings", len(trainings))
+    logger.debug("Trainings: %s", trainings)
 
     # System prompts
     system = CONFIG.prompts.llm.chat_system(
@@ -292,7 +299,7 @@ async def _execute_llm_chat(
         logger.warning("Tools disabled for this chat")
     else:
         tools = await plugins.to_openai(call)
-        logger.debug(f"Tools: {tools}")
+        logger.debug("Tools: %s", tools)
 
     # Execute LLM inference
     maximum_tokens_reached = False
@@ -314,19 +321,19 @@ async def _execute_llm_chat(
             else:
                 # Store whole content
                 content_full += delta.content
-                for sentence in tts_sentence_split(
+                for sentence, length in tts_sentence_split(
                     content_full[content_buffer_pointer:], False
                 ):
-                    content_buffer_pointer += len(sentence)
+                    content_buffer_pointer += length
                     plugins.style = await _content_callback(sentence, plugins.style)
     except MaximumTokensReachedError:  # Retry on maximum tokens reached
         logger.warning("Maximum tokens reached for this completion, retry asked")
         maximum_tokens_reached = True
     except APIError as e:  # Retry on API error
-        logger.warning(f"OpenAI API call error: {e}")
+        logger.warning("OpenAI API call error: %s", e)
         return True, True, call  # Error, retry
     except SafetyCheckError as e:  # Last user message is trash, remove it
-        logger.warning(f"Safety Check error: {e}")
+        logger.warning("Safety Check error: %s", e)
         if last_message := next(
             (
                 call
@@ -351,8 +358,8 @@ async def _execute_llm_chat(
     # Delete action and style from the message as they are in the history and LLM hallucinates them
     _, content_full = extract_message_style(remove_message_action(content_full))
 
-    logger.debug(f"Chat response: {content_full}")
-    logger.debug(f"Tool calls: {tool_calls}")
+    logger.debug("Chat response: %s", content_full)
+    logger.debug("Tool calls: %s", tool_calls)
 
     # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
     # TODO: Tries to detect this error earlier
@@ -360,7 +367,7 @@ async def _execute_llm_chat(
     if any(
         tool_call.function_name == "multi_tool_use.parallel" for tool_call in tool_calls
     ):
-        logger.warning(f'LLM send back invalid tool schema "multi_tool_use.parallel"')
+        logger.warning('LLM send back invalid tool schema "multi_tool_use.parallel"')
         return True, True, call  # Error, retry
 
     # OpenAI GPT-4 Turbo tends to return empty content, in that case, retry within limits

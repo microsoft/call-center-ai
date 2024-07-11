@@ -1,9 +1,9 @@
-from aiohttp import ClientSession, DummyCookieJar, ClientTimeout
+from typing import Optional
+
+from aiohttp import ClientSession, ClientTimeout, DummyCookieJar
 from aiohttp_retry import JitterRetry, RetryClient
 from azure.core.pipeline.transport._aiohttp import AioHttpTransport
 from twilio.http.async_http_client import AsyncTwilioHttpClient
-from typing import Optional
-
 
 _cookie_jar: Optional[DummyCookieJar] = None
 _session: Optional[ClientSession] = None
@@ -12,14 +12,14 @@ _twilio_http: Optional[AsyncTwilioHttpClient] = None
 
 
 async def _aiohttp_cookie_jar() -> DummyCookieJar:
-    global _cookie_jar
+    global _cookie_jar  # pylint: disable=global-statement
     if not _cookie_jar:
         _cookie_jar = DummyCookieJar()
     return _cookie_jar
 
 
 async def aiohttp_session() -> ClientSession:
-    global _session
+    global _session  # pylint: disable=global-statement
     if not _session:
         _session = ClientSession(
             # Same config as default in the SDK
@@ -36,7 +36,7 @@ async def aiohttp_session() -> ClientSession:
 
 
 async def azure_transport() -> AioHttpTransport:
-    global _transport
+    global _transport  # pylint: disable=global-statement
     if not _transport:
         _transport = AioHttpTransport(
             session_owner=False,  # Restrict the SDK to close the client after usage
@@ -46,7 +46,7 @@ async def azure_transport() -> AioHttpTransport:
 
 
 async def twilio_http() -> AsyncTwilioHttpClient:
-    global _twilio_http
+    global _twilio_http  # pylint: disable=global-statement
     if not _twilio_http:
         _twilio_http = AsyncTwilioHttpClient(
             timeout=10,

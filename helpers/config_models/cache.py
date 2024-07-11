@@ -1,8 +1,10 @@
 from enum import Enum
-from functools import cache
-from persistence.icache import ICache
-from pydantic import field_validator, SecretStr, BaseModel, Field, ValidationInfo
+from functools import lru_cache
 from typing import Optional
+
+from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
+
+from persistence.icache import ICache
 
 
 class ModeEnum(str, Enum):
@@ -13,9 +15,11 @@ class ModeEnum(str, Enum):
 class MemoryModel(BaseModel, frozen=True):
     max_size: int = Field(default=100, ge=10)
 
-    @cache
+    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
     def instance(self) -> ICache:
-        from persistence.memory import MemoryCache
+        from persistence.memory import (  # pylint: disable=import-outside-toplevel
+            MemoryCache,
+        )
 
         return MemoryCache(self)
 
@@ -27,9 +31,11 @@ class RedisModel(BaseModel, frozen=True):
     port: int = 6379
     ssl: bool = True
 
-    @cache
+    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
     def instance(self) -> ICache:
-        from persistence.redis import RedisCache
+        from persistence.redis import (  # pylint: disable=import-outside-toplevel
+            RedisCache,
+        )
 
         return RedisCache(self)
 
@@ -40,6 +46,7 @@ class CacheModel(BaseModel):
     redis: Optional[RedisModel] = None
 
     @field_validator("redis")
+    @classmethod
     def _validate_sqlite(
         cls,
         redis: Optional[RedisModel],
@@ -50,6 +57,7 @@ class CacheModel(BaseModel):
         return redis
 
     @field_validator("memory")
+    @classmethod
     def _validate_memory(
         cls,
         memory: Optional[MemoryModel],

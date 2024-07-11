@@ -1,7 +1,8 @@
+import pytest
+from pytest import assume  # pylint: disable=no-name-in-module # pyright: ignore
+
 from helpers.config import CONFIG
 from helpers.config_models.cache import ModeEnum as CacheModeEnum
-from pytest import assume
-import pytest
 
 
 @pytest.mark.parametrize(
