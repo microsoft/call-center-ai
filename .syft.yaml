@@ -1,0 +1,10 @@
+exclude:
+  - ./docs
+  - ./examples
+  - ./tests
+
+python:
+  guess-unpinned-requirements: true
+
+source:
+  name: Call Center AI

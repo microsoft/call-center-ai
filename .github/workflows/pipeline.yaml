@@ -83,6 +83,8 @@ jobs:
     name: Create release
     needs:
       - init
+      - sast-creds
+      - sast-semgrep
     permissions:
       # Allow to create releases
       contents: write
@@ -116,6 +118,45 @@ jobs:
               target_commitish: context.ref,
             });
             return data.id
+
+  attest-dependencies:
+    name: Attest - Dependencies
+    permissions:
+      # Allow to write to GitHub Security
+      contents: write
+    runs-on: ubuntu-22.04
+    needs:
+      - create-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.7
+
+      - name: Run attestation
+        uses: advanced-security/component-detection-dependency-submission-action@v0.0.2
+        with:
+          directoryExclusionList: tests,docs,examples
+
+  attest-sbom:
+    name: Attest - SBOM
+    runs-on: ubuntu-22.04
+    needs:
+      - create-release
+      - init
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.7
+
+      - name: Init Syft
+        uses: anchore/sbom-action/download-syft@v0.16.1
+
+      - name: Run attestation
+        run: make sbom version_full=${{ needs.init.outputs.VERSION_FULL }}
+
+      - name: Upload results to release
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: sbom
+          path: sbom-reports/*
 
   publish-release:
     name: Publish release

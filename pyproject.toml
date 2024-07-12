@@ -1,3 +1,82 @@
+[project]
+description = "AI-powered call center solution with Azure and OpenAI GPT."
+dynamic = ["version"]
+license = {file = "LICENSE"}
+name = "call-center-ai"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "aiohttp==3.9.5",
+  "aiosqlite==0.20.0",
+  "azure-ai-translation-text==1.0.0",
+  "azure-communication-callautomation==1.2.0",
+  "azure-communication-sms==1.0.1",
+  "azure-cosmos==4.7.0",
+  "azure-eventgrid==4.20.0",
+  "azure-functions==1.20.0",
+  "azure-identity==1.17.0",
+  "azure-monitor-opentelemetry==1.6.0",
+  "azure-search-documents==11.6.0b4",
+  "azure-storage-queue==12.10.0",
+  "django-htmlmin==0.11.0",
+  "jinja2==3.1.4",
+  "json-repair==0.25.1",
+  "mistune==3.0.2",
+  "openai==1.35.3",
+  "opentelemetry-instrumentation-aiohttp-client==0.46b0",
+  "opentelemetry-instrumentation-httpx==0.46b0",
+  "opentelemetry-instrumentation-openai==0.23.0",
+  "opentelemetry-instrumentation-redis==0.46b0",
+  "opentelemetry-instrumentation-sqlite3==0.46b0",
+  "opentelemetry-semantic-conventions==0.46b0",
+  "phonenumbers==8.13.39",
+  "pydantic-extra-types==2.8.2",
+  "pydantic-settings==2.3.3",
+  "pydantic[email]==2.7.4",
+  "python-dotenv==1.0.1",
+  "pytz==2024.1",
+  "pyyaml==6.0.1",
+  "redis==5.0.6",
+  "tenacity==8.2.3",
+  "tiktoken==0.7.0",
+  "twilio==9.2.1",
+  "typing-extensions==4.12.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black[jupyter]==24.4.2",
+  "deepeval==0.21.59",
+  "deptry==0.16.1",
+  "isort==5.13.2",
+  "pip-tools==7.4.1",
+  "pylint==3.2.5",
+  "pyright==1.1.371",
+  "pytest-assume==2.4.3",
+  "pytest-asyncio==0.23.7",
+  "pytest-repeat==0.9.3",
+  "pytest-xdist[psutil]==3.6.1",
+  "pytest==8.2.2",
+]
+
+[tool.setuptools]
+py-modules = [
+  "helpers",
+  "models",
+  "persistence",
+]
+
+[tool.pip-tools]
+generate-hashes = true
+
+[tool.deptry]
+ignore_notebooks = true
+pep621_dev_dependency_groups = ["dev"]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ["aiohttp"]
+DEP003 = ["aiohttp_retry"]
+
 [tool.black]
 target-version = ["py311"]
 
