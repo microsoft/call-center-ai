@@ -7,7 +7,10 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
-from helpers.config_models.conversation import LanguageEntryModel, WorkflowInitiateModel
+from helpers.config_models.conversation import (
+    LanguageEntryModel,
+    WorkflowInitiateModel,
+)
 from helpers.monitoring import tracer
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.message import ActionEnum as MessageActionEnum, MessageModel

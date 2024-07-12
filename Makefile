@@ -42,26 +42,33 @@ brew:
 	@echo "➡️ Installing Azure Dev tunnels..."
 	brew install devtunnel
 
-	@echo "➡️ Installing Snyk CLI..."
-	brew install snyk-cli
+	@echo "➡️ Installing Syft..."
+	brew install syft
 
 	@echo "➡️ Installing Twilio CLI..."
 	brew tap twilio/brew && brew install twilio
 
 install:
-	@for f in $$(find . -name "requirements*.txt"); do \
-		echo "➡️ Installing Python dependencies in $$f..."; \
-		python3 -m pip install -r $$f; \
-	done
+	@echo "➡️ Installing pip-tools..."
+	python3 -m pip install pip-tools
+
+	@echo "➡️ Syncing dependencies..."
+	pip-sync requirements-dev.txt
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
 	python3 -m pip install --upgrade pip
 
-	@for f in $$(find . -name "requirements*.txt"); do \
-		echo "➡️ Upgrading Python dependencies in $$f..."; \
-		python3 -m pur -r $$f; \
-	done
+	@echo "➡️ Compiling app requirements..."
+	pip-compile \
+		--output-file requirements.txt \
+		pyproject.toml
+
+	@echo "➡️ Compiling dev requirements..."
+	pip-compile \
+		--extra dev \
+		--output-file requirements-dev.txt \
+		pyproject.toml
 
 	@echo "➡️ Upgrading Bicep CLI..."
 	az bicep upgrade
@@ -74,11 +81,7 @@ test:
 	python3 -m isort --check .
 
 	@echo "➡️ Test dependencies issues (deptry)..."
-	python3 -m deptry \
-		--ignore-notebooks \
-		--per-rule-ignores "DEP002=aiohttp" \
-		--per-rule-ignores "DEP003=aiohttp_retry" \
-		.
+	python3 -m deptry .
 
 	@echo "➡️ Test code smells (Pylint)..."
 	python3 -m pylint \
@@ -91,7 +94,7 @@ test:
 
 	@echo "➡️ Unit tests (Pytest)..."
 	PUBLIC_DOMAIN=dummy pytest \
-		--junit-xml=test-reports/$$(date +%Y%m%d%H%M%S).xml \
+		--junit-xml=test-reports/$(version_full).xml \
 		tests/*.py
 
 lint:
@@ -132,7 +135,10 @@ deploy:
 	 	--name $(name_sanitized)
 
 	@echo "🛠️ Deploying Function App..."
-	func azure functionapp publish $(function_app_name) --python
+	func azure functionapp publish $(function_app_name) \
+		--build local \
+		--build-native-deps \
+		--python
 
 	@echo "🚀 Call Center AI is running on $(app_url)"
 
@@ -174,7 +180,7 @@ copy-resources:
 		--no-progress \
 		--output none \
 		--overwrite \
-		--source resources
+		--source app/resources
 
 watch-call:
 	@echo "👀 Watching status of $(phone_number)..."
@@ -183,3 +189,10 @@ watch-call:
 		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .phone_number, "claim": .claim, "reminders": .reminders}'; \
 		sleep 3; \
 	done
+
+sbom:
+	@echo "🔍 Generating SBOM..."
+	syft scan \
+		--source-version $(version_full)  \
+		--output spdx-json=./sbom-reports/$(version_full).json \
+		.

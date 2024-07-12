@@ -7,19 +7,21 @@
 config*.yaml
 
 # Tests
-tests/
-
-# Test reports
 .pytest_cache/
+sbom-reports/
 test-reports/
+tests/
 
 # Documentation and examples
 docs/
 examples/
 
-# Python cache
+# Local cache
 __pycache__/
+.python_packages/
+*.egg-info/
 *.pyc
+build/
 
 # GitHub
 .github/

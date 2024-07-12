@@ -747,3 +747,9 @@ config*.yaml
 
 # Tests reports
 test-reports/
+
+# SBOM reports
+sbom-reports/
+
+# Azure Functions
+.python_packages/
