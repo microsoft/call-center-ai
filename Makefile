@@ -180,7 +180,7 @@ copy-resources:
 		--no-progress \
 		--output none \
 		--overwrite \
-		--source app/resources
+		--source resources
 
 watch-call:
 	@echo "👀 Watching status of $(phone_number)..."
