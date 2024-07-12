@@ -67,6 +67,7 @@ py-modules = [
 ]
 
 [tool.pip-tools]
+allow-unsafe = true
 generate-hashes = true
 
 [tool.deptry]
