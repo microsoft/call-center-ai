@@ -42,6 +42,9 @@ brew:
 	@echo "➡️ Installing Azure Dev tunnels..."
 	brew install devtunnel
 
+	@echo "➡️ Installing Syft..."
+	brew install syft
+
 	@echo "➡️ Installing Twilio CLI..."
 	brew tap twilio/brew && brew install twilio
 
@@ -180,3 +183,10 @@ watch-call:
 		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .phone_number, "claim": .claim, "reminders": .reminders}'; \
 		sleep 3; \
 	done
+
+sbom:
+	@echo "🔍 Generating SBOM..."
+	syft scan \
+		--source-version $(version_full)  \
+		--output spdx-json=./sbom-reports/$(version_full).json \
+		.
