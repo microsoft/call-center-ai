@@ -88,7 +88,7 @@ test:
 
 	@echo "➡️ Unit tests (Pytest)..."
 	PUBLIC_DOMAIN=dummy pytest \
-		--junit-xml=test-reports/$$(date +%Y%m%d%H%M%S).xml \
+		--junit-xml=test-reports/$(version_full).xml \
 		tests/*.py
 
 lint:
