@@ -49,19 +49,29 @@ brew:
 	brew tap twilio/brew && brew install twilio
 
 install:
-	@for f in $$(find . -name "requirements*.txt"); do \
-		echo "➡️ Installing Python dependencies in $$f..."; \
-		python3 -m pip install -r $$f; \
-	done
+	@echo "➡️ Installing pip-tools..."
+	python3 -m pip install pip-tools
+
+	@echo "➡️ Syncing dependencies..."
+	pip-sync requirements-dev.txt
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
 	python3 -m pip install --upgrade pip
 
-	@for f in $$(find . -name "requirements*.txt"); do \
-		echo "➡️ Upgrading Python dependencies in $$f..."; \
-		python3 -m pur -r $$f; \
-	done
+	@echo "➡️ Upgrading pip-tools..."
+	python3 -m pip install --upgrade pip-tools
+
+	@echo "➡️ Compiling app requirements..."
+	pip-compile \
+		--output-file requirements.txt \
+		pyproject.toml
+
+	@echo "➡️ Compiling dev requirements..."
+	pip-compile \
+		--extra dev \
+		--output-file requirements-dev.txt \
+		pyproject.toml
 
 	@echo "➡️ Upgrading Bicep CLI..."
 	az bicep upgrade
@@ -74,11 +84,7 @@ test:
 	python3 -m isort --check .
 
 	@echo "➡️ Test dependencies issues (deptry)..."
-	python3 -m deptry \
-		--ignore-notebooks \
-		--per-rule-ignores "DEP002=aiohttp" \
-		--per-rule-ignores "DEP003=aiohttp_retry" \
-		.
+	python3 -m deptry .
 
 	@echo "➡️ Test code smells (Pylint)..."
 	python3 -m pylint \
@@ -174,7 +180,7 @@ copy-resources:
 		--no-progress \
 		--output none \
 		--overwrite \
-		--source resources
+		--source app/resources
 
 watch-call:
 	@echo "👀 Watching status of $(phone_number)..."
