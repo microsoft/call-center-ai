@@ -238,11 +238,13 @@ sequenceDiagram
     PSTN->>Customer: Forward voice
 ```
 
-## Remote deployment
+## Deployment
 
-Application is hosted by Azure Functions. Code will be pushed automatically `make deploy`, with after the deployment.
+Some prerequisites are needed to deploy the solution.
 
-Prerequisites:
+In macOS, with [Homebrew](https://brew.sh), simply type `make brew`.
+
+For other systems, make sure you have the following installed:
 
 - Bash compatible shell, like `bash` or `zsh`
 - [yq](https://github.com/mikefarah/yq?tab=readme-ov-file#install)
@@ -250,6 +252,8 @@ Prerequisites:
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - [Azure Functions Core Tools](https://github.com/Azure/azure-functions-core-tools?tab=readme-ov-file#installing)
 - [Twilio CLI](https://www.twilio.com/docs/twilio-cli/getting-started/install) (optional)
+
+### Remote (on Azure)
 
 Steps to deploy:
 
@@ -303,9 +307,9 @@ Steps to deploy:
 
 Get the logs with `make logs name=my-rg-name`.
 
-## Local installation
+### Local (on your machine)
 
-### Prerequisites
+#### Prerequisites for local development
 
 Place a file called `config.yaml` in the root of the project with the following content:
 
@@ -390,7 +394,7 @@ For your knowledge, this `resources` folder contains:
 - Audio files (`xxx.wav`) to be played during the call
 - [Lexicon file (`lexicon.xml`)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon) to be used by the bot to understand the company products (note: any change [makes up to 15 minutes](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation#custom-lexicon-file) to be taken into account)
 
-### Run
+#### Run
 
 Finally, run:
 
@@ -399,7 +403,7 @@ Finally, run:
 make dev
 ```
 
-### Debug
+#### Debug
 
 Breakpoints can be added in the code to debug the application with your favorite IDE.
 
