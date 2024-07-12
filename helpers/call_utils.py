@@ -70,7 +70,7 @@ def tts_sentence_split(
                 )
         else:  # Add punctuation back
             yield (
-                "%s %s" % (split.strip(), splits[i + 1].strip()),
+                split.strip() + splits[i + 1].strip(),
                 len(split) + len(splits[i + 1]),
             )
 
