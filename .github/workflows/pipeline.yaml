@@ -30,7 +30,7 @@ jobs:
           # Ensure "version.sh" submodule are up-to-date
           submodules: recursive
 
-      - name: Version
+      - name: Generate versions
         id: version
         run: |
           echo "version=$(bash cicd/version/version.sh -g . -c)" >> $GITHUB_OUTPUT
@@ -48,7 +48,7 @@ jobs:
           # Ensure all submodules up-to-date
           submodules: recursive
 
-      - name: SAST - Credentials
+      - name: Run tests
         uses: trufflesecurity/trufflehog@v3.78.1
         with:
           base: ${{ github.event.repository.default_branch }}
@@ -125,7 +125,6 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - create-release
-      - init
     # Only publish on non-scheduled default branch
     if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
     steps:

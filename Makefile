@@ -42,9 +42,6 @@ brew:
 	@echo "➡️ Installing Azure Dev tunnels..."
 	brew install devtunnel
 
-	@echo "➡️ Installing Snyk CLI..."
-	brew install snyk-cli
-
 	@echo "➡️ Installing Twilio CLI..."
 	brew tap twilio/brew && brew install twilio
 
