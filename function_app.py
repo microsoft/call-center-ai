@@ -44,7 +44,11 @@ from models.call import CallGetModel, CallInitiateModel, CallStateModel
 from models.next import ActionEnum as NextActionEnum
 from models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
 
-logger.info("call-center-ai v%s", CONFIG.version)
+logger.info(
+    "call-center-ai v%s (Azure Functions v%s)",
+    CONFIG.version,
+    getattr(func, "__version__"),
+)
 
 # Jinja configuration
 _jinja = Environment(
