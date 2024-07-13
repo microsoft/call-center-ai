@@ -7,7 +7,7 @@ readme = "README.md"
 requires-python = "==3.11"
 dependencies = [
   "aiohttp-retry==2.8.3",  # Retry middleware for aiohttp, used with Twilio SDK
-  "aiohttp==3.9.5",  # Async HTTP client for Azure and Twilio SDKs
+  "aiohttp[speedups]==3.9.5",  # Async HTTP client for Azure and Twilio SDKs, plus async DNS resolver and async Brotli compression
   "aiosqlite==0.20.0",  # Async SQLite3 driver
   "azure-ai-translation-text==1.0.0",  # Azure Cognitive Services Text Translation
   "azure-communication-callautomation==1.2.0",  # Azure Communication Services Call Automation

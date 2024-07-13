@@ -1,6 +1,12 @@
 from typing import Optional
 
-from aiohttp import ClientSession, ClientTimeout, DummyCookieJar
+from aiohttp import (
+    AsyncResolver,
+    ClientSession,
+    ClientTimeout,
+    DummyCookieJar,
+    TCPConnector,
+)
 from aiohttp_retry import JitterRetry, RetryClient
 from azure.core.pipeline.transport._aiohttp import AioHttpTransport
 from twilio.http.async_http_client import AsyncTwilioHttpClient
@@ -40,6 +46,8 @@ async def aiohttp_session() -> ClientSession:
             auto_decompress=False,
             cookie_jar=await _aiohttp_cookie_jar(),
             trust_env=True,
+            # Performance
+            connector=TCPConnector(resolver=AsyncResolver()),
             # Reliability
             timeout=ClientTimeout(
                 connect=5,
