@@ -836,22 +836,35 @@ def _str_to_contexts(value: Optional[str]) -> Optional[set[CallContextEnum]]:
 def _validation_error(
     e: Exception,
 ) -> func.HttpResponse:
-    body: dict[str, Any] = {
+    """
+    Generate a standard validation error response.
+
+    Response body is a JSON object with the following structure:
+
+    ```
+    {
         "error": {
             "message": "Validation error",
-            "details": [],
+            "details": ["Error message"]
         }
     }
+    ```
+
+    Returns a 400 Bad Request with a JSON body.
+    """
+    messages = []
     if isinstance(e, ValidationError):
-        body["error"][
-            "details"
-        ] = e.errors()  # Pydantic returns well formatted errors, use them
+        messages = e.errors()  # Pydantic returns well formatted errors, use them
     elif isinstance(e, ValueError):
-        body["error"]["details"] = str(
-            e
-        )  # TODO: Could it expose sensitive information?
+        messages = [str(e)]  # TODO: Could it expose sensitive information?
+    res_json = {
+        "error": {
+            "message": "Validation error",
+            "details": messages,
+        }
+    }
     return func.HttpResponse(
-        body=json.dumps(body),
+        body=json.dumps(res_json),
         mimetype="application/json",
         status_code=HTTPStatus.BAD_REQUEST,
     )
