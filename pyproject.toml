@@ -6,6 +6,7 @@ name = "call-center-ai"
 readme = "README.md"
 requires-python = "==3.11"
 dependencies = [
+  "aiohttp-retry==2.8.3",  # Retry middleware for aiohttp, used with Twilio SDK
   "aiohttp==3.9.5",  # Async HTTP client for Azure and Twilio SDKs
   "aiosqlite==0.20.0",  # Async SQLite3 driver
   "azure-ai-translation-text==1.0.0",  # Azure Cognitive Services Text Translation
@@ -75,8 +76,9 @@ ignore_notebooks = true
 pep621_dev_dependency_groups = ["dev"]
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ["aiohttp"]
-DEP003 = ["aiohttp_retry"]
+DEP002 = [
+  "aiodns",  # Resolver is required for the AIOHTTP AsyncResolver TCP resolver
+]
 
 [tool.black]
 target-version = ["py311"]
