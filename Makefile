@@ -78,7 +78,7 @@ test:
 	python3 -m black --check .
 
 	@echo "➡️ Test import formatter (isort)..."
-	python3 -m isort --check .
+	python3 -m isort --jobs -1 --check .
 
 	@echo "➡️ Test dependencies issues (deptry)..."
 	python3 -m deptry .
@@ -102,7 +102,7 @@ lint:
 	python3 -m black .
 
 	@echo "➡️ Fix with import formatter (isort)..."
-	python3 -m isort .
+	python3 -m isort --jobs -1 .
 
 tunnel:
 	@echo "➡️ Creating tunnel..."
