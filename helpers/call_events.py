@@ -19,7 +19,7 @@ from helpers.call_utils import (
 from helpers.config import CONFIG
 from helpers.llm_worker import completion_sync
 from helpers.logging import logger
-from helpers.monitoring import tracer
+from helpers.monitoring import CallAttributes, span_attribute, tracer
 from models.call import CallStateModel
 from models.message import (
     ActionEnum as MessageActionEnum,
@@ -124,6 +124,8 @@ async def on_speech_recognized(
     trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Voice recognition: %s", text)
+    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
+    span_attribute(CallAttributes.CALL_MESSAGE, text)
     call.messages.append(
         MessageModel(
             content=text,
@@ -157,6 +159,7 @@ async def on_recognize_timeout_error(
     if (
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
     ):  # Retry IVR recognition
+        span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
         if call.recognition_retry < CONFIG.conversation.voice_recognition_retry_max:
             call.recognition_retry += 1
             logger.info(
@@ -184,6 +187,7 @@ async def on_recognize_timeout_error(
         return
 
     # Retry voice recognition
+    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
     call.recognition_retry += 1
     logger.info(
         "Timeout, retrying voice recognition (%s/%s)",
@@ -218,6 +222,8 @@ async def on_recognize_unknown_error(
     client: CallAutomationClient,
     error_code: int,
 ) -> None:
+    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
+
     if error_code == 8511:  # Failure while trying to play the prompt
         logger.warning("Failed to play prompt")
     else:
@@ -225,6 +231,7 @@ async def on_recognize_unknown_error(
             "Recognition failed with unknown error code %s, answering with default error",
             error_code,
         )
+
     await handle_recognize_text(
         call=call,
         client=client,
@@ -242,6 +249,7 @@ async def on_play_completed(
     post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.debug("Play completed")
+    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
 
     if not contexts:
         return
@@ -269,6 +277,7 @@ async def on_play_completed(
 @tracer.start_as_current_span("on_play_error")
 async def on_play_error(error_code: int) -> None:
     logger.debug("Play failed")
+    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
     # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
     if error_code == 8535:  # Action failed, file format
         logger.warning("Error during media play, file format is invalid")
@@ -292,6 +301,9 @@ async def on_ivr_recognized(
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
+    logger.info("IVR recognized: %s", label)
+    span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
+    span_attribute(CallAttributes.CALL_MESSAGE, label)
     call.recognition_retry = 0  # Reset recognition retry counter
     try:
         lang = next(
@@ -371,6 +383,8 @@ async def on_sms_received(
     trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> bool:
     logger.info("SMS received from %s: %s", call.initiate.phone_number, message)
+    span_attribute(CallAttributes.CALL_CHANNEL, "sms")
+    span_attribute(CallAttributes.CALL_MESSAGE, message)
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.SMS,
