@@ -15,7 +15,6 @@ from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
 from htmlmin.minify import html_minify
 from jinja2 import Environment, FileSystemLoader
-from opentelemetry.semconv.trace import SpanAttributes
 from pydantic import TypeAdapter, ValidationError
 from twilio.twiml.messaging_response import MessagingResponse
 
@@ -38,7 +37,7 @@ from helpers.call_utils import ContextEnum as CallContextEnum
 from helpers.config import CONFIG
 from helpers.http import azure_transport
 from helpers.logging import logger
-from helpers.monitoring import trace
+from helpers.monitoring import CallAttributes, span_attribute, tracer
 from helpers.pydantic_types.phone_numbers import PhoneNumber
 from models.call import CallGetModel, CallInitiateModel, CallStateModel
 from models.next import ActionEnum as NextActionEnum
@@ -90,6 +89,7 @@ logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
     "health/liveness",
     methods=["GET"],
 )
+@tracer.start_as_current_span("health_liveness_get")
 async def health_liveness_get(req: func.HttpRequest) -> func.HttpResponse:
     """
     Check if the service is running.
@@ -105,6 +105,7 @@ async def health_liveness_get(req: func.HttpRequest) -> func.HttpResponse:
     "health/readiness",
     methods=["GET"],
 )
+@tracer.start_as_current_span("health_readiness_get")
 async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
     """
     Check if the service is ready to serve requests.
@@ -154,6 +155,7 @@ async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
     trigger_arg_name="req",
 )
+@tracer.start_as_current_span("report_get")
 async def report_get(req: func.HttpRequest) -> func.HttpResponse:
     """
     List all calls with a web interface.
@@ -204,6 +206,7 @@ async def report_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
     trigger_arg_name="req",
 )
+@tracer.start_as_current_span("report_single_get")
 async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
     """
     Show a single call with a web interface.
@@ -249,6 +252,7 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
     trigger_arg_name="req",
 )
+@tracer.start_as_current_span("call_search_get")
 async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
     """
     REST API to search for calls by phone number.
@@ -275,6 +279,7 @@ async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
     trigger_arg_name="req",
 )
+@tracer.start_as_current_span("call_get")
 async def call_get(req: func.HttpRequest) -> func.HttpResponse:
     """ "
     REST API to get a single call by call ID.
@@ -306,6 +311,7 @@ async def call_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["POST"],
     trigger_arg_name="req",
 )
+@tracer.start_as_current_span("call_post")
 async def call_post(req: func.HttpRequest) -> func.HttpResponse:
     """
     REST API to initiate a call.
@@ -319,9 +325,8 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
     except ValidationError as e:
         return _validation_error(e)
     url, call = await _communicationservices_event_url(initiate.phone_number, initiate)
-    trace.get_current_span().set_attribute(
-        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
-    )
+    span_attribute(CallAttributes.CALL_ID, str(call.call_id))
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     automation_client = await _use_automation_client()
     call_connection_properties = await automation_client.create_call(
         callback_url=url,
@@ -348,6 +353,7 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
     connection="Storage",
     queue_name=CONFIG.communication_services.call_queue_name,
 )
+@tracer.start_as_current_span("call_event")
 async def call_event(
     call: func.QueueMessage,
 ) -> None:
@@ -369,9 +375,8 @@ async def call_event(
     call_context: str = event.data["incomingCallContext"]
     phone_number = PhoneNumber(event.data["from"]["phoneNumber"]["value"])
     url, _call = await _communicationservices_event_url(phone_number)
-    trace.get_current_span().set_attribute(
-        SpanAttributes.ENDUSER_ID, _call.initiate.phone_number
-    )
+    span_attribute(CallAttributes.CALL_ID, str(_call.call_id))
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, _call.initiate.phone_number)
     await on_new_call(
         callback_url=url,
         client=await _use_automation_client(),
@@ -395,6 +400,7 @@ async def call_event(
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
 )
+@tracer.start_as_current_span("sms_event")
 async def sms_event(
     post: func.Out[str],
     sms: func.QueueMessage,
@@ -417,13 +423,12 @@ async def sms_event(
 
     message: str = event.data["message"]
     phone_number: str = event.data["from"]
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, phone_number)
     call = await _db.call_asearch_one(phone_number)
     if not call:
         logger.warning("Call for phone number %s not found", phone_number)
         return
-    trace.get_current_span().set_attribute(
-        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
-    )
+    span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
     async def _post_callback(_call: CallStateModel) -> None:
         _trigger_post_event(call=_call, post=post)
@@ -455,6 +460,7 @@ async def sms_event(
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
 )
+@tracer.start_as_current_span("communicationservices_event_post")
 async def communicationservices_event_post(
     post: func.Out[str],
     req: func.HttpRequest,
@@ -515,6 +521,7 @@ async def _communicationservices_event_worker(
 
     Returns None. Can trigger additional events to `trainings` and `post` queues.
     """
+    span_attribute(CallAttributes.CALL_ID, str(call_id))
     call = await _db.call_aget(call_id)
     if not call:
         logger.warning("Call %s not found", call_id)
@@ -523,10 +530,7 @@ async def _communicationservices_event_worker(
         logger.warning("Secret for call %s does not match", call_id)
         return
 
-    # OpenTelemetry
-    trace.get_current_span().set_attribute(
-        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
-    )
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     # Event parsing
     event = CloudEvent.from_dict(event_dict)
     assert isinstance(event.data, dict)
@@ -656,6 +660,7 @@ async def _communicationservices_event_worker(
     connection="Storage",
     queue_name=CONFIG.communication_services.trainings_queue_name,
 )
+@tracer.start_as_current_span("trainings_event")
 async def trainings_event(
     trainings: func.QueueMessage,
 ) -> None:
@@ -668,9 +673,8 @@ async def trainings_event(
     """
     call = CallStateModel.model_validate_json(trainings.get_body())
     logger.debug("Trainings event received for call %s", call)
-    trace.get_current_span().set_attribute(
-        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
-    )
+    span_attribute(CallAttributes.CALL_ID, str(call.call_id))
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     await call.trainings(cache_only=False)  # Get trainings by advance to populate cache
 
 
@@ -679,6 +683,7 @@ async def trainings_event(
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
 )
+@tracer.start_as_current_span("post_event")
 async def post_event(
     post: func.QueueMessage,
 ) -> None:
@@ -689,9 +694,8 @@ async def post_event(
     """
     call = CallStateModel.model_validate_json(post.get_body())
     logger.debug("Post event received for call %s", call)
-    trace.get_current_span().set_attribute(
-        SpanAttributes.ENDUSER_ID, call.initiate.phone_number
-    )
+    span_attribute(CallAttributes.CALL_ID, str(call.call_id))
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     await on_end_call(call)
 
 
@@ -758,6 +762,7 @@ async def _communicationservices_event_url(
     connection="Storage",
     queue_name=CONFIG.communication_services.post_queue_name,
 )
+@tracer.start_as_current_span("twilio_sms_post")
 async def twilio_sms_post(
     post: func.Out[str],
     req: func.HttpRequest,
@@ -777,15 +782,15 @@ async def twilio_sms_post(
         message: str = req.form["Body"]
     except ValueError as e:
         return _validation_error(e)
+
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, phone_number)
     call = await _db.call_asearch_one(phone_number)
 
     if not call:
         logger.warning("Call for phone number %s not found", phone_number)
 
     else:
-        trace.get_current_span().set_attribute(
-            SpanAttributes.ENDUSER_ID, call.initiate.phone_number
-        )
+        span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
         async def _post_callback(_call: CallStateModel) -> None:
             _trigger_post_event(call=_call, post=post)
