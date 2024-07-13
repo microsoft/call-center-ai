@@ -472,16 +472,22 @@ async def communicationservices_event_post(
         secret: str = req.route_params["secret"]
     except ValueError as e:
         return _validation_error(e)
+    try:
+        events = req.get_json()
+    except ValueError:
+        return _validation_error(Exception("Invalid JSON format"))
+    if not events or not isinstance(events, list):
+        return _validation_error(Exception("Events must be a list"))
     await asyncio.gather(
         *[
             _communicationservices_event_worker(
                 call_id=call_id,
-                event_dict=event_dict,
+                event_dict=event,
                 post=post,
                 secret=secret,
                 trainings=trainings,
             )
-            for event_dict in req.get_json()
+            for event in events
         ]
     )
     return func.HttpResponse(status_code=HTTPStatus.NO_CONTENT)
