@@ -84,10 +84,15 @@ target-version = ["py311"]
 [tool.isort]
 combine_as_imports = true
 profile = "black"
+skip_gitignore = true
 
 [tool.pylint.MAIN]
+fail-under = 8.0
+ignore-paths = [".python_packages/.+"]
 init-hook='import sys; sys.path.append(".")'
+jobs = 0
 py-version = "3.11"
+recursive = true
 
 [tool.pylint.format]
 max-line-length = "88"

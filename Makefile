@@ -84,10 +84,7 @@ test:
 	python3 -m deptry .
 
 	@echo "➡️ Test code smells (Pylint)..."
-	python3 -m pylint \
-		--fail-under=8 \
-		--recursive=true \
-		.
+	python3 -m pylint .
 
 	@echo "➡️ Test types (Pyright)..."
 	python3 -m pyright .
