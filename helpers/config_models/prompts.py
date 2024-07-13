@@ -486,9 +486,7 @@ class LlmModel(BaseModel):
 
     @cached_property
     def logger(self) -> Logger:
-        from helpers.logging import (  # pylint: disable=import-outside-toplevel
-            logger,
-        )
+        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
 
         return logger
 
@@ -608,9 +606,7 @@ class TtsModel(BaseModel):
 
     @cached_property
     def logger(self) -> Logger:
-        from helpers.logging import (  # pylint: disable=import-outside-toplevel
-            logger,
-        )
+        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
 
         return logger
 

@@ -82,9 +82,7 @@ class ToolModel(BaseModel):
         return self
 
     async def execute_function(self, plugins: object) -> None:
-        from helpers.logging import (  # pylint: disable=import-outside-toplevel
-            logger,
-        )
+        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
 
         json_str = self.function_arguments
         name = self.function_name
