@@ -810,12 +810,27 @@ async def twilio_sms_post(
     )
 
 
-def _str_to_contexts(contexts: Optional[str]) -> Optional[set[CallContextEnum]]:
-    return (
-        {CallContextEnum(context) for context in json.loads(contexts)}
-        if contexts
-        else None
-    )
+def _str_to_contexts(value: Optional[str]) -> Optional[set[CallContextEnum]]:
+    """
+    Convert a string to a set of contexts.
+
+    The string is a JSON array of strings.
+
+    Returns a set of `CallContextEnum` or None.
+    """
+    if not value:
+        return None
+    try:
+        contexts = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    res = set()
+    for context in contexts:
+        try:
+            res.add(CallContextEnum(context))
+        except ValueError:
+            logger.warning("Unknown context %s, skipping", context)
+    return res or None
 
 
 def _validation_error(
