@@ -78,16 +78,13 @@ test:
 	python3 -m black --check .
 
 	@echo "➡️ Test import formatter (isort)..."
-	python3 -m isort --check .
+	python3 -m isort --jobs -1 --check .
 
 	@echo "➡️ Test dependencies issues (deptry)..."
 	python3 -m deptry .
 
 	@echo "➡️ Test code smells (Pylint)..."
-	python3 -m pylint \
-		--fail-under=8 \
-		--recursive=true \
-		.
+	python3 -m pylint .
 
 	@echo "➡️ Test types (Pyright)..."
 	python3 -m pyright .
@@ -102,7 +99,7 @@ lint:
 	python3 -m black .
 
 	@echo "➡️ Fix with import formatter (isort)..."
-	python3 -m isort .
+	python3 -m isort --jobs -1 .
 
 tunnel:
 	@echo "➡️ Creating tunnel..."
