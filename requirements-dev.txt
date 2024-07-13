@@ -537,9 +537,9 @@ decorator==5.1.1 \
     --hash=sha256:637996211036b6385ef91435e4fae22989472f9d571faba8927ba8253acbc330 \
     --hash=sha256:b8c3f85900b9dc423225913c5aace94729fe1fa9763b38939a95226f02d37186
     # via ipython
-deepeval==0.21.59 \
-    --hash=sha256:3c57fdbbe9fdb5dc3407c7b444307ffc4bfb1067a79aa5984083bc0d3048f47f \
-    --hash=sha256:44abf67b5af4126c4d7da0613a055ca8d5a4cedbc4e5d33441ad4c39c7272fd3
+deepeval==0.21.65 \
+    --hash=sha256:9e3ffdfd2208c2e1bcb611ccebf4c5f9aa9af18949a58ebea8c96c4ea7e5a815 \
+    --hash=sha256:aa4ffc988f55bb452ec696e5fb5a752e4ec397ea853d59160b0de8eb8d542585
     # via call-center-ai (pyproject.toml)
 deprecated==1.2.14 \
     --hash=sha256:6fac8b097794a90302bdbb17b9b815e732d3c4720583ff1b198499d78470466c \
