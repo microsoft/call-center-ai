@@ -57,7 +57,10 @@ install:
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
-	python3 -m pip install --upgrade pip
+	python3 -m pip install --upgrade pip setuptools wheel
+
+	@echo "➡️ Upgrading pip-tools..."
+	python3 -m pip install --upgrade pip-tools
 
 	@echo "➡️ Compiling app requirements..."
 	pip-compile \
