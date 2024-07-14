@@ -6,6 +6,9 @@ AI-powered call center solution with Azure and OpenAI GPT.
 [![Last release date](https://img.shields.io/github/release-date/clemlesne/call-center-ai)](https://github.com/clemlesne/call-center-ai/releases)
 [![Project license](https://img.shields.io/github/license/clemlesne/call-center-ai)](https://github.com/clemlesne/call-center-ai/blob/main/LICENSE)
 
+<!-- GitHub Codespaces badge -->
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/microsoft/call-center-ai?quickstart=1)
+
 ## Overview
 
 Send a phone call from AI agent, in an API call. Or, directly call the bot from the configured phone number!
@@ -242,7 +245,7 @@ sequenceDiagram
 
 Some prerequisites are needed to deploy the solution.
 
-**Prefer using GitHub Codespaces for a quick start.** The environment will setup automatically with all the required tools.
+[Prefer using GitHub Codespaces for a quick start.](https://codespaces.new/microsoft/call-center-ai?quickstart=1) The environment will setup automatically with all the required tools.
 
 In macOS, with [Homebrew](https://brew.sh), simply type `make brew`.
 
