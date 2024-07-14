@@ -40,7 +40,7 @@ brew:
 	brew tap azure/functions && brew install azure-functions-core-tools@4
 
 	@echo "➡️ Installing Azure Dev tunnels..."
-	brew install devtunnel
+	curl -sL https://aka.ms/DevTunnelCliInstall | bash
 
 	@echo "➡️ Installing Syft..."
 	brew install syft
