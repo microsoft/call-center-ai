@@ -40,7 +40,7 @@ brew:
 	brew tap azure/functions && brew install azure-functions-core-tools@4
 
 	@echo "➡️ Installing Azure Dev tunnels..."
-	brew install devtunnel
+	curl -sL https://aka.ms/DevTunnelCliInstall | bash
 
 	@echo "➡️ Installing Syft..."
 	brew install syft
@@ -53,11 +53,14 @@ install:
 	python3 -m pip install pip-tools
 
 	@echo "➡️ Syncing dependencies..."
-	pip-sync requirements-dev.txt
+	pip-sync --pip-args "--no-deps" requirements-dev.txt
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
-	python3 -m pip install --upgrade pip
+	python3 -m pip install --upgrade pip setuptools wheel
+
+	@echo "➡️ Upgrading pip-tools..."
+	python3 -m pip install --upgrade pip-tools
 
 	@echo "➡️ Compiling app requirements..."
 	pip-compile \

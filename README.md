@@ -242,6 +242,8 @@ sequenceDiagram
 
 Some prerequisites are needed to deploy the solution.
 
+**Prefer using GitHub Codespaces for a quick start.** The environment will setup automatically with all the required tools.
+
 In macOS, with [Homebrew](https://brew.sh), simply type `make brew`.
 
 For other systems, make sure you have the following installed:
