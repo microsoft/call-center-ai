@@ -53,7 +53,7 @@ install:
 	python3 -m pip install pip-tools
 
 	@echo "➡️ Syncing dependencies..."
-	pip-sync requirements-dev.txt
+	pip-sync --pip-args "--no-deps" requirements-dev.txt
 
 upgrade:
 	@echo "➡️ Upgrading pip..."
