@@ -78,7 +78,7 @@ Claim ({{ call.initiate.phone_number }})
                 </span>
               </div>
               <div class="text-neutral-600 dark:text-neutral-400">
-                {{ message.created_at.astimezone(call.tz()).strftime('%d %b %Y, %H:%M (%Z)') }}
+                {{ message.created_at.astimezone(call.tz()).strftime('%a %d %b %Y, %H:%M (%Z)') }}
               </div>
             </div>
             {% if message.content %}
@@ -108,7 +108,7 @@ Claim ({{ call.initiate.phone_number }})
       {% for reminder in call.reminders | sort(attribute='due_date_time') %}
       <div>
         <div class="text-xs">
-          {{ reminder.owner | title }}<span class="text-neutral-600 dark:text-neutral-400">, {{ reminder.due_date_time.astimezone(call.tz()).strftime('%d %b %Y, %H:%M (%Z)') }}</span>
+          {{ reminder.owner | title }}<span class="text-neutral-600 dark:text-neutral-400">, {{ reminder.due_date_time.astimezone(call.tz()).strftime('%a %d %b %Y, %H:%M (%Z)') }}</span>
         </div>
         <p class="text-neutral-600 dark:text-neutral-400">{{ reminder.title | capitalize }}</p>
       </div>
@@ -185,7 +185,7 @@ Claim ({{ call.initiate.phone_number }})
           set details = [
             {
               'title': 'Date',
-              'value': call.claim.incident_date_time.strftime('%d %b %Y, %H:%M (%Z)') if call.claim.incident_date_time else 'N/A'
+              'value': call.claim.incident_date_time.strftime('%a %d %b %Y, %H:%M (%Z)') if call.claim.incident_date_time else 'N/A'
             },
             {
               'title': 'Location',
