@@ -58,6 +58,7 @@ var config = {
     endpoint: communicationServices.properties.hostName
     phone_number: localConfig.communication_services.phone_number
     post_queue_name: postQueue.name
+    resource_id: communicationServices.properties.immutableResourceId
     sms_queue_name: smsQueue.name
     trainings_queue_name: trainingsQueue.name
   }

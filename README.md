@@ -335,6 +335,7 @@ communication_services:
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
   post_queue_name: post-33612345678
+  resource_id: xxx
   sms_queue_name: sms-33612345678
 
 cognitive_service:
