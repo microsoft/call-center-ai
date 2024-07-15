@@ -1,4 +1,6 @@
 {
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.typeCheckingMode": "standard",
   "python.languageServer": "Pylance",
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter",
