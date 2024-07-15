@@ -2,11 +2,12 @@ import asyncio
 import json
 from http import HTTPStatus
 from os import getenv
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from urllib.parse import quote_plus, urljoin
 from uuid import UUID
 
 import azure.functions as func
+import jwt
 import mistune
 from azure.communication.callautomation import PhoneNumberIdentifier
 from azure.communication.callautomation.aio import CallAutomationClient
@@ -66,6 +67,10 @@ _jinja.filters["markdown"] = lambda x: (
 _automation_client: Optional[CallAutomationClient] = None
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
 logger.info("Using phone number %s", CONFIG.communication_services.phone_number)
+_communication_services_jwks_client = jwt.PyJWKClient(
+    cache_keys=True,
+    uri="https://acscallautomation.communication.azure.com/calling/keys",
+)
 
 # Persistences
 _cache = CONFIG.cache.instance()
@@ -471,8 +476,28 @@ async def communicationservices_event_post(
 
     No parameters are expected. The body is a list of JSON objects `CloudEvent`.
 
-    Returns a 204 No Content if the events are properly fomatted. Otherwise, returns a 400 Bad Request.
+    Returns a 204 No Content if the events are properly fomatted. A 401 Unauthorized if the JWT token is invalid. Otherwise, returns a 400 Bad Request.
     """
+    # Validate JWT token
+    service_jwt: Union[str, None] = req.headers.get("Authorization")
+    if not service_jwt:
+        return func.HttpResponse(status_code=HTTPStatus.UNAUTHORIZED)
+    service_jwt = str(service_jwt).replace("Bearer ", "")
+    try:
+        jwt.decode(
+            algorithms=["RS256"],
+            audience=CONFIG.communication_services.resource_id,
+            issuer="https://acscallautomation.communication.azure.com",
+            jwt=service_jwt,
+            key=_communication_services_jwks_client.get_signing_key_from_jwt(
+                service_jwt
+            ).key,
+        )
+    except jwt.PyJWTError:
+        logger.warning("Invalid JWT token", exc_info=True)
+        return func.HttpResponse(status_code=HTTPStatus.UNAUTHORIZED)
+
+    # Validate request
     try:
         call_id = UUID(req.route_params["call_id"])
         secret: str = req.route_params["secret"]
@@ -484,6 +509,8 @@ async def communicationservices_event_post(
         return _validation_error(Exception("Invalid JSON format"))
     if not events or not isinstance(events, list):
         return _validation_error(Exception("Events must be a list"))
+
+    # Process events in parallel
     await asyncio.gather(
         *[
             _communicationservices_event_worker(
@@ -496,6 +523,8 @@ async def communicationservices_event_post(
             for event in events
         ]
     )
+
+    # Return default response
     return func.HttpResponse(status_code=HTTPStatus.NO_CONTENT)
 
 
