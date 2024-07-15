@@ -160,7 +160,7 @@ class ClaimRelevancyMetric(BaseMetric):
             Assistant is a data analyst expert with 20 years of experience.
 
             # Context
-            Conversation is coming from a call centre. Today is {datetime.now(self.call.tz()).strftime("%Y-%m-%d %H:%M (%Z)")}.
+            Conversation is coming from a call centre. Today is {datetime.now(self.call.tz()).strftime("%a %d %b %Y, %H:%M (%Z)")}.
 
             # Objective
             Extract fields from a conversation. The respond will be a JSON object with the key-value pairs.
