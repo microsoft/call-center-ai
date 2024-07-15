@@ -1145,9 +1145,9 @@ pydantic-extra-types==2.8.2 \
     --hash=sha256:4d2b3c52c1e2e4dfa31bf1d5a37b841b09e3c5a08ec2bffca0e07fc2ad7d5c4a \
     --hash=sha256:f2400b3c3553fb7fa09a131967b4edf2d53f01ad9fa89d158784653f2e5c13d1
     # via call-center-ai (pyproject.toml)
-pydantic-settings==2.3.3 \
-    --hash=sha256:87fda838b64b5039b970cd47c3e8a1ee460ce136278ff672980af21516f6e6ce \
-    --hash=sha256:e4ed62ad851670975ec11285141db888fd24947f9440bd4380d7d8788d4965de
+pydantic-settings==2.3.4 \
+    --hash=sha256:11ad8bacb68a045f00e4f862c7a718c8a9ec766aa8fd4c32e39a0594b207b53a \
+    --hash=sha256:c5802e3d62b78e82522319bbc9b8f8ffb28ad1c988a99311d04f2a6051fca0a7
     # via call-center-ai (pyproject.toml)
 pyjwt[crypto]==2.8.0 \
     --hash=sha256:57e28d156e3d5c10088e0c68abb90bfac3df82b40a71bd0daa20c65ccd5c23de \
