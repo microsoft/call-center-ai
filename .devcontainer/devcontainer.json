@@ -10,7 +10,8 @@
     "ghcr.io/devcontainers/features/common-utils:2": {
       "configureZshAsDefaultShell": true
     },
-    "ghcr.io/meaningful-ooo/devcontainer-features/homebrew:2": {}
+    "ghcr.io/meaningful-ooo/devcontainer-features/homebrew:2": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
   "onCreateCommand": "cd /workspaces/call-center-ai && python3 -m venv .venv",
   "updateContentCommand": "cd /workspaces/call-center-ai && . .venv/bin/activate && make brew upgrade install",
