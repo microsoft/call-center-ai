@@ -1,10 +1,18 @@
 # Local dev
-.version.cache
+.devcontainer/
+.gitmodules/
+.python-version
+.syft.yaml
 *.sqlite*
+bicep/
+cicd/
+Makefile
+requirements-dev.txt
 
 # Local app config file
 *.env
-config*.yaml
+*.settings.json
+config.*
 
 # Tests
 .pytest_cache/
@@ -13,15 +21,20 @@ test-reports/
 tests/
 
 # Documentation and examples
+*.md
 docs/
 examples/
 
 # Local cache
 __pycache__/
 .python_packages/
+.venv/
+.version.cache
+.version.config
 *.egg-info/
 *.pyc
 build/
+DevTunnels/
 
 # GitHub
 .github/
