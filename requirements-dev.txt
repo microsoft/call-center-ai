@@ -1702,6 +1702,7 @@ pyjwt[crypto]==2.8.0 \
     --hash=sha256:57e28d156e3d5c10088e0c68abb90bfac3df82b40a71bd0daa20c65ccd5c23de \
     --hash=sha256:59127c392cc44c2da5bb3192169a91f429924e17aff6534d70fdc02ab3e04320
     # via
+    #   call-center-ai (pyproject.toml)
     #   msal
     #   twilio
 pylint==3.2.5 \

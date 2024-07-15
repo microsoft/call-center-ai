@@ -27,7 +27,7 @@ var appUrl = 'https://${functionAppName}.azurewebsites.net'
 var llmFastModelFullName = toLower('${llmFastModel}-${llmFastVersion}')
 var llmSlowModelFullName = toLower('${llmSlowModel}-${llmSlowVersion}')
 var embeddingModelFullName = toLower('${embeddingModel}-${embeddingVersion}')
-var cosmosContainerName = 'calls-v3'  // Third schema version
+var cosmosContainerName = 'calls-v3' // Third schema version
 var localConfig = loadYamlContent('../config.yaml')
 var phonenumberSanitized = replace(localConfig.communication_services.phone_number, '+', '')
 var config = {
@@ -58,6 +58,7 @@ var config = {
     endpoint: communicationServices.properties.hostName
     phone_number: localConfig.communication_services.phone_number
     post_queue_name: postQueue.name
+    resource_id: communicationServices.properties.immutableResourceId
     sms_queue_name: smsQueue.name
     trainings_queue_name: trainingsQueue.name
   }
@@ -123,7 +124,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   properties: {
     retentionInDays: 30
     sku: {
-      name: 'PerGB2018'  // Pay-as-you-go
+      name: 'PerGB2018' // Pay-as-you-go
     }
   }
 }
@@ -201,16 +202,16 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         }
       }
       scaleAndConcurrency: {
-        instanceMemoryMB: 2048  // Default and recommended
-        maximumInstanceCount: 100  // TODO: Avoid billing surprises, delete when sure
+        instanceMemoryMB: 2048 // Default and recommended
+        maximumInstanceCount: 100 // TODO: Avoid billing surprises, delete when sure
         alwaysReady: [
           {
             instanceCount: 2
-            name: 'http'  // Handle "conversation" events
+            name: 'http' // Handle "conversation" events
           }
         ]
         triggers: {
-          http:{
+          http: {
             perInstanceConcurrency: 4
           }
         }
@@ -335,7 +336,7 @@ resource eventgridSubscriptionCall 'Microsoft.EventGrid/systemTopics/eventSubscr
       destination: {
         endpointType: 'StorageQueue'
         properties: {
-          queueMessageTimeToLiveInSeconds: 30  // Short lived messages, only new call events
+          queueMessageTimeToLiveInSeconds: 30 // Short lived messages, only new call events
           queueName: callQueue.name
           resourceId: storageAccount.id
         }
@@ -370,7 +371,7 @@ resource eventgridSubscriptionSms 'Microsoft.EventGrid/systemTopics/eventSubscri
       destination: {
         endpointType: 'StorageQueue'
         properties: {
-          queueMessageTimeToLiveInSeconds: -1  // Infinite persistence, SMS is async
+          queueMessageTimeToLiveInSeconds: -1 // Infinite persistence, SMS is async
           queueName: smsQueue.name
           resourceId: storageAccount.id
         }
@@ -413,7 +414,7 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-04-01
   location: cognitiveCommunicationLocation
   tags: tags
   sku: {
-    name: 'S0'  // Only one available
+    name: 'S0' // Only one available
   }
   kind: 'CognitiveServices'
   properties: {
@@ -426,7 +427,7 @@ resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2024-04-01-prev
   location: location
   tags: tags
   sku: {
-    name: 'S0'  // Pay-as-you-go
+    name: 'S0' // Pay-as-you-go
   }
   kind: 'FormRecognizer'
   properties: {
@@ -454,7 +455,7 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-previe
   location: openaiLocation
   tags: tags
   sku: {
-    name: 'S0'  // Pay-as-you-go
+    name: 'S0' // Pay-as-you-go
   }
   kind: 'OpenAI'
   properties: {
@@ -468,7 +469,7 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
   tags: tags
   properties: {
     basePolicyName: 'Microsoft.Default'
-    mode: 'Deferred'  // Async moderation
+    mode: 'Deferred' // Async moderation
     contentFilters: [
       // Indirect attacks
       {
@@ -620,9 +621,9 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   kind: 'GlobalDocumentDB'
   properties: {
     consistencyPolicy: {
-      defaultConsistencyLevel: 'BoundedStaleness'  // ACID in a single-region, lag in the others
-      maxIntervalInSeconds: 600  // 5 mins lags at maximum
-      maxStalenessPrefix: 1000  // 1000 requests lags at max
+      defaultConsistencyLevel: 'BoundedStaleness' // ACID in a single-region, lag in the others
+      maxIntervalInSeconds: 600 // 5 mins lags at maximum
+      maxStalenessPrefix: 1000 // 1000 requests lags at max
     }
     databaseAccountOfferType: 'Standard'
     locations: [
@@ -699,7 +700,7 @@ resource search 'Microsoft.Search/searchServices@2024-03-01-preview' = {
   location: searchLocation
   tags: tags
   sku: {
-    name: 'basic'  // Smallest with semantic search
+    name: 'basic' // Smallest with semantic search
   }
   identity: {
     type: 'SystemAssigned'
@@ -714,7 +715,7 @@ resource translate 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   location: location
   tags: tags
   sku: {
-    name: 'S1'  // Pay-as-you-go
+    name: 'S1' // Pay-as-you-go
   }
   kind: 'TextTranslation'
   properties: {
@@ -728,11 +729,11 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' = {
   tags: tags
   properties: {
     sku: {
-      capacity: 0  // 250 MB of data
+      capacity: 0 // 250 MB of data
       family: 'C'
-      name: 'Standard'  // First tier with SLA
+      name: 'Standard' // First tier with SLA
     }
     minimumTlsVersion: '1.2'
-    redisVersion: '6'  // v6.x
+    redisVersion: '6' // v6.x
   }
 }
