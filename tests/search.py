@@ -123,7 +123,6 @@ class RagRelevancyMetric(BaseMetric):
 async def test_relevancy(
     call: CallStateModel,
     claim_tests_excl: list[str],
-    claim_tests_incl: list[str],
     deepeval_model: GPTModel,
     expected_output: str,
     speeches: list[str],
