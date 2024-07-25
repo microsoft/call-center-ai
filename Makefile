@@ -56,6 +56,9 @@ install:
 	pip-sync --pip-args "--no-deps" requirements-dev.txt
 
 upgrade:
+	@echo "➡️ Updating Git submodules..."
+	git submodule update --init --recursive
+
 	@echo "➡️ Upgrading pip..."
 	python3 -m pip install --upgrade pip setuptools wheel
 
