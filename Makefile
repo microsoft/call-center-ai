@@ -137,6 +137,9 @@ deploy:
 		--template-file bicep/main.bicep \
 	 	--name $(name_sanitized)
 
+	@echo "💤 Wait 10 secs for output to be available..."
+	sleep 10
+
 	@echo "🛠️ Deploying Function App..."
 	func azure functionapp publish $(function_app_name) \
 		--build local \
