@@ -219,7 +219,11 @@ class Conversation(BaseModel):
 
 
 def with_conversations(fn=None) -> MarkDecorator:
-    with open("tests/conversations.yaml", encoding="utf-8") as f:
+    with open(
+        encoding="utf-8",
+        file="tests/conversations.yaml",
+        mode="r",
+    ) as f:
         file: dict = yaml.safe_load(f)
     conversations: list[Conversation] = []
     for conv in file.get("conversations", []):
