@@ -347,7 +347,7 @@ async def call_id_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
-        body=call.model_dump_json(exclude_none=True),
+        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
