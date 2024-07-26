@@ -257,20 +257,16 @@ async def completion_sync(
     # Initialize prompts
     messages = system
     if _validation_error:
-        messages.append(
-            ChatCompletionSystemMessageParam(
-                role="system",
-                content=f"""
-                    A validation error occurred during the previous attempt.
-
-                    # Previous result
-                    {_previous_result or "N/A"}
-
-                    # Error details
-                    {_validation_error}
-                    """,
-            )
-        )
+        messages += [
+            ChatCompletionAssistantMessageParam(
+                content=_previous_result or "",
+                role="assistant",
+            ),
+            ChatCompletionUserMessageParam(
+                content=f"A validation error occurred, please retry: {_validation_error}",
+                role="user",
+            ),
+        ]
 
     # Generate
     res_content: Optional[str] = await _completion_sync_worker(
