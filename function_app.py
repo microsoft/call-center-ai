@@ -252,27 +252,70 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
 
 # TODO: Add total (int) and calls (list) as a wrapper for the list of calls
 @app.route(
+    "call",
+    methods=["GET"],
+    trigger_arg_name="req",
+)
+@tracer.start_as_current_span("call_list_get")
+async def call_list_get(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    REST API to list all calls.
+
+    Parameters:
+    - phone_number: Filter by phone number
+
+    Returns a list of calls objects `CallGetModel`, for a phone number, in JSON format.
+    """
+    try:
+        phone_number = (
+            PhoneNumber(req.params["phone_number"])
+            if "phone_number" in req.params
+            else None
+        )
+    except ValueError as e:
+        return _validation_error(e)
+    count = 100
+    calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=count)
+    if not calls:
+        return _standard_error(
+            message=f"Calls {phone_number} not found",
+            status_code=HTTPStatus.NOT_FOUND,
+        )
+    output = [CallGetModel.model_validate(call) for call in calls or []]
+    return func.HttpResponse(
+        body=TypeAdapter(list[CallGetModel]).dump_json(output),
+        mimetype="application/json",
+        status_code=HTTPStatus.OK,
+    )
+
+
+@app.route(
     "call/{phone_number}",
     methods=["GET"],
     trigger_arg_name="req",
 )
-@tracer.start_as_current_span("call_search_get")
-async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
+@tracer.start_as_current_span("call_phone_number_get")
+async def call_phone_number_get(req: func.HttpRequest) -> func.HttpResponse:
     """
     REST API to search for calls by phone number.
 
-    No parameters are expected.
+    Parameters:
+    - phone_number: Phone number to search for
 
-    Returns a list of calls objects `CallGetModel`, for a phone number, in JSON format.
+    Returns a single call object `CallGetModel`, in JSON format.
     """
     try:
         phone_number = PhoneNumber(req.route_params["phone_number"])
     except ValueError as e:
         return _validation_error(e)
-    calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=1)
-    output = [CallGetModel.model_validate(call) for call in calls or []]
+    call = await _db.call_asearch_one(phone_number=phone_number)
+    if not call:
+        return _standard_error(
+            message=f"Call {phone_number} not found",
+            status_code=HTTPStatus.NOT_FOUND,
+        )
     return func.HttpResponse(
-        body=TypeAdapter(list[CallGetModel]).dump_json(output),
+        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -283,12 +326,13 @@ async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
     trigger_arg_name="req",
 )
-@tracer.start_as_current_span("call_get")
-async def call_get(req: func.HttpRequest) -> func.HttpResponse:
+@tracer.start_as_current_span("call_id_get")
+async def call_id_get(req: func.HttpRequest) -> func.HttpResponse:
     """ "
     REST API to get a single call by call ID.
 
-    No parameters are expected.
+    Parameters:
+    - call_id: Call ID to search for
 
     Returns a single call object `CallGetModel`, in JSON format.
     """
