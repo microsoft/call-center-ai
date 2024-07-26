@@ -40,6 +40,7 @@ from helpers.http import azure_transport
 from helpers.logging import logger
 from helpers.monitoring import CallAttributes, span_attribute, tracer
 from helpers.pydantic_types.phone_numbers import PhoneNumber
+from helpers.resources import resources_dir
 from models.call import CallGetModel, CallInitiateModel, CallStateModel
 from models.next import ActionEnum as NextActionEnum
 from models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
@@ -88,6 +89,39 @@ _COMMUNICATIONSERVICES_CALLABACK_TPL = urljoin(
     "/communicationservices/event/{call_id}/{callback_secret}",
 )
 logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
+
+
+@app.route(
+    "openapi.json",
+    methods=["GET"],
+)
+@tracer.start_as_current_span("openapi_get")
+async def openapi_get(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Generate the OpenAPI specification for the API.
+
+    No parameters are expected.
+
+    Returns a JSON object with the OpenAPI specification.
+    """
+    with open(
+        encoding="utf-8",
+        file=resources_dir("openapi.json"),
+        mode="r",
+    ) as f:
+        openapi = json.load(f)
+        openapi["info"]["version"] = CONFIG.version
+        openapi["servers"] = [
+            {
+                "description": "Public endpoint",
+                "url": str(CONFIG.public_domain),
+            }
+        ]
+        return func.HttpResponse(
+            body=json.dumps(openapi),
+            mimetype="application/json",
+            status_code=HTTPStatus.OK,
+        )
 
 
 @app.route(

@@ -1,0 +1,907 @@
+{
+    "openapi": "3.0.2",
+    "info": {
+        "title": "Call Center AI",
+        "description": "AI-powered call center solution with Azure and OpenAI GPT.",
+        "contact": {
+            "name": "GitHub",
+            "url": "https://github.com/microsoft/call-center-ai/issues"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0"
+        }
+    },
+    "paths": {
+        "/health/liveness": {
+            "get": {
+                "responses": {
+                    "204": {
+                        "content": {
+                            "text/plain": {}
+                        }
+                    }
+                }
+            }
+        },
+        "/health/readiness": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReadinessModel"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReadinessModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/report": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "text/html": {}
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "parameters": [
+                {
+                    "name": "phone_number",
+                    "description": "",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "in": "query"
+                }
+            ]
+        },
+        "/report/{call_id}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "text/html": {}
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "content": {
+                            "text/plain": {}
+                        }
+                    }
+                }
+            },
+            "parameters": [
+                {
+                    "name": "call_id",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "in": "path",
+                    "required": true
+                }
+            ]
+        },
+        "/call/{call_id}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CallGetModel"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/call/{phone_number}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CallGetModel"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/call": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CallGetModel"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CallInitiateModel"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CallGetModel"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/communicationservices/event/{call_id}/{secret}": {
+            "post": {
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "204": {
+                        "content": {
+                            "text/plain": {}
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "AzureCommunicationServicesManaged": []
+                    },
+                    {
+                        "CallbackCallSecret": []
+                    }
+                ]
+            },
+            "parameters": [
+                {
+                    "name": "call_id",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "in": "path",
+                    "required": true
+                },
+                {
+                    "name": "secret",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "in": "path",
+                    "required": true
+                }
+            ]
+        },
+        "/twilio/sms": {
+            "post": {
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TwilioSmsModel"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "text/xml": {}
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ReadinessModel": {
+                "description": "",
+                "required": [
+                    "status",
+                    "checks"
+                ],
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "description": "",
+                        "enum": [
+                            "fail",
+                            "ok"
+                        ],
+                        "type": "string"
+                    },
+                    "checks": {
+                        "$ref": "#/components/schemas/ReadinessCheckModel",
+                        "description": ""
+                    }
+                }
+            },
+            "ReadinessCheckModel": {
+                "description": "",
+                "required": [
+                    "id",
+                    "status"
+                ],
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "description": "",
+                        "type": "string"
+                    },
+                    "status": {
+                        "description": "",
+                        "enum": [
+                            "fail",
+                            "ok"
+                        ],
+                        "type": "string"
+                    }
+                }
+            },
+            "CallGetModel": {
+                "title": "Root Type for CallGetModel",
+                "description": "",
+                "required": [
+                    "claim",
+                    "call_id",
+                    "created_at",
+                    "in_progress",
+                    "initiate",
+                    "messages",
+                    "recognition_retry",
+                    "reminders"
+                ],
+                "type": "object",
+                "properties": {
+                    "call_id": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "initiate": {
+                        "$ref": "#/components/schemas/CallInitiateModel",
+                        "properties": {
+                            "agent_phone_number": {
+                                "type": "string"
+                            },
+                            "bot_company": {
+                                "type": "string"
+                            },
+                            "bot_name": {
+                                "type": "string"
+                            },
+                            "claim": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "lang": {
+                                "type": "object",
+                                "properties": {
+                                    "default_short_code": {
+                                        "type": "string"
+                                    },
+                                    "availables": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "pronunciations_en": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "short_code": {
+                                                    "type": "string"
+                                                },
+                                                "voice": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "prosody_rate": {
+                                "format": "int32",
+                                "type": "integer"
+                            },
+                            "task": {
+                                "type": "string"
+                            },
+                            "phone_number": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "claim": {
+                        "type": "string"
+                    },
+                    "messages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MessageModel"
+                        }
+                    },
+                    "next": {
+                        "$ref": "#/components/schemas/NextModel",
+                        "properties": {
+                            "action": {
+                                "type": "string"
+                            },
+                            "justification": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "reminders": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReminderModel"
+                        }
+                    },
+                    "synthesis": {
+                        "$ref": "#/components/schemas/SynthesisModel",
+                        "properties": {
+                            "long": {
+                                "type": "string"
+                            },
+                            "satisfaction": {
+                                "type": "string"
+                            },
+                            "short": {
+                                "type": "string"
+                            },
+                            "improvement_suggestions": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "recognition_retry": {
+                        "format": "int32",
+                        "type": "integer"
+                    },
+                    "in_progress": {
+                        "type": "boolean"
+                    },
+                    "voice_id": {
+                        "description": "",
+                        "type": "string"
+                    }
+                }
+            },
+            "CallInitiateModel": {
+                "title": "Root Type for CallInitiateModel",
+                "description": "",
+                "required": [
+                    "phone_number"
+                ],
+                "type": "object",
+                "properties": {
+                    "agent_phone_number": {
+                        "type": "string"
+                    },
+                    "bot_company": {
+                        "type": "string"
+                    },
+                    "bot_name": {
+                        "type": "string"
+                    },
+                    "claim": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ClaimFieldModel"
+                        }
+                    },
+                    "lang": {
+                        "$ref": "#/components/schemas/LanguageModel",
+                        "properties": {
+                            "default_short_code": {
+                                "type": "string"
+                            },
+                            "availables": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "pronunciations_en": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "short_code": {
+                                            "type": "string"
+                                        },
+                                        "voice": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "prosody_rate": {
+                        "format": "int32",
+                        "maximum": 1.25,
+                        "minimum": 0.75,
+                        "type": "integer"
+                    },
+                    "task": {
+                        "type": "string"
+                    },
+                    "phone_number": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ClaimFieldModel": {
+                "title": "Root Type for ClaimFieldModel",
+                "description": "",
+                "required": [
+                    "type",
+                    "name",
+                    "description"
+                ],
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "description": "",
+                        "enum": [
+                            "datetime",
+                            "email",
+                            "phone_number",
+                            "text"
+                        ],
+                        "type": "string"
+                    }
+                }
+            },
+            "MessageModel": {
+                "title": "Root Type for MessageModel",
+                "description": "",
+                "required": [
+                    "action",
+                    "content",
+                    "created_at",
+                    "persona",
+                    "style",
+                    "tool_calls"
+                ],
+                "type": "object",
+                "properties": {
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "content": {
+                        "type": "string"
+                    },
+                    "persona": {
+                        "enum": [
+                            "assistant",
+                            "human",
+                            "tool"
+                        ],
+                        "type": "string"
+                    },
+                    "style": {
+                        "enum": [
+                            "cheerful",
+                            "none",
+                            "sad"
+                        ],
+                        "type": "string"
+                    },
+                    "tool_calls": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ToolModel"
+                        }
+                    },
+                    "action": {
+                        "description": "",
+                        "enum": [
+                            "call",
+                            "hangup",
+                            "sms",
+                            "talk"
+                        ],
+                        "type": "string"
+                    }
+                }
+            },
+            "ToolModel": {
+                "title": "Root Type for ToolModel",
+                "description": "",
+                "required": [
+                    "content",
+                    "function_arguments",
+                    "function_name",
+                    "tool_id"
+                ],
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string"
+                    },
+                    "function_arguments": {
+                        "type": "string"
+                    },
+                    "function_name": {
+                        "type": "string"
+                    },
+                    "tool_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "NextModel": {
+                "title": "Root Type for NextModel",
+                "description": "",
+                "required": [
+                    "action",
+                    "justification"
+                ],
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string"
+                    },
+                    "justification": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ReminderModel": {
+                "description": "",
+                "required": [
+                    "created_at",
+                    "description",
+                    "due_date_time",
+                    "title"
+                ],
+                "type": "object",
+                "properties": {
+                    "created_at": {
+                        "format": "date-time",
+                        "description": "",
+                        "type": "string"
+                    },
+                    "description": {
+                        "description": "",
+                        "type": "string"
+                    },
+                    "due_date_time": {
+                        "format": "date-time",
+                        "description": "",
+                        "type": "string"
+                    },
+                    "owner": {
+                        "description": "",
+                        "type": "string"
+                    },
+                    "title": {
+                        "description": "",
+                        "type": "string"
+                    }
+                }
+            },
+            "SynthesisModel": {
+                "title": "Root Type for SynthesisModel",
+                "description": "",
+                "required": [
+                    "improvement_suggestions",
+                    "long",
+                    "satisfaction",
+                    "short"
+                ],
+                "type": "object",
+                "properties": {
+                    "long": {
+                        "type": "string"
+                    },
+                    "satisfaction": {
+                        "enum": [
+                            "terrible",
+                            "low",
+                            "partial",
+                            "high",
+                            "unknown"
+                        ],
+                        "type": "string"
+                    },
+                    "short": {
+                        "type": "string"
+                    },
+                    "improvement_suggestions": {
+                        "type": "string"
+                    }
+                }
+            },
+            "LanguageEntryModel": {
+                "title": "Root Type for LanguageEntryModel",
+                "description": "",
+                "required": [
+                    "pronunciations_en",
+                    "short_code",
+                    "voice"
+                ],
+                "type": "object",
+                "properties": {
+                    "pronunciations_en": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "short_code": {
+                        "type": "string"
+                    },
+                    "voice": {
+                        "type": "string"
+                    }
+                }
+            },
+            "LanguageModel": {
+                "description": "",
+                "required": [
+                    "default_short_code",
+                    "availables"
+                ],
+                "type": "object",
+                "properties": {
+                    "default_short_code": {
+                        "description": "",
+                        "type": "string"
+                    },
+                    "availables": {
+                        "description": "",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LanguageEntryModel"
+                        }
+                    }
+                }
+            },
+            "ErrorModel": {
+                "description": "",
+                "required": [
+                    "error"
+                ],
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "$ref": "#/components/schemas/ErrorEntryModel",
+                        "description": ""
+                    }
+                }
+            },
+            "ErrorEntryModel": {
+                "description": "",
+                "required": [
+                    "message",
+                    "details"
+                ],
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "description": "",
+                        "type": "string"
+                    },
+                    "details": {
+                        "description": "",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "TwilioSmsModel": {
+                "description": "",
+                "required": [
+                    "From",
+                    "Body"
+                ],
+                "type": "object",
+                "properties": {
+                    "From": {
+                        "description": "",
+                        "type": "string"
+                    },
+                    "Body": {
+                        "description": "",
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "securitySchemes": {
+            "AzureCommunicationServicesManaged": {
+                "scheme": "bearer",
+                "type": "http"
+            },
+            "CallbackCallSecret": {
+                "type": "apiKey",
+                "name": "secret",
+                "in": "query"
+            }
+        }
+    }
+}
