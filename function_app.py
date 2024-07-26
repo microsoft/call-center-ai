@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
 from typing import Any, Optional, Union
@@ -568,6 +569,9 @@ async def communicationservices_event_post(
             audience=CONFIG.communication_services.resource_id,
             issuer="https://acscallautomation.communication.azure.com",
             jwt=service_jwt,
+            leeway=timedelta(
+                minutes=5
+            ),  # Recommended practice by Azure to mitigate clock skew
             key=_communication_services_jwks_client.get_signing_key_from_jwt(
                 service_jwt
             ).key,
