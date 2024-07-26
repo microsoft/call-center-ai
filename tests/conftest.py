@@ -16,7 +16,6 @@ from azure.communication.callautomation.aio import (
 )
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
-from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, ValidationError
 
