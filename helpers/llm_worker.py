@@ -29,7 +29,7 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCallFunction,
 )
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 from tenacity import (
     AsyncRetrying,
     retry,
@@ -311,7 +311,6 @@ async def _completion_sync_worker(
     """
     Returns a completion.
     """
-    content = None
     client, platform = _use_llm(is_fast)
     extra = {}
     if json_output:

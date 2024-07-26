@@ -226,11 +226,11 @@ class LlmPlugins:
             The field to update, in English.
 
             # Available fields
-            {% for name, info in call.initiate.claim_model().model_fields.items() %}
-            {% if not info.description %}
-            - {{ name }}
+            {% for field in call.initiate.claim %}
+            {% if not field.description %}
+            - {{ field.name }}
             {% else %}
-            - '{{ name }}', {{ info.description }}
+            - '{{ field.name }}', {{ field.description }}
             {% endif %}
             {% endfor %}
 

@@ -518,7 +518,6 @@ async def _intelligence_synthesis(call: CallStateModel) -> None:
         validate_json=True,
         validation_callback=_validate,
     )
-
     if not model:
         logger.warning("Error generating synthesis")
         return
@@ -550,7 +549,6 @@ async def _intelligence_next(call: CallStateModel) -> None:
         validate_json=True,
         validation_callback=_validate,
     )
-
     if not model:
         logger.warning("Error generating next action")
         return
