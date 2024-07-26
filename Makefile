@@ -56,6 +56,9 @@ install:
 	pip-sync --pip-args "--no-deps" requirements-dev.txt
 
 upgrade:
+	@echo "➡️ Updating Git submodules..."
+	git submodule update --init --recursive
+
 	@echo "➡️ Upgrading pip..."
 	python3 -m pip install --upgrade pip setuptools wheel
 
@@ -133,6 +136,9 @@ deploy:
 			'version=$(version_full)' \
 		--template-file bicep/main.bicep \
 	 	--name $(name_sanitized)
+
+	@echo "💤 Wait 10 secs for output to be available..."
+	sleep 10
 
 	@echo "🛠️ Deploying Function App..."
 	func azure functionapp publish $(function_app_name) \

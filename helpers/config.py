@@ -31,7 +31,11 @@ def load_config() -> RootModel:
     if not path:
         raise ConfigNotFound(f'Cannot find config file "{config_file}"')
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(
+            encoding="utf-8",
+            file=path,
+            mode="r",
+        ) as f:
             config = RootModel.model_validate(yaml.safe_load(f))
             print(f'Config loaded from file "{path}"')
             return config

@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
 from typing import Any, Optional, Union
@@ -40,6 +41,7 @@ from helpers.http import azure_transport
 from helpers.logging import logger
 from helpers.monitoring import CallAttributes, span_attribute, tracer
 from helpers.pydantic_types.phone_numbers import PhoneNumber
+from helpers.resources import resources_dir
 from models.call import CallGetModel, CallInitiateModel, CallStateModel
 from models.next import ActionEnum as NextActionEnum
 from models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
@@ -88,6 +90,39 @@ _COMMUNICATIONSERVICES_CALLABACK_TPL = urljoin(
     "/communicationservices/event/{call_id}/{callback_secret}",
 )
 logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
+
+
+@app.route(
+    "openapi.json",
+    methods=["GET"],
+)
+@tracer.start_as_current_span("openapi_get")
+async def openapi_get(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Generate the OpenAPI specification for the API.
+
+    No parameters are expected.
+
+    Returns a JSON object with the OpenAPI specification.
+    """
+    with open(
+        encoding="utf-8",
+        file=resources_dir("openapi.json"),
+        mode="r",
+    ) as f:
+        openapi = json.load(f)
+        openapi["info"]["version"] = CONFIG.version
+        openapi["servers"] = [
+            {
+                "description": "Public endpoint",
+                "url": str(CONFIG.public_domain),
+            }
+        ]
+        return func.HttpResponse(
+            body=json.dumps(openapi),
+            mimetype="application/json",
+            status_code=HTTPStatus.OK,
+        )
 
 
 @app.route(
@@ -226,9 +261,8 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
         return _validation_error(e)
     call = await _db.call_aget(call_id)
     if not call:
-        return func.HttpResponse(
-            body=f"Call {call_id} not found",
-            mimetype="text/plain",
+        return _standard_error(
+            message=f"Call {call_id} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
     template = _jinja.get_template("single.html.jinja")
@@ -253,27 +287,70 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
 
 # TODO: Add total (int) and calls (list) as a wrapper for the list of calls
 @app.route(
+    "call",
+    methods=["GET"],
+    trigger_arg_name="req",
+)
+@tracer.start_as_current_span("call_list_get")
+async def call_list_get(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    REST API to list all calls.
+
+    Parameters:
+    - phone_number: Filter by phone number
+
+    Returns a list of calls objects `CallGetModel`, for a phone number, in JSON format.
+    """
+    try:
+        phone_number = (
+            PhoneNumber(req.params["phone_number"])
+            if "phone_number" in req.params
+            else None
+        )
+    except ValueError as e:
+        return _validation_error(e)
+    count = 100
+    calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=count)
+    if not calls:
+        return _standard_error(
+            message=f"Calls {phone_number} not found",
+            status_code=HTTPStatus.NOT_FOUND,
+        )
+    output = [CallGetModel.model_validate(call) for call in calls or []]
+    return func.HttpResponse(
+        body=TypeAdapter(list[CallGetModel]).dump_json(output),
+        mimetype="application/json",
+        status_code=HTTPStatus.OK,
+    )
+
+
+@app.route(
     "call/{phone_number}",
     methods=["GET"],
     trigger_arg_name="req",
 )
-@tracer.start_as_current_span("call_search_get")
-async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
+@tracer.start_as_current_span("call_phone_number_get")
+async def call_phone_number_get(req: func.HttpRequest) -> func.HttpResponse:
     """
     REST API to search for calls by phone number.
 
-    No parameters are expected.
+    Parameters:
+    - phone_number: Phone number to search for
 
-    Returns a list of calls objects `CallGetModel`, for a phone number, in JSON format.
+    Returns a single call object `CallGetModel`, in JSON format.
     """
     try:
         phone_number = PhoneNumber(req.route_params["phone_number"])
     except ValueError as e:
         return _validation_error(e)
-    calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=1)
-    output = [CallGetModel.model_validate(call) for call in calls or []]
+    call = await _db.call_asearch_one(phone_number=phone_number)
+    if not call:
+        return _standard_error(
+            message=f"Call {phone_number} not found",
+            status_code=HTTPStatus.NOT_FOUND,
+        )
     return func.HttpResponse(
-        body=TypeAdapter(list[CallGetModel]).dump_json(output),
+        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -284,12 +361,13 @@ async def call_search_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
     trigger_arg_name="req",
 )
-@tracer.start_as_current_span("call_get")
-async def call_get(req: func.HttpRequest) -> func.HttpResponse:
+@tracer.start_as_current_span("call_id_get")
+async def call_id_get(req: func.HttpRequest) -> func.HttpResponse:
     """ "
     REST API to get a single call by call ID.
 
-    No parameters are expected.
+    Parameters:
+    - call_id: Call ID to search for
 
     Returns a single call object `CallGetModel`, in JSON format.
     """
@@ -299,13 +377,12 @@ async def call_get(req: func.HttpRequest) -> func.HttpResponse:
         return _validation_error(e)
     call = await _db.call_aget(call_id)
     if not call:
-        return func.HttpResponse(
-            body=f"Call {call_id} not found",
-            mimetype="text/plain",
+        return _standard_error(
+            message=f"Call {call_id} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
-        body=call.model_dump_json(exclude_none=True),
+        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -481,7 +558,10 @@ async def communicationservices_event_post(
     # Validate JWT token
     service_jwt: Union[str, None] = req.headers.get("Authorization")
     if not service_jwt:
-        return func.HttpResponse(status_code=HTTPStatus.UNAUTHORIZED)
+        return _standard_error(
+            message="Authorization header missing",
+            status_code=HTTPStatus.UNAUTHORIZED,
+        )
     service_jwt = str(service_jwt).replace("Bearer ", "")
     try:
         jwt.decode(
@@ -489,13 +569,19 @@ async def communicationservices_event_post(
             audience=CONFIG.communication_services.resource_id,
             issuer="https://acscallautomation.communication.azure.com",
             jwt=service_jwt,
+            leeway=timedelta(
+                minutes=5
+            ),  # Recommended practice by Azure to mitigate clock skew
             key=_communication_services_jwks_client.get_signing_key_from_jwt(
                 service_jwt
             ).key,
         )
     except jwt.PyJWTError:
         logger.warning("Invalid JWT token", exc_info=True)
-        return func.HttpResponse(status_code=HTTPStatus.UNAUTHORIZED)
+        return _standard_error(
+            message="Invalid JWT token",
+            status_code=HTTPStatus.UNAUTHORIZED,
+        )
 
     # Validate request
     try:
@@ -835,7 +921,10 @@ async def twilio_sms_post(
             trainings_callback=_trainings_callback,
         )
         if not event_status:
-            return func.HttpResponse(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return _standard_error(
+                message="SMS event failed",
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     return func.HttpResponse(
         body=str(MessagingResponse()),  # Twilio expects an empty response everytime
@@ -888,19 +977,49 @@ def _validation_error(
     """
     messages = []
     if isinstance(e, ValidationError):
-        messages = e.errors()  # Pydantic returns well formatted errors, use them
+        messages = [
+            str(x) for x in e.errors()
+        ]  # Pydantic returns well formatted errors, use them
     elif isinstance(e, ValueError):
         messages = [str(e)]  # TODO: Could it expose sensitive information?
+    return _standard_error(
+        details=messages,
+        message="Validation error",
+        status_code=HTTPStatus.BAD_REQUEST,
+    )
+
+
+def _standard_error(
+    message: str,
+    details: Optional[list[str]] = None,
+    status_code: HTTPStatus = HTTPStatus.BAD_REQUEST,
+) -> func.HttpResponse:
+    """
+    Generate a standard error response.
+
+    Response body is a JSON object with the following structure:
+
+    ```
+    {
+        "error": {
+            "message": "Error message",
+            "details": ["Error details"]
+        }
+    }
+    ```
+
+    Returns a JOSN with a JSON body and the specified status code.
+    """
     res_json = {
         "error": {
-            "message": "Validation error",
-            "details": messages,
+            "message": message,
+            "details": details or [],
         }
     }
     return func.HttpResponse(
         body=json.dumps(res_json),
         mimetype="application/json",
-        status_code=HTTPStatus.BAD_REQUEST,
+        status_code=status_code,
     )
 
 

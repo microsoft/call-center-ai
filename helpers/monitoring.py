@@ -9,9 +9,16 @@ from opentelemetry.util.types import AttributeValue
 
 VERSION = environ.get("VERSION", "0.0.0-unknown")
 
-configure_azure_monitor()  # Configure Azure Application Insights exporter
-AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
-HTTPXClientInstrumentor().instrument()  # Instrument httpx
+try:
+    configure_azure_monitor()  # Configure Azure Application Insights exporter
+    AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
+    HTTPXClientInstrumentor().instrument()  # Instrument httpx
+except ValueError as e:
+    print(
+        "Azure Application Insights instrumentation failed, likely due to a missing APPLICATIONINSIGHTS_CONNECTION_STRING environment variable.",
+        e,
+    )
+
 tracer = trace.get_tracer(
     instrumenting_library_version=VERSION,
     instrumenting_module_name="com.github.clemlesne.call-center-ai",

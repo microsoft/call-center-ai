@@ -16,7 +16,6 @@ from azure.communication.callautomation.aio import (
 )
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
-from langchain_core.language_models import BaseChatModel
 from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, ValidationError
 
@@ -219,7 +218,11 @@ class Conversation(BaseModel):
 
 
 def with_conversations(fn=None) -> MarkDecorator:
-    with open("tests/conversations.yaml", encoding="utf-8") as f:
+    with open(
+        encoding="utf-8",
+        file="tests/conversations.yaml",
+        mode="r",
+    ) as f:
         file: dict = yaml.safe_load(f)
     conversations: list[Conversation] = []
     for conv in file.get("conversations", []):
