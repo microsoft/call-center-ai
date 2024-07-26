@@ -4,6 +4,7 @@ from os import environ
 from typing import AsyncGenerator, Callable, Optional, TypeVar, Union
 
 import tiktoken
+from json_repair import repair_json
 from openai import (
     APIConnectionError,
     APIResponseValidationError,
@@ -272,11 +273,15 @@ async def completion_sync(
         )
 
     # Generate
-    res_content = await _completion_sync_worker(
+    res_content: Optional[str] = await _completion_sync_worker(
         is_fast=False,
         json_output=validate_json,
         system=messages,
     )
+    if validate_json and res_content:
+        # Try to fix JSON args to catch LLM hallucinations
+        # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
+        res_content = repair_json(json_str=res_content)  # pyright: ignore
 
     # Validate
     is_valid, validation_error, res_object = validation_callback(res_content)
