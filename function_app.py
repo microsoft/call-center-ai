@@ -226,9 +226,8 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
         return _validation_error(e)
     call = await _db.call_aget(call_id)
     if not call:
-        return func.HttpResponse(
-            body=f"Call {call_id} not found",
-            mimetype="text/plain",
+        return _standard_error(
+            message=f"Call {call_id} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
     template = _jinja.get_template("single.html.jinja")
@@ -299,9 +298,8 @@ async def call_get(req: func.HttpRequest) -> func.HttpResponse:
         return _validation_error(e)
     call = await _db.call_aget(call_id)
     if not call:
-        return func.HttpResponse(
-            body=f"Call {call_id} not found",
-            mimetype="text/plain",
+        return _standard_error(
+            message=f"Call {call_id} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
@@ -481,7 +479,10 @@ async def communicationservices_event_post(
     # Validate JWT token
     service_jwt: Union[str, None] = req.headers.get("Authorization")
     if not service_jwt:
-        return func.HttpResponse(status_code=HTTPStatus.UNAUTHORIZED)
+        return _standard_error(
+            message="Authorization header missing",
+            status_code=HTTPStatus.UNAUTHORIZED,
+        )
     service_jwt = str(service_jwt).replace("Bearer ", "")
     try:
         jwt.decode(
@@ -495,7 +496,10 @@ async def communicationservices_event_post(
         )
     except jwt.PyJWTError:
         logger.warning("Invalid JWT token", exc_info=True)
-        return func.HttpResponse(status_code=HTTPStatus.UNAUTHORIZED)
+        return _standard_error(
+            message="Invalid JWT token",
+            status_code=HTTPStatus.UNAUTHORIZED,
+        )
 
     # Validate request
     try:
@@ -835,7 +839,10 @@ async def twilio_sms_post(
             trainings_callback=_trainings_callback,
         )
         if not event_status:
-            return func.HttpResponse(status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return _standard_error(
+                message="SMS event failed",
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     return func.HttpResponse(
         body=str(MessagingResponse()),  # Twilio expects an empty response everytime
@@ -888,19 +895,49 @@ def _validation_error(
     """
     messages = []
     if isinstance(e, ValidationError):
-        messages = e.errors()  # Pydantic returns well formatted errors, use them
+        messages = [
+            str(x) for x in e.errors()
+        ]  # Pydantic returns well formatted errors, use them
     elif isinstance(e, ValueError):
         messages = [str(e)]  # TODO: Could it expose sensitive information?
+    return _standard_error(
+        details=messages,
+        message="Validation error",
+        status_code=HTTPStatus.BAD_REQUEST,
+    )
+
+
+def _standard_error(
+    message: str,
+    details: Optional[list[str]] = None,
+    status_code: HTTPStatus = HTTPStatus.BAD_REQUEST,
+) -> func.HttpResponse:
+    """
+    Generate a standard error response.
+
+    Response body is a JSON object with the following structure:
+
+    ```
+    {
+        "error": {
+            "message": "Error message",
+            "details": ["Error details"]
+        }
+    }
+    ```
+
+    Returns a JOSN with a JSON body and the specified status code.
+    """
     res_json = {
         "error": {
-            "message": "Validation error",
-            "details": messages,
+            "message": message,
+            "details": details or [],
         }
     }
     return func.HttpResponse(
         body=json.dumps(res_json),
         mimetype="application/json",
-        status_code=HTTPStatus.BAD_REQUEST,
+        status_code=status_code,
     )
 
 
