@@ -1,7 +1,7 @@
 # Versioning
 version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
-# DevTunnel configuration
+# Dev tunnels configuration
 tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]')
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
 # App location
@@ -121,6 +121,22 @@ dev:
 	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) func start
 
 deploy:
+	$(MAKE) deploy-bicep
+
+	@echo "💤 Wait 10 secs for output to be available..."
+	sleep 10
+
+	@echo "🛠️ Deploying Function App..."
+	func azure functionapp publish $(function_app_name) \
+		--build local \
+		--build-native-deps \
+		--python
+
+	@echo "🚀 Call Center AI is running on $(app_url)"
+
+	@$(MAKE) deploy-post
+
+deploy-bicep:
 	@echo "👀 Current subscription:"
 	@az account show --query "{subscriptionId:id, subscriptionName:name, tenantId:tenantId}" --output table
 
@@ -137,20 +153,7 @@ deploy:
 		--template-file bicep/main.bicep \
 	 	--name $(name_sanitized)
 
-	@echo "💤 Wait 10 secs for output to be available..."
-	sleep 10
-
-	@echo "🛠️ Deploying Function App..."
-	func azure functionapp publish $(function_app_name) \
-		--build local \
-		--build-native-deps \
-		--python
-
-	@echo "🚀 Call Center AI is running on $(app_url)"
-
-	@$(MAKE) post-deploy name=$(name_sanitized)
-
-post-deploy:
+deploy-post:
 	@$(MAKE) copy-resources \
 		name=$(blob_storage_public_name)
 
