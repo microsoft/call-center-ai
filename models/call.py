@@ -34,7 +34,6 @@ class CallGetModel(BaseModel):
     next: Optional[NextModel] = None
     reminders: list[ReminderModel] = []
     synthesis: Optional[SynthesisModel] = None
-    voice_id: Optional[str] = None
 
     @computed_field
     @property
@@ -85,6 +84,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
     # Editable fields
     lang_short_code: Optional[str] = None
     recognition_retry: int = 0
+    voice_id: Optional[str] = None
 
     @computed_field
     @property
