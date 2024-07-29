@@ -420,10 +420,18 @@ Copy `local.example.settings.json` to `local.settings.json`, then fill the requi
 - `APPLICATIONINSIGHTS_CONNECTION_STRING`, as the connection string of the Application Insights resource
 - `AzureWebJobsStorage`, as the connection string of the Azure Storage account
 
-#### 4. Connect to Azure Dev tunnels with `devtunnel login`, then run it with `make tunnel`
+#### 4. Connect to Azure Dev tunnels
 
 > [!IMPORTANT]
 > Tunnel requires to be run in a separate terminal, because it needs to be running all the time
+
+```zsh
+# Log in once
+devtunnel login
+
+# Start the tunnel
+make tunnel
+```
 
 #### 5. Iterate quickly with the code
 
