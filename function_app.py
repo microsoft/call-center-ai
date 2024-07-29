@@ -350,7 +350,7 @@ async def call_phone_number_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
-        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
+        body=TypeAdapter(CallGetModel).dump_json(call),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -382,7 +382,7 @@ async def call_id_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
-        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
+        body=TypeAdapter(CallGetModel).dump_json(call),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -424,7 +424,7 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         call_connection_properties.call_connection_id,
     )
     return func.HttpResponse(
-        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
+        body=TypeAdapter(CallGetModel).dump_json(call),
         mimetype="application/json",
         status_code=HTTPStatus.CREATED,
     )
