@@ -184,7 +184,7 @@ async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code = HTTPStatus.SERVICE_UNAVAILABLE
             break
     return func.HttpResponse(
-        body=readiness.model_dump_json(exclude_none=True),
+        body=readiness.model_dump_json(),
         mimetype="application/json",
         status_code=status_code,
     )
@@ -350,7 +350,7 @@ async def call_phone_number_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
-        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
+        body=TypeAdapter(CallGetModel).dump_json(call),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -382,7 +382,7 @@ async def call_id_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code=HTTPStatus.NOT_FOUND,
         )
     return func.HttpResponse(
-        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
+        body=TypeAdapter(CallGetModel).dump_json(call),
         mimetype="application/json",
         status_code=HTTPStatus.OK,
     )
@@ -424,7 +424,7 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         call_connection_properties.call_connection_id,
     )
     return func.HttpResponse(
-        body=CallGetModel.model_validate(call).model_dump_json(exclude_none=True),
+        body=TypeAdapter(CallGetModel).dump_json(call),
         mimetype="application/json",
         status_code=HTTPStatus.CREATED,
     )

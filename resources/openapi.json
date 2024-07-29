@@ -15,17 +15,24 @@
     "paths": {
         "/health/liveness": {
             "get": {
+                "tags": [
+                    "health"
+                ],
                 "responses": {
                     "204": {
                         "content": {
                             "text/plain": {}
                         }
                     }
-                }
+                },
+                "summary": "Get the liveness status of the server."
             }
         },
         "/health/readiness": {
             "get": {
+                "tags": [
+                    "health"
+                ],
                 "responses": {
                     "200": {
                         "content": {
@@ -45,11 +52,16 @@
                             }
                         }
                     }
-                }
+                },
+                "summary": "Get the liveness readiness of the server.",
+                "description": "Status will be \"ok\" if and only if all indicators (storage, database, cache, sms, ...) are ready. Functional testing is applied on all dependencies (transaction, health, ...)."
             }
         },
         "/report": {
             "get": {
+                "tags": [
+                    "ui"
+                ],
                 "responses": {
                     "200": {
                         "content": {
@@ -65,12 +77,13 @@
                             }
                         }
                     }
-                }
+                },
+                "summary": "Web interface to list calls."
             },
             "parameters": [
                 {
                     "name": "phone_number",
-                    "description": "",
+                    "description": "Phone number in a E164 format.",
                     "schema": {
                         "type": "string"
                     },
@@ -80,6 +93,9 @@
         },
         "/report/{call_id}": {
             "get": {
+                "tags": [
+                    "ui"
+                ],
                 "responses": {
                     "200": {
                         "content": {
@@ -100,11 +116,18 @@
                             "text/plain": {}
                         }
                     }
-                }
+                },
+                "summary": "Web interface to details a single call."
             },
             "parameters": [
                 {
+                    "examples": {
+                        "UUID": {
+                            "value": "74e74ad0-c9ca-41c4-8b53-ff17f40e3a95"
+                        }
+                    },
                     "name": "call_id",
+                    "description": "UUID of the object.",
                     "schema": {
                         "type": "string"
                     },
@@ -143,8 +166,26 @@
                             }
                         }
                     }
+                },
+                "summary": "Get a single call object.",
+                "description": "Returns a single call object."
+            },
+            "parameters": [
+                {
+                    "examples": {
+                        "UUID": {
+                            "value": "74e74ad0-c9ca-41c4-8b53-ff17f40e3a95"
+                        }
+                    },
+                    "name": "call_id",
+                    "description": "UUID of the object.",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "in": "path",
+                    "required": true
                 }
-            }
+            ]
         },
         "/call/{phone_number}": {
             "get": {
@@ -176,11 +217,44 @@
                             }
                         }
                     }
+                },
+                "summary": "Get a single call object.",
+                "description": "Match the most recent one for a given phone number."
+            },
+            "parameters": [
+                {
+                    "examples": {
+                        "French phone number": {
+                            "value": "+337755194077"
+                        }
+                    },
+                    "name": "phone_number",
+                    "description": "Phone number in a E164 format.",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "in": "path",
+                    "required": true
                 }
-            }
+            ]
         },
         "/call": {
             "get": {
+                "parameters": [
+                    {
+                        "examples": {
+                            "French phone number": {
+                                "value": "+337755194077"
+                            }
+                        },
+                        "name": "phone_number",
+                        "description": "Phone number in a E164 format.",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "content": {
@@ -212,7 +286,8 @@
                             }
                         }
                     }
-                }
+                },
+                "summary": "List call objects."
             },
             "post": {
                 "requestBody": {
@@ -244,7 +319,8 @@
                             }
                         }
                     }
-                }
+                },
+                "summary": "Initiate a new outbound call."
             }
         },
         "/communicationservices/event/{call_id}/{secret}": {
@@ -262,6 +338,9 @@
                     },
                     "required": true
                 },
+                "tags": [
+                    "event"
+                ],
                 "responses": {
                     "204": {
                         "content": {
@@ -294,11 +373,18 @@
                     {
                         "CallbackCallSecret": []
                     }
-                ]
+                ],
+                "summary": "Callback for Azure Communication Services events."
             },
             "parameters": [
                 {
+                    "examples": {
+                        "UUID": {
+                            "value": "74e74ad0-c9ca-41c4-8b53-ff17f40e3a95"
+                        }
+                    },
                     "name": "call_id",
+                    "description": "UUID of the object.",
                     "schema": {
                         "type": "string"
                     },
@@ -306,7 +392,13 @@
                     "required": true
                 },
                 {
+                    "examples": {
+                        "Random text": {
+                            "value": "6sDawCHPf27fDNA2"
+                        }
+                    },
                     "name": "secret",
+                    "description": "Secret string for authorization.",
                     "schema": {
                         "type": "string"
                     },
@@ -327,6 +419,9 @@
                     },
                     "required": true
                 },
+                "tags": [
+                    "event"
+                ],
                 "responses": {
                     "200": {
                         "content": {
@@ -362,7 +457,8 @@
                             "fail",
                             "ok"
                         ],
-                        "type": "string"
+                        "type": "string",
+                        "example": ""
                     },
                     "checks": {
                         "$ref": "#/components/schemas/ReadinessCheckModel",
@@ -380,7 +476,8 @@
                 "properties": {
                     "id": {
                         "description": "",
-                        "type": "string"
+                        "type": "string",
+                        "example": "cache"
                     },
                     "status": {
                         "description": "",
@@ -388,7 +485,8 @@
                             "fail",
                             "ok"
                         ],
-                        "type": "string"
+                        "type": "string",
+                        "example": ""
                     }
                 }
             },
@@ -408,7 +506,8 @@
                 "type": "object",
                 "properties": {
                     "call_id": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "00dfb3c4-9795-4c55-b387-6c65917a4584"
                     },
                     "created_at": {
                         "format": "date-time",
@@ -484,7 +583,8 @@
                         }
                     },
                     "claim": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "{\n    \"incident_datetime\": \"2024-07-23T00:00:00\",\n    \"incident_description\": \"Vol de trottinette Xiaomi 4 Ultra garée dans le parking à vélo, en bas du bâtiment, dans un espace public.\",\n    \"incident_location\": \"Place de l'Étoile, Montrouge\",\n    \"policyholder_name\": \"Clémence Lesné\"\n}"
                     },
                     "messages": {
                         "type": "array",
@@ -528,14 +628,12 @@
                     },
                     "recognition_retry": {
                         "format": "int32",
-                        "type": "integer"
+                        "minimum": 0,
+                        "type": "integer",
+                        "example": "0"
                     },
                     "in_progress": {
                         "type": "boolean"
-                    },
-                    "voice_id": {
-                        "description": "",
-                        "type": "string"
                     }
                 }
             },
@@ -594,13 +692,18 @@
                         "format": "int32",
                         "maximum": 1.25,
                         "minimum": 0.75,
-                        "type": "integer"
+                        "type": "integer",
+                        "example": "1.0"
                     },
                     "task": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "Helping the customer to file an insurance claim. The customer is probably calling because they have a problem with something covered by their policy, but it's not certain. The assistant needs information from the customer to complete the claim. The conversation is over when all the data relevant to the case has been collected. Filling in as much information as possible is important for further processing."
                     },
                     "phone_number": {
-                        "type": "string"
+                        "description": "Phone number in a E164 format.",
+                        "pattern": "^\\+[1-9]\\d{1,14}$",
+                        "type": "string",
+                        "example": "+336579996809"
                     }
                 }
             },
@@ -615,10 +718,12 @@
                 "type": "object",
                 "properties": {
                     "description": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "Date and time of the incident."
                     },
                     "name": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "incident_datetime"
                     },
                     "type": {
                         "description": "",
@@ -650,7 +755,8 @@
                         "type": "string"
                     },
                     "content": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "Thank you, Clémence. I'm now going to update your file with your name and the scooter reference. I'm updating the file with your name. The scooter reference is now saved."
                     },
                     "persona": {
                         "enum": [
@@ -698,16 +804,20 @@
                 "type": "object",
                 "properties": {
                     "content": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "# Updated fields\\n- Updated claim field \\\"policyholder_name\\\" with value \\\"Clémence Lesne\\\"."
                     },
                     "function_arguments": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "{\\\"customer_response\\\": \\\"Je mets à jour le dossier avec votre nom.\\\", \\\"updates\\\": [{\\\"field\\\": \\\"policyholder_name\\\", \\\"value\\\": \\\"Clémence Lesne\\\"}]}"
                     },
                     "function_name": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "updated_claim"
                     },
                     "tool_id": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "call_7f56XNaBEsfn4uesZaQ6PMFp"
                     }
                 }
             },
@@ -721,10 +831,19 @@
                 "type": "object",
                 "properties": {
                     "action": {
+                        "enum": [
+                            "case_closed",
+                            "commercial_offer",
+                            "customer_will_send_info",
+                            "high_priority",
+                            "propose_new_contract",
+                            "requires_expertise"
+                        ],
                         "type": "string"
                     },
                     "justification": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "All necessary information for the claim has been collected and the customer has been informed that their case has been updated. The customer did not express any further concerns or questions."
                     }
                 }
             },
@@ -774,7 +893,8 @@
                 "type": "object",
                 "properties": {
                     "long": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "I understand that your Xiaomi 4 Ultra scooter was stolen on July 23, 2024, from the bike parking area at Place de l'Étoile, Montrouge. I have updated your claim with all the necessary details to ensure that your situation is well-documented."
                     },
                     "satisfaction": {
                         "enum": [
@@ -787,10 +907,12 @@
                         "type": "string"
                     },
                     "short": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "the theft of your scooter"
                     },
                     "improvement_suggestions": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "Ensure that the customer is aware of the next steps after the claim is filed, such as expected processing time and any additional documentation that may be required."
                     }
                 }
             },
@@ -808,13 +930,16 @@
                         "type": "array",
                         "items": {
                             "type": "string"
-                        }
+                        },
+                        "example": "[\n    \"English\",\n    \"American\",\n    \"USA\"\n]"
                     },
                     "short_code": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "en-US"
                     },
                     "voice": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "en-US-NancyNeural"
                     }
                 }
             },
@@ -828,7 +953,8 @@
                 "properties": {
                     "default_short_code": {
                         "description": "",
-                        "type": "string"
+                        "type": "string",
+                        "example": "en-US"
                     },
                     "availables": {
                         "description": "",
@@ -862,14 +988,16 @@
                 "properties": {
                     "message": {
                         "description": "",
-                        "type": "string"
+                        "type": "string",
+                        "example": "Validation error"
                     },
                     "details": {
                         "description": "",
                         "type": "array",
                         "items": {
                             "type": "string"
-                        }
+                        },
+                        "example": "[\n    \"Missing field value for \\\"phone_number\\\".\"\n]"
                     }
                 }
             },
@@ -882,12 +1010,15 @@
                 "type": "object",
                 "properties": {
                     "From": {
-                        "description": "",
-                        "type": "string"
+                        "description": "Phone number in a E164 format.",
+                        "pattern": "^\\+[1-9]\\d{1,14}$",
+                        "type": "string",
+                        "example": "+336952679801"
                     },
                     "Body": {
-                        "description": "",
-                        "type": "string"
+                        "description": "Raw content of the SMS.",
+                        "type": "string",
+                        "example": "I confirm the address to 31 rue de La Jolie, 75003 Paris."
                     }
                 }
             }
