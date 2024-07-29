@@ -184,7 +184,7 @@ async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
             status_code = HTTPStatus.SERVICE_UNAVAILABLE
             break
     return func.HttpResponse(
-        body=readiness.model_dump_json(exclude_none=True),
+        body=readiness.model_dump_json(),
         mimetype="application/json",
         status_code=status_code,
     )
