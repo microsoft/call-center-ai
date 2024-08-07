@@ -404,14 +404,34 @@ ai_translation:
   endpoint: https://xxx.cognitiveservices.azure.com
 ```
 
+- We add the ability to disable language choice in `config.yaml` at the begining of the call with `enable_language_choice`. Default value is `false`.
+
+```yaml
+
+conversation:
+  initiate:
+    task: "xxx"
+    agent_phone_number: "xxx"
+    bot_company: xxx
+    bot_name: xxx
+    enable_language_choice: true
+```
+
 #### 2. Run the deployment automation
 
 ```zsh
+
 make deploy-bicep deploy-post name=my-rg-name
 ```
 
 - This will deploy the Azure resources without the API server, allowing you to test the bot locally
 - Wait for the deployment to finish
+- You can disable Azure content safety during the bicep deployment
+
+```bash
+
+make deploy-bicep deploy-post name=my-rg-name enable_content_filter=false
+```
 
 #### 3. Initialize local function config
 
@@ -442,7 +462,7 @@ Copy `local.example.settings.json` to `local.settings.json`, then fill the requi
 > ```
 
 ```zsh
-make dev
+make dev 
 ```
 
 - Code is automatically reloaded on file changes, no need to restart the server
