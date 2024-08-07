@@ -148,8 +148,10 @@ class ToolModel(BaseModel):
         from helpers.llm_tools import (  # pylint: disable=import-outside-toplevel
             LlmPlugins,
         )
+        from helpers.config import CONFIG
 
-        return [name for name, _ in getmembers(LlmPlugins, isfunction)]
+        return [name for name, _ in getmembers(LlmPlugins, isfunction) 
+                if name not in CONFIG.llm.excluded_llm_tools]
 
 
 class MessageModel(BaseModel):

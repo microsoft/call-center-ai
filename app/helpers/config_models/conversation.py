@@ -128,6 +128,7 @@ class WorkflowInitiateModel(BaseModel):
         ge=0.75,
         le=1.25,
     )
+    enable_language_choice: bool = True # add language choice option
     task: str = (
         "Helping the customer to file an insurance claim. The customer is probably calling because they have a problem with something covered by their policy, but it's not certain. The assistant needs information from the customer to complete the claim. The conversation is over when all the data relevant to the case has been collected. Filling in as much information as possible is important for further processing."
     )

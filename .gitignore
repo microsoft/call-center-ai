@@ -756,3 +756,6 @@ sbom-reports/
 
 # Azure dev tunnels local installation
 DevTunnels/
+
+# Fake data for demos
+app/helpers/db

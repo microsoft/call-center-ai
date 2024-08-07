@@ -281,10 +281,10 @@ Now that the prerequisites are configured (local + Azure), the deployment can be
 
 #### 1. Create the light config file
 
-File is named `config.yaml`:
+File is named `configs/config.yaml`:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 conversation:
   initiate:
     # Phone number the bot will transfer the call to if customer asks for a human agent
@@ -348,10 +348,10 @@ make logs name=my-rg-name
 > - Copy the configuration from the Azure Function App to your local machine by using the content of the `CONFIG_JSON` application setting
 > - Then convert it to YAML format
 
-File is named `config.yaml`:
+File is named `configs/config.yaml`:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 resources:
   public_url: https://xxx.blob.core.windows.net/public
 
@@ -476,7 +476,7 @@ The bot can be used in multiple languages. It can understand the language the us
 See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages) for the Text-to-Speech service.
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 conversation:
@@ -495,7 +495,7 @@ conversation:
 If you built and deployed an [Azure Speech Custom Neural Voice (CNV)](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/custom-neural-voice), add field `custom_voice_endpoint_id` on the language configuration:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 conversation:
@@ -535,7 +535,7 @@ Finally, an optional description can be provided. The description must be short 
 Default schema, for inbound calls, is defined in the configuration:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 conversation:
@@ -563,7 +563,7 @@ This solution is priviledged instead of overriding the LLM prompt.
 Default task, for inbound calls, is defined in the configuration:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 conversation:
@@ -576,10 +576,10 @@ Task can be customized for each call, by adding the `task` field in the `POST /c
 
 ### Customize the conversation
 
-Conversation options are documented in [conversation.py](helpers/config_models/conversation.py). The options can all be overridden in `config.yaml` file:
+Conversation options are documented in [conversation.py](helpers/config_models/conversation.py). The options can all be overridden in `configs/config.yaml` file:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 conversation:
@@ -601,10 +601,10 @@ To use a model compatible with the OpenAI completion API, you need to create an 
 - Model name
 - Streaming capability
 
-Then, add the following in the `config.yaml` file:
+Then, add the following in the `configs/config.yaml` file:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 llm:
@@ -634,10 +634,10 @@ To use Twilio for SMS, you need to create an account and get the following infor
 - Auth Token
 - Phone number
 
-Then, add the following in the `config.yaml` file:
+Then, add the following in the `configs/config.yaml` file:
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 sms:
@@ -655,7 +655,7 @@ Note that prompt examples contains `{xxx}` placeholders. These placeholders are 
 Be sure to write all the TTS prompts in English. This language is used as a pivot language for the conversation translation.
 
 ```yaml
-# config.yaml
+# configs/config.yaml
 [...]
 
 prompts:

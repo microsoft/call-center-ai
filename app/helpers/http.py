@@ -47,7 +47,7 @@ async def aiohttp_session() -> ClientSession:
             cookie_jar=await _aiohttp_cookie_jar(),
             trust_env=True,
             # Performance
-            connector=TCPConnector(resolver=AsyncResolver()),
+            #connector=TCPConnector(resolver=AsyncResolver()),
             # Reliability
             timeout=ClientTimeout(
                 connect=5,

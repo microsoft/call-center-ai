@@ -673,6 +673,8 @@ async def _communicationservices_event_worker(
         await on_call_connected(
             call=call,
             client=automation_client,
+            post_callback=_post_callback,
+            trainings_callback=_trainings_callback,
         )
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
