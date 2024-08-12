@@ -46,7 +46,7 @@ async def aiohttp_session() -> ClientSession:
             auto_decompress=False,
             cookie_jar=await _aiohttp_cookie_jar(),
             trust_env=True,
-            # Performance
+            # Performance / we disable this feature to resolve this issue: https://github.com/microsoft/call-center-ai/issues/275
             #connector=TCPConnector(resolver=AsyncResolver()),
             # Reliability
             timeout=ClientTimeout(
