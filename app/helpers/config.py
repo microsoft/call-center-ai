@@ -19,7 +19,7 @@ class ConfigBadFormat(Exception):
 def load_config() -> RootModel:
     config: Optional[RootModel] = None
     config_env = "CONFIG_JSON"
-    config_file = "config.yaml"
+    config_file = "../../configs/config.yaml"
 
     if config_env in environ:
         config = RootModel.model_validate_json(environ[config_env])

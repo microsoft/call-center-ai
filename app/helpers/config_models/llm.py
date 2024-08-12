@@ -105,6 +105,7 @@ class SelectedPlatformModel(BaseModel):
 
 
 class LlmModel(BaseModel):
+    excluded_llm_tools: Optional[list] = []
     fast: SelectedPlatformModel = Field(
         serialization_alias="backup",  # Backwards compatibility with v6
     )

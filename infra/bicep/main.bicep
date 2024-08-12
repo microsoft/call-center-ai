@@ -19,6 +19,7 @@ param location string = deployment().location
 param openaiLocation string
 param searchLocation string
 param version string
+param enableContentFilter bool = false
 
 targetScope = 'subscription'
 
@@ -32,7 +33,7 @@ var tags = {
   application: 'call-center-ai'
   instance: instance
   managed_by: 'Bicep'
-  sources: 'https://github.com/clemlesne/call-center-ai'
+  sources: 'https://github.com/microsoft/call-center-ai'
   version: version
 }
 
@@ -67,5 +68,6 @@ module app 'app.bicep' = {
     searchLocation: searchLocation
     tags: tags
     version: version
+    enableContentFilter: enableContentFilter
   }
 }

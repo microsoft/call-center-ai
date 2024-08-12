@@ -19,6 +19,7 @@ param openaiLocation string
 param searchLocation string
 param tags object
 param version string
+param enableContentFilter bool
 
 var appName = 'call-center-ai'
 var prefix = deployment().name
@@ -28,7 +29,7 @@ var llmFastModelFullName = toLower('${llmFastModel}-${llmFastVersion}')
 var llmSlowModelFullName = toLower('${llmSlowModel}-${llmSlowVersion}')
 var embeddingModelFullName = toLower('${embeddingModel}-${embeddingVersion}')
 var cosmosContainerName = 'calls-v3' // Third schema version
-var localConfig = loadYamlContent('../config.yaml')
+var localConfig = loadYamlContent('../../configs/config.yaml')
 var phonenumberSanitized = replace(localConfig.communication_services.phone_number, '+', '')
 var config = {
   public_domain: appUrl
@@ -50,6 +51,7 @@ var config = {
       bot_company: localConfig.conversation.initiate.bot_company
       bot_name: localConfig.conversation.initiate.bot_name
       lang: localConfig.conversation.initiate.lang
+      enable_language_choice: localConfig.conversation.initiate.enable_language_choice
     }
   }
   communication_services: {
@@ -67,6 +69,7 @@ var config = {
     endpoint: cognitiveCommunication.properties.endpoint
   }
   llm: {
+    excluded_llm_tools: localConfig.llm.excluded_llm_tools
     fast: {
       mode: 'azure_openai'
       azure_openai: {
@@ -463,7 +466,7 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-previe
   }
 }
 
-resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04-01-preview' = {
+resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04-01-preview' = if (enableContentFilter) {
   parent: cognitiveOpenai
   name: 'disabled'
   tags: tags
@@ -560,7 +563,7 @@ resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
     name: llmSlowDeploymentType
   }
   properties: {
-    raiPolicyName: contentfilter.name
+    raiPolicyName: (enableContentFilter? contentfilter.name: null)
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
@@ -579,7 +582,7 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
     name: llmFastDeploymentType
   }
   properties: {
-    raiPolicyName: contentfilter.name
+    raiPolicyName: (enableContentFilter? contentfilter.name: null)
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'
@@ -601,7 +604,7 @@ resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-
     name: embeddingDeploymentType
   }
   properties: {
-    raiPolicyName: contentfilter.name
+    raiPolicyName: (enableContentFilter? contentfilter.name: null)
     versionUpgradeOption: 'NoAutoUpgrade'
     model: {
       format: 'OpenAI'

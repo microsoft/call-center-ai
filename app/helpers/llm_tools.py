@@ -582,6 +582,59 @@ class LlmPlugins:
         # LLM confirmation
         return f"Voice language set to {lang} (was {initial_lang})"
 
+    # This is for SG hackathon demo: authentification group
+    async def load_customer_data(
+        self,
+        customer_phone_number: Annotated[
+            str,
+            """
+            Phone number of the customer setting from the context of the call.
+
+            # Rules
+            - It is phone number in french format
+            - Always get it from context
+
+            # Examples
+            - +33601020304
+            - +33708091011
+            - +33782820096
+            """
+        ]
+    ) -> str:
+        """
+        Use to get claim customer data based on its mobile phone 
+
+        # Behavior
+        1. Get customer info 
+        2. Return a customer data 
+
+        # Usage examples
+        - Assistant want to identity the customer
+        - Customer need to be identify by assistant
+        """
+        if len(customer_phone_number) < 12:  # Check if customer phone number is valid
+            return f"Customer phone number <{customer_phone_number}> is not valid"
+
+        import json 
+        from pathlib import Path
+        # read cutomer data from local file
+        customer_phone_number = customer_phone_number[-9:]
+        customer_data_file = Path(__file__).parent / "db" / "data_customer.json"
+        with customer_data_file.open(mode="r",  encoding="utf-8") as file_fp:
+            customer_datas = json.load(file_fp)
+            logger.info(
+                f"Customers data loaded {customer_datas} | customer phone number {customer_phone_number}"
+            )
+            customer_data = customer_datas.get(customer_phone_number)
+            if not customer_data:  # Check if customer data is found
+                return f"Customer data are not found in our Database"
+            
+            # format customer data
+            format_customer_data = "\n".join([f"{x}: {y}" for x, y in customer_data.items()])
+
+            # return customer data
+            return f"# Customer data are: \n {format_customer_data}"
+    
     @staticmethod
     async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
         return await asyncio.gather(
@@ -589,5 +642,6 @@ class LlmPlugins:
                 function_schema(type, call=call)
                 for name, type in getmembers(LlmPlugins, isfunction)
                 if not name.startswith("_") and name != "to_openai"
+                and name not in CONFIG.llm.excluded_llm_tools # try to exclude unused functions 
             ]
         )

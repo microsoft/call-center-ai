@@ -81,6 +81,8 @@ async def on_new_call(
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Call connected, asking for language")
     call.recognition_retry = 0  # Reset recognition retry counter
@@ -91,14 +93,47 @@ async def on_call_connected(
             persona=MessagePersonaEnum.HUMAN,
         )
     )
-    await asyncio.gather(
-        _handle_ivr_language(
-            call=call, client=client
-        ),  # First, every time a call is answered, confirm the language
-        _db.call_aset(
-            call
-        ),  # save in DB allowing SMS answers to be more "in-sync", should be quick enough to be in sync with the next message
-    )
+    if CONFIG.conversation.initiate.enable_language_choice:
+        await asyncio.gather(
+            _handle_ivr_language(
+                call=call, client=client
+            ), # First, every time a call is answered, confirm the language
+            _db.call_aset(call) # save in DB allowing SMS answers to be more "in-sync", should be quick enough to be in sync with the next message
+        )
+    else:
+        persist_coro = _db.call_aset(call)
+        if len(call.messages) <= 1:  # First call, or only the call action
+            await asyncio.gather(
+                handle_recognize_text(
+                    call=call,
+                    client=client,
+                    text=await CONFIG.prompts.tts.hello(call),
+                ),  # First, greet the user
+                persist_coro,  # Second, persist language change for next messages, should be quick enough to be in sync with the next message
+                load_llm_chat(
+                    call=call,
+                    client=client,
+                    post_callback=post_callback,
+                    trainings_callback=trainings_callback,
+                ),  # Third, the LLM should be loaded to continue the conversation
+            )  # All in parallel to lower the response latency
+
+        else:  # Returning call
+            await asyncio.gather(
+                handle_recognize_text(
+                    call=call,
+                    client=client,
+                    style=MessageStyleEnum.CHEERFUL,
+                    text=await CONFIG.prompts.tts.welcome_back(call),
+                ), # First, welcome back the user
+                persist_coro, # Second, persist language change for next messages, should be quick enough to be in sync with the next message
+                load_llm_chat(
+                    call=call,
+                    client=client,
+                    post_callback=post_callback,
+                    trainings_callback=trainings_callback,
+                ), # Third, the LLM should be loaded to continue the conversation
+            )
 
 
 @tracer.start_as_current_span("on_call_disconnected")
@@ -439,10 +474,12 @@ async def on_end_call(
         )
         return
 
+    actions = [_intelligence_next(call)]
+    if "send_sms" not in CONFIG.llm.excluded_llm_tools: 
+        actions.append(_intelligence_sms(call))
+    actions.append(_intelligence_synthesis(call))
     await asyncio.gather(
-        _intelligence_next(call),
-        _intelligence_sms(call),
-        _intelligence_synthesis(call),
+        *actions
     )
 
 
