@@ -243,7 +243,7 @@ sequenceDiagram
 
 ## Deployment
 
-Some local prerequisites are needed to deploy the solution.
+### Prerequisites
 
 [Prefer using GitHub Codespaces for a quick start.](https://codespaces.new/microsoft/call-center-ai?quickstart=1) The environment will setup automatically with all the required tools.
 
@@ -260,166 +260,201 @@ For other systems, make sure you have the following installed:
 
 Then, Azure resources are needed:
 
-1. [Create a new resource group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal)
+#### 1. [Create a new resource group](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal)
 
-    - Prefer to use lowercase and no special characters other than dashes (e.g. `ccai-customer-a`)
+- Prefer to use lowercase and no special characters other than dashes (e.g. `ccai-customer-a`)
 
-2. [Create a Communication Services resource](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/create-communication-resource?tabs=linux&pivots=platform-azp)
+#### 2. [Create a Communication Services resource](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/create-communication-resource?tabs=linux&pivots=platform-azp)
 
-    - Same name as the resource group
-    - Enable system managed identity
+- Same name as the resource group
+- Enable system managed identity
 
-3. [Buy a phone number](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/telephony/get-phone-number?tabs=linux&pivots=platform-azp-new)
+#### 3. [Buy a phone number](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/telephony/get-phone-number?tabs=linux&pivots=platform-azp-new)
 
-    - From the Communication Services resource
-    - Allow inbound and outbound communication
-    - Enable voice (required) and SMS (optional) capabilities
+- From the Communication Services resource
+- Allow inbound and outbound communication
+- Enable voice (required) and SMS (optional) capabilities
 
 Now that the prerequisites are configured (local + Azure), the deployment can be done.
 
 ### Remote (on Azure)
 
-1. Create a local `config.yaml` file
+#### 1. Create the light config file
 
-    ```yaml
-    # config.yaml
-    conversation:
-      initiate:
-        # Phone number the bot will transfer the call to if customer asks for a human agent
-        agent_phone_number: "+33612345678"
-        bot_company: Contoso
-        bot_name: Amélie
-        lang: {}
+File is named `config.yaml`:
 
-    communication_services:
-      # Phone number purshased from Communication Services
-      phone_number: "+33612345678"
+```yaml
+# config.yaml
+conversation:
+  initiate:
+    # Phone number the bot will transfer the call to if customer asks for a human agent
+    agent_phone_number: "+33612345678"
+    bot_company: Contoso
+    bot_name: Amélie
+    lang: {}
 
-    sms: {}
+communication_services:
+  # Phone number purshased from Communication Services
+  phone_number: "+33612345678"
 
-    prompts:
-      llm: {}
-      tts: {}
-    ```
+sms: {}
 
-2. Connect to your Azure environment (e.g. `az login`)
-3. Run deployment automation with `make deploy name=my-rg-name`
+prompts:
+  llm: {}
+  tts: {}
+```
 
-    - Wait for the deployment to finish
+#### 2. Connect to your Azure environment
 
-4. [Create a AI Search resource](https://learn.microsoft.com/en-us/azure/search/search-create-service-portal)
+```zsh
+az login
+```
 
-    - An index named `trainings`
-    - A semantic search configuration on the index named `default`
+#### 3. Run deployment automation
 
-Get the logs with `make logs name=my-rg-name`.
+```zsh
+make deploy name=my-rg-name
+```
+
+- Wait for the deployment to finish
+
+#### 4. [Create a AI Search resource](https://learn.microsoft.com/en-us/azure/search/search-create-service-portal)
+
+- An index named `trainings`
+- A semantic search configuration on the index named `default`
+
+#### 5. Get the logs
+
+```zsh
+make logs name=my-rg-name
+```
 
 ### Local (on your machine)
 
-1. Create a local `config.yaml` file
+#### 1. Create the full config file
 
-    > [!TIP]
-    > To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
-    >
-    > ```dotenv
-    > AZURE_CLIENT_ID=xxx
-    > AZURE_CLIENT_SECRET=xxx
-    > AZURE_TENANT_ID=xxx
-    > ```
+> [!TIP]
+> To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
+>
+> ```dotenv
+> AZURE_CLIENT_ID=xxx
+> AZURE_CLIENT_SECRET=xxx
+> AZURE_TENANT_ID=xxx
+> ```
 
-    > [!TIP]
-    > If you already deployed the application to Azure and if it is working, you can:
-    >
-    > - Copy the configuration from the Azure Function App to your local machine by using the content of the `CONFIG_JSON` application setting
-    > - Then convert it to YAML format
+> [!TIP]
+> If you already deployed the application to Azure and if it is working, you can:
+>
+> - Copy the configuration from the Azure Function App to your local machine by using the content of the `CONFIG_JSON` application setting
+> - Then convert it to YAML format
 
-    ```yaml
-    # config.yaml
-    resources:
-      public_url: https://xxx.blob.core.windows.net/public
+File is named `config.yaml`:
 
-    conversation:
-      initiate:
-        agent_phone_number: "+33612345678"
-        bot_company: Contoso
-        bot_name: Robert
+```yaml
+# config.yaml
+resources:
+  public_url: https://xxx.blob.core.windows.net/public
 
-    communication_services:
-      access_key: xxx
-      call_queue_name: call-33612345678
-      endpoint: https://xxx.france.communication.azure.com
-      phone_number: "+33612345678"
-      post_queue_name: post-33612345678
-      resource_id: xxx
-      sms_queue_name: sms-33612345678
+conversation:
+  initiate:
+    agent_phone_number: "+33612345678"
+    bot_company: Contoso
+    bot_name: Robert
 
-    cognitive_service:
-      # Must be of type "AI services multi-service account"
-      endpoint: https://xxx.cognitiveservices.azure.com
+communication_services:
+  access_key: xxx
+  call_queue_name: call-33612345678
+  endpoint: https://xxx.france.communication.azure.com
+  phone_number: "+33612345678"
+  post_queue_name: post-33612345678
+  resource_id: xxx
+  sms_queue_name: sms-33612345678
 
-    llm:
-      fast:
-        mode: azure_openai
-        azure_openai:
-          api_key: xxx
-          context: 16385
-          deployment: gpt-35-turbo-0125
-          endpoint: https://xxx.openai.azure.com
-          model: gpt-35-turbo
-          streaming: true
-      slow:
-        mode: azure_openai
-        azure_openai:
-          api_key: xxx
-          context: 128000
-          deployment: gpt-4o-2024-05-13
-          endpoint: https://xxx.openai.azure.com
-          model: gpt-4o
-          streaming: true
+cognitive_service:
+  # Must be of type "AI services multi-service account"
+  endpoint: https://xxx.cognitiveservices.azure.com
 
-    ai_search:
-      access_key: xxx
-      endpoint: https://xxx.search.windows.net
-      index: trainings
+llm:
+  fast:
+    mode: azure_openai
+    azure_openai:
+      api_key: xxx
+      context: 16385
+      deployment: gpt-35-turbo-0125
+      endpoint: https://xxx.openai.azure.com
+      model: gpt-35-turbo
+      streaming: true
+  slow:
+    mode: azure_openai
+    azure_openai:
+      api_key: xxx
+      context: 128000
+      deployment: gpt-4o-2024-05-13
+      endpoint: https://xxx.openai.azure.com
+      model: gpt-4o
+      streaming: true
 
-    ai_translation:
-      access_key: xxx
-      endpoint: https://xxx.cognitiveservices.azure.com
-    ```
+ai_search:
+  access_key: xxx
+  endpoint: https://xxx.search.windows.net
+  index: trainings
 
-2. Run the deployment automation with `make deploy-bicep deploy-post name=my-rg-name`
+ai_translation:
+  access_key: xxx
+  endpoint: https://xxx.cognitiveservices.azure.com
+```
 
-    - This will deploy the Azure resources without the API server, allowing you to test the bot locally
-    - Wait for the deployment to finish
+#### 2. Run the deployment automation
 
-3. Copy local file `local.example.settings.json` to `local.settings.json` and fill the required fields
+```zsh
+make deploy-bicep deploy-post name=my-rg-name
+```
 
-    - `APPLICATIONINSIGHTS_CONNECTION_STRING`, as the connection string of the Application Insights resource
-    - `AzureWebJobsStorage`, as the connection string of the Azure Storage account
+- This will deploy the Azure resources without the API server, allowing you to test the bot locally
+- Wait for the deployment to finish
 
-4. Connect to Azure Dev tunnels with `devtunnel login`, then run it with `make tunnel`
+#### 3. Initialize local function config
 
-    > [!IMPORTANT]
-    > Tunnel requires to be run in a separate terminal, because it needs to be running all the time
+Copy `local.example.settings.json` to `local.settings.json`, then fill the required fields:
 
-5. Iterate quickly with the code by running `make dev`
+- `APPLICATIONINSIGHTS_CONNECTION_STRING`, as the connection string of the Application Insights resource
+- `AzureWebJobsStorage`, as the connection string of the Azure Storage account
 
-    > [!NOTE]
-    > To override a specific configuration value, you can use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:
-    >
-    > ```dotenv
-    > LLM__FAST__ENDPOINT=https://xxx.openai.azure.com
-    > ```
+#### 4. Connect to Azure Dev tunnels
 
-    > [!NOTE]
-    > Also, `local.py` script is available to test the application without the need of a phone call (= without Communication Services). Run the script with:
-    >
-    > ```bash
-    > python3 -m tests.local
-    > ```
+> [!IMPORTANT]
+> Tunnel requires to be run in a separate terminal, because it needs to be running all the time
 
-    - Code is automatically reloaded on file changes, no need to restart the server
-    - The API server is available at `http://localhost:8080`
+```zsh
+# Log in once
+devtunnel login
+
+# Start the tunnel
+make tunnel
+```
+
+#### 5. Iterate quickly with the code
+
+> [!NOTE]
+> To override a specific configuration value, you can use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:
+>
+> ```dotenv
+> LLM__FAST__ENDPOINT=https://xxx.openai.azure.com
+> ```
+
+> [!NOTE]
+> Also, `local.py` script is available to test the application without the need of a phone call (= without Communication Services). Run the script with:
+>
+> ```bash
+> python3 -m tests.local
+> ```
+
+```zsh
+make dev
+```
+
+- Code is automatically reloaded on file changes, no need to restart the server
+- The API server is available at `http://localhost:8080`
 
 ## Advanced usage
 
