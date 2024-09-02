@@ -26,7 +26,7 @@ dependencies = [
   "openai==1.35.3",  # OpenAI client
   "opentelemetry-instrumentation-aiohttp-client==0.46b0",  # OpenTelemetry instrumentation for aiohttp client
   "opentelemetry-instrumentation-httpx==0.46b0",  # OpenTelemetry instrumentation for HTTPX
-  "opentelemetry-instrumentation-openai==0.23.0",  # OpenTelemetry instrumentation for OpenAI
+  "opentelemetry-instrumentation-openai==0.29.2",  # OpenTelemetry instrumentation for OpenAI
   "opentelemetry-instrumentation-redis==0.46b0",  # OpenTelemetry instrumentation for Redis
   "opentelemetry-instrumentation-sqlite3==0.46b0",  # OpenTelemetry instrumentation for SQLite3
   "opentelemetry-semantic-conventions==0.46b0",  # OpenTelemetry conventions, to standardize telemetry data
