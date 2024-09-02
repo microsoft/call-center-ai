@@ -2452,9 +2452,9 @@ pip==24.1.2 \
     --hash=sha256:7cd207eed4c60b0f411b444cd1464198fe186671c323b6cd6d433ed80fc9d247 \
     --hash=sha256:e5458a0b89f2755e0ee8c0c77613fe5273e05f337907874d64f13171a898a7ff
     # via pip-tools
-setuptools==70.3.0 \
-    --hash=sha256:f171bab1dfbc86b132997f26a119f6056a57950d058587841a0082e8830f9dc5 \
-    --hash=sha256:fe384da74336c398e0d956d1cae0669bc02eed936cdb1d49b57de1990dc11ffc
+setuptools==74.1.0 \
+    --hash=sha256:bea195a800f510ba3a2bc65645c88b7e016fe36709fefc58a880c4ae8a0138d7 \
+    --hash=sha256:cee604bd76cc092355a4e43ec17aee5369095974f41f088676724dc6bc2c9ef8
     # via
     #   opentelemetry-instrumentation
     #   pip-tools
