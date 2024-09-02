@@ -1242,9 +1242,9 @@ opentelemetry-instrumentation-sqlite3==0.46b0 \
     --hash=sha256:4ee6ac3f19f07075398673b6e946264041215fd210667465cc8434e3ed1481e7 \
     --hash=sha256:8544ece0bd1f8638d0f70622baba572e5a3098d33e381d81eb8ee832e6113936
     # via call-center-ai (pyproject.toml)
-opentelemetry-instrumentation-urllib==0.46b0 \
-    --hash=sha256:90d39daf1abb8a5513d3043ea74d019a7483302e73ffaca10cf954b2aec5372f \
-    --hash=sha256:cd7c5dc8c9ca367d1966b456438e76636d61b93cc62d98d89aa16ff8620b2fe9
+opentelemetry-instrumentation-urllib==0.48b0 \
+    --hash=sha256:8115399fc786f5a46f30b158ab32a9cc77a248d421dcb0d411da657250388915 \
+    --hash=sha256:a9db839b4248efc9b01628dc8aa886c1269a81cec84bc375d344239037823d48
     # via azure-monitor-opentelemetry
 opentelemetry-instrumentation-urllib3==0.46b0 \
     --hash=sha256:3f8e3ed206e3faa2b2a141b89a831f97b5ebecff1df6950c3745bdc0ec7b8a6f \
