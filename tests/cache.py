@@ -1,5 +1,5 @@
 import pytest
-from pytest import assume  # pylint: disable=no-name-in-module # pyright: ignore
+from pytest import assume
 
 from helpers.config import CONFIG
 from helpers.config_models.cache import ModeEnum as CacheModeEnum

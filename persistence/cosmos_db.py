@@ -1,7 +1,7 @@
 import asyncio
-import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from http import HTTPStatus
 from uuid import UUID, uuid4
 
 from azure.cosmos import ConsistencyLevel
@@ -20,7 +20,7 @@ from persistence.istore import IStore
 
 
 class CosmosDbStore(IStore):
-    _client: Optional[CosmosClient] = None
+    _client: CosmosClient | None = None
     _config: CosmosDbModel
 
     def __init__(self, cache: ICache, config: CosmosDbModel):
@@ -54,9 +54,9 @@ class CosmosDbStore(IStore):
                 read_item = await db.read_item(
                     item=test_id, partition_key=test_partition
                 )
-                assert {
-                    k: v for k, v in read_item.items() if k in test_dict
-                } == test_dict  # Check only the relevant fields, Cosmos DB adds metadata
+                assert (
+                    {k: v for k, v in read_item.items() if k in test_dict} == test_dict
+                )  # Check only the relevant fields, Cosmos DB adds metadata
                 # Delete the item
                 await db.delete_item(item=test_id, partition_key=test_partition)
             # Test the item does not exist
@@ -67,7 +67,7 @@ class CosmosDbStore(IStore):
             logger.error("Readiness test failed", exc_info=True)
         except CosmosHttpResponseError:
             logger.error("Error requesting CosmosDB", exc_info=True)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.error(
                 "Unknown error while checking Cosmos DB readiness", exc_info=True
             )
@@ -80,12 +80,12 @@ class CosmosDbStore(IStore):
                 await db.read_item(item=test_id, partition_key=partition_key)
                 exist = True
             except CosmosHttpResponseError as e:
-                if e.status_code != 404:
+                if e.status_code != HTTPStatus.NOT_FOUND:
                     logger.error("Error requesting CosmosDB: %s", e)
                     exist = True
         return exist
 
-    async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
+    async def call_aget(self, call_id: UUID) -> CallStateModel | None:
         logger.debug("Loading call %s", call_id)
 
         # Try cache
@@ -151,7 +151,7 @@ class CosmosDbStore(IStore):
 
         return res
 
-    async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
+    async def call_asearch_one(self, phone_number: str) -> CallStateModel | None:
         logger.debug("Loading last call for %s", phone_number)
 
         # Try cache
@@ -196,8 +196,8 @@ class CosmosDbStore(IStore):
     async def call_asearch_all(
         self,
         count: int,
-        phone_number: Optional[str] = None,
-    ) -> tuple[Optional[list[CallStateModel]], int]:
+        phone_number: str | None = None,
+    ) -> tuple[list[CallStateModel] | None, int]:
         logger.debug("Searching calls, for %s and count %s", phone_number, count)
         # TODO: Cache results
         calls, total = await asyncio.gather(
@@ -209,8 +209,8 @@ class CosmosDbStore(IStore):
     async def _call_asearch_all_calls_worker(
         self,
         count: int,
-        phone_number: Optional[str] = None,
-    ) -> Optional[list[CallStateModel]]:
+        phone_number: str | None = None,
+    ) -> list[CallStateModel] | None:
         calls: list[CallStateModel] = []
         try:
             async with self._use_client() as db:
@@ -245,7 +245,7 @@ class CosmosDbStore(IStore):
 
     async def _call_asearch_all_total_worker(
         self,
-        phone_number: Optional[str] = None,
+        phone_number: str | None = None,
     ) -> int:
         total = 0
         try:

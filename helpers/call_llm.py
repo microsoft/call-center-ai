@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from azure.communication.callautomation.aio import CallAutomationClient
 from openai import APIError
@@ -35,8 +35,9 @@ _cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
 
 
+# TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
 @tracer.start_as_current_span("call_load_llm_chat")
-async def load_llm_chat(
+async def load_llm_chat(  # noqa: PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
@@ -171,9 +172,7 @@ async def load_llm_chat(
                         text=await CONFIG.prompts.tts.timeout_loading(call),
                     )
 
-                elif (
-                    loading_task.done()
-                ):  # Do not play timeout prompt plus loading, it can be frustrating for the user
+                elif loading_task.done():  # Do not play timeout prompt plus loading, it can be frustrating for the user
                     loading_task = _loading_task()
                     await handle_media(
                         call=call,
@@ -184,7 +183,7 @@ async def load_llm_chat(
             # Wait to not block the event loop for other requests
             await asyncio.sleep(1)
 
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:
         logger.warning("Error loading intelligence", exc_info=True)
 
     if is_error:  # Error during chat
@@ -233,8 +232,9 @@ async def load_llm_chat(
     return call
 
 
+# TODO: Refacto, this function is too long (and remove PLR0911/PLR0912/PLR0915 ignore)
 @tracer.start_as_current_span("call_execute_llm_chat")
-async def _execute_llm_chat(
+async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],

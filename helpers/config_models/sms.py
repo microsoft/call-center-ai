@@ -1,6 +1,5 @@
 from enum import Enum
-from functools import lru_cache
-from typing import Optional
+from functools import cache
 
 from pydantic import BaseModel, SecretStr, ValidationInfo, field_validator
 
@@ -20,10 +19,10 @@ class CommunicationServiceModel(BaseModel, frozen=True):
     Model is purely empty to fit to the `ISms` interface and the "mode" enum code organization. As the Communication Services is also used as the only call interface, it is not necessary to duplicate the models.
     """
 
-    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    @cache
     def instance(self) -> ISms:
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
-        from persistence.communication_services import (  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
+        from persistence.communication_services import (
             CommunicationServicesSms,
         )
 
@@ -35,9 +34,9 @@ class TwilioModel(BaseModel, frozen=True):
     auth_token: SecretStr
     phone_number: PhoneNumber
 
-    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    @cache
     def instance(self) -> ISms:
-        from persistence.twilio import (  # pylint: disable=import-outside-toplevel
+        from persistence.twilio import (
             TwilioSms,
         )
 
@@ -45,19 +44,19 @@ class TwilioModel(BaseModel, frozen=True):
 
 
 class SmsModel(BaseModel):
-    communication_services: Optional[CommunicationServiceModel] = (
+    communication_services: CommunicationServiceModel | None = (
         CommunicationServiceModel()
     )  # Object is fully defined by default
     mode: ModeEnum = ModeEnum.COMMUNICATION_SERVICES
-    twilio: Optional[TwilioModel] = None
+    twilio: TwilioModel | None = None
 
     @field_validator("communication_services")
     @classmethod
     def _validate_communication_services(
         cls,
-        communication_services: Optional[CommunicationServiceModel],
+        communication_services: CommunicationServiceModel | None,
         info: ValidationInfo,
-    ) -> Optional[CommunicationServiceModel]:
+    ) -> CommunicationServiceModel | None:
         if (
             not communication_services
             and info.data.get("mode", None) == ModeEnum.COMMUNICATION_SERVICES
@@ -69,9 +68,9 @@ class SmsModel(BaseModel):
     @classmethod
     def _validate_twilio(
         cls,
-        twilio: Optional[TwilioModel],
+        twilio: TwilioModel | None,
         info: ValidationInfo,
-    ) -> Optional[TwilioModel]:
+    ) -> TwilioModel | None:
         if not twilio and info.data.get("mode", None) == ModeEnum.TWILIO:
             raise ValueError("Twilio config required")
         return twilio

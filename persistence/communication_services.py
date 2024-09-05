@@ -13,7 +13,7 @@ from persistence.isms import ISms
 
 
 class CommunicationServicesSms(ISms):
-    _client: Optional[SmsClient] = None
+    _client: SmsClient | None = None
     _config: CommunicationServicesModel
 
     def __init__(self, config: CommunicationServicesModel):

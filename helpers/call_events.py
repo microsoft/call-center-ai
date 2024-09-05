@@ -1,5 +1,5 @@
 import asyncio
-from typing import Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
 
 from azure.communication.callautomation import DtmfTone, RecognitionChoice
 from azure.communication.callautomation.aio import CallAutomationClient
@@ -154,7 +154,7 @@ async def on_speech_recognized(
 async def on_recognize_timeout_error(
     call: CallStateModel,
     client: CallAutomationClient,
-    contexts: Optional[set[CallContextEnum]],
+    contexts: set[CallContextEnum] | None,
 ) -> None:
     if (
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
@@ -224,7 +224,8 @@ async def on_recognize_unknown_error(
 ) -> None:
     span_attribute(CallAttributes.CALL_CHANNEL, "voice")
 
-    if error_code == 8511:  # Failure while trying to play the prompt
+    if error_code == 8511:  # noqa: PLR2004
+        # Failure while trying to play the prompt
         logger.warning("Failed to play prompt")
     else:
         logger.warning(
@@ -245,7 +246,7 @@ async def on_recognize_unknown_error(
 async def on_play_completed(
     call: CallStateModel,
     client: CallAutomationClient,
-    contexts: Optional[set[CallContextEnum]],
+    contexts: set[CallContextEnum] | None,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.debug("Play completed")
@@ -279,15 +280,19 @@ async def on_play_error(error_code: int) -> None:
     logger.debug("Play failed")
     span_attribute(CallAttributes.CALL_CHANNEL, "voice")
     # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
-    if error_code == 8535:  # Action failed, file format
+    if error_code == 8535:  # noqa: PLR2004
+        # Action failed, file format
         logger.warning("Error during media play, file format is invalid")
-    elif error_code == 8536:  # Action failed, file downloaded
+    elif error_code == 8536:  # noqa: PLR2004
+        # Action failed, file downloaded
         logger.warning("Error during media play, file could not be downloaded")
-    elif error_code == 8565:  # Action failed, AI services config
+    elif error_code == 8565:  # noqa: PLR2004
+        # Action failed, AI services config
         logger.error(
             "Error during media play, impossible to connect with Azure AI services"
         )
-    elif error_code == 9999:  # Unknown
+    elif error_code == 9999:  # noqa: PLR2004
+        # Unknown error code
         logger.warning("Error during media play, unknown internal server error")
     else:
         logger.warning("Error during media play, unknown error code %s", error_code)
@@ -429,7 +434,7 @@ async def on_end_call(
     Shortcut to run all post-call intelligence tasks in background.
     """
     if (
-        len(call.messages) >= 3
+        len(call.messages) >= 3  # noqa: PLR2004
         and call.messages[-3].action == MessageActionEnum.CALL
         and call.messages[-2].persona == MessagePersonaEnum.ASSISTANT
         and call.messages[-1].action == MessageActionEnum.HANGUP
@@ -451,11 +456,9 @@ async def _intelligence_sms(call: CallStateModel) -> None:
     Send an SMS report to the customer.
     """
 
-    def _validate(req: Optional[str]) -> tuple[bool, Optional[str], Optional[str]]:
+    def _validate(req: str | None) -> tuple[bool, str | None, str | None]:
         if not req:
             return False, "No SMS content", None
-        if len(req) < 10:
-            return False, "SMS content too short", None
         return True, None, req
 
     content = await completion_sync(
@@ -503,8 +506,8 @@ async def _intelligence_synthesis(call: CallStateModel) -> None:
     logger.debug("Synthesizing call")
 
     def _validate(
-        req: Optional[str],
-    ) -> tuple[bool, Optional[str], Optional[SynthesisModel]]:
+        req: str | None,
+    ) -> tuple[bool, str | None, SynthesisModel | None]:
         if not req:
             return False, "Empty response", None
         try:
@@ -534,8 +537,8 @@ async def _intelligence_next(call: CallStateModel) -> None:
     logger.debug("Generating next action")
 
     def _validate(
-        req: Optional[str],
-    ) -> tuple[bool, Optional[str], Optional[NextModel]]:
+        req: str | None,
+    ) -> tuple[bool, str | None, NextModel | None]:
         if not req:
             return False, "Empty response", None
         try:

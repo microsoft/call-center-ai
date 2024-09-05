@@ -1,5 +1,3 @@
-from typing import Optional
-
 from aiohttp import (
     AsyncResolver,
     ClientSession,
@@ -11,10 +9,10 @@ from aiohttp_retry import JitterRetry, RetryClient
 from azure.core.pipeline.transport._aiohttp import AioHttpTransport
 from twilio.http.async_http_client import AsyncTwilioHttpClient
 
-_cookie_jar: Optional[DummyCookieJar] = None
-_session: Optional[ClientSession] = None
-_transport: Optional[AioHttpTransport] = None
-_twilio_http: Optional[AsyncTwilioHttpClient] = None
+_cookie_jar: DummyCookieJar | None = None
+_session: ClientSession | None = None
+_transport: AioHttpTransport | None = None
+_twilio_http: AsyncTwilioHttpClient | None = None
 
 
 async def _aiohttp_cookie_jar() -> DummyCookieJar:
@@ -25,7 +23,7 @@ async def _aiohttp_cookie_jar() -> DummyCookieJar:
 
     Returns a `DummyCookieJar` instance.
     """
-    global _cookie_jar  # pylint: disable=global-statement
+    global _cookie_jar  # noqa: PLW0603
     if not _cookie_jar:
         _cookie_jar = DummyCookieJar()
     return _cookie_jar
@@ -39,7 +37,7 @@ async def aiohttp_session() -> ClientSession:
 
     Returns a `ClientSession` instance.
     """
-    global _session  # pylint: disable=global-statement
+    global _session  # noqa: PLW0603
     if not _session:
         _session = ClientSession(
             # Same config as default in the SDK
@@ -65,7 +63,7 @@ async def azure_transport() -> AioHttpTransport:
 
     Returns a `AioHttpTransport` instance.
     """
-    global _transport  # pylint: disable=global-statement
+    global _transport  # noqa: PLW0603
     if not _transport:
         # Azure SDK implements its own retry logic (e.g. for Cosmos DB), so we don't add it here
         _transport = AioHttpTransport(
@@ -83,7 +81,7 @@ async def twilio_http() -> AsyncTwilioHttpClient:
 
     Returns a `AsyncTwilioHttpClient` instance.
     """
-    global _twilio_http  # pylint: disable=global-statement
+    global _twilio_http  # noqa: PLW0603
     if not _twilio_http:
         _twilio_http = AsyncTwilioHttpClient(
             timeout=10,

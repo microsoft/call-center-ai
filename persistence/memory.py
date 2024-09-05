@@ -17,7 +17,7 @@ class MemoryCache(ICache):
     See: https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)
     """
 
-    _cache: OrderedDict[str, Union[bytes, None]] = OrderedDict()
+    _cache: OrderedDict[str, bytes | None] = OrderedDict()
     _config: MemoryModel
 
     def __init__(self, config: MemoryModel):
@@ -33,7 +33,7 @@ class MemoryCache(ICache):
         """
         return ReadinessEnum.OK  # Always ready, it's memory :)
 
-    async def aget(self, key: str) -> Optional[bytes]:
+    async def aget(self, key: str) -> bytes | None:
         """
         Get a value from the cache.
 
@@ -46,7 +46,7 @@ class MemoryCache(ICache):
         self._cache.move_to_end(sha_key, last=False)  # Move to first
         return res
 
-    async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
+    async def aset(self, key: str, value: str | bytes | None) -> bool:
         """
         Set a value in the cache.
         """

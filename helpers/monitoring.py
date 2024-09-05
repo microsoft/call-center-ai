@@ -14,7 +14,7 @@ try:
     AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
     HTTPXClientInstrumentor().instrument()  # Instrument httpx
 except ValueError as e:
-    print(
+    print(  # noqa: T201
         "Azure Application Insights instrumentation failed, likely due to a missing APPLICATIONINSIGHTS_CONNECTION_STRING environment variable.",
         e,
     )

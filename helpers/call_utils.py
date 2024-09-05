@@ -1,8 +1,8 @@
 import json
 import re
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from enum import Enum
-from typing import AsyncGenerator, Generator, Optional
 
 from azure.communication.callautomation import (
     FileSource,
@@ -26,11 +26,12 @@ from models.message import (
     StyleEnum as MessageStyleEnum,
 )
 
+_MAX_CHARACTERS_PER_TTS = 400  # Azure Speech Service TTS limit is 400 characters
 _SENTENCE_PUNCTUATION_R = (
     r"([!?;]+|[\.\-:]+(?:$| ))"  # Split by sentence by punctuation
 )
 _TTS_SANITIZER_R = re.compile(
-    r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&€$%=]"
+    r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&€$%=]"  # noqa: RUF001
 )  # Sanitize text for TTS
 
 
@@ -79,9 +80,9 @@ def tts_sentence_split(
 async def _handle_recognize_media(
     call: CallStateModel,
     client: CallAutomationClient,
-    context: Optional[ContextEnum],
+    context: ContextEnum | None,
     style: MessageStyleEnum,
-    text: Optional[str],
+    text: str | None,
 ) -> None:
     """
     Play a media to a call participant and start recognizing the response.
@@ -107,9 +108,7 @@ async def _handle_recognize_media(
                     else None
                 ),  # If no text is provided, only recognize
                 speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(
-                    call.initiate.phone_number
-                ),  # pyright: ignore
+                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # pyright: ignore
             )
     except ResourceNotFoundError:
         logger.debug("Call hung up before recognizing")
@@ -124,7 +123,7 @@ async def _handle_play_text(
     call: CallStateModel,
     client: CallAutomationClient,
     text: str,
-    context: Optional[ContextEnum] = None,
+    context: ContextEnum | None = None,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
 ) -> None:
     """
@@ -157,7 +156,7 @@ async def handle_media(
     client: CallAutomationClient,
     call: CallStateModel,
     sound_url: str,
-    context: Optional[ContextEnum] = None,
+    context: ContextEnum | None = None,
 ) -> None:
     """
     Play a media to a call participant.
@@ -180,11 +179,11 @@ async def handle_media(
             raise e
 
 
-async def handle_recognize_text(
+async def handle_recognize_text(  # noqa: PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
-    text: Optional[str],
-    context: Optional[ContextEnum] = None,
+    text: str | None,
+    context: ContextEnum | None = None,
     no_response_error: bool = False,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
@@ -231,11 +230,11 @@ async def handle_recognize_text(
         )
 
 
-async def handle_play_text(
+async def handle_play_text(  # noqa: PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
     text: str,
-    context: Optional[ContextEnum] = None,
+    context: ContextEnum | None = None,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
 ) -> None:
@@ -310,11 +309,11 @@ async def _chunk_before_tts(
                 )
             )
 
-    # Split text in chunks of max 400 characters, separated by sentence
+    # Split text in chunks, separated by sentence
     chunks = []
     chunk = ""
     for to_add, _ in tts_sentence_split(text, True):
-        if len(chunk) + len(to_add) >= 400:
+        if len(chunk) + len(to_add) >= _MAX_CHARACTERS_PER_TTS:
             chunks.append(chunk.strip())  # Remove trailing space
             chunk = ""
         chunk += to_add
@@ -332,16 +331,13 @@ def _audio_from_text(
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
-    Text requires to be SVG escaped, and SSML tags are used to control the voice. Plus, text is slowed down by 5% to make it more understandable for elderly people. Text is also truncated to 400 characters, as this is the limit of Azure Communication Services TTS, but a warning is logged.
+    Text requires to be SVG escaped, and SSML tags are used to control the voice. Plus, text is slowed down by 5% to make it more understandable for elderly people. Text is also truncated, as this is the limit of Azure Communication Services TTS, but a warning is logged.
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-structure
     """
-    # Azure Speech Service TTS limit is 400 characters
-    if len(text) > 400:
-        logger.warning(
-            "Text is too long to be processed by TTS, truncating to 400 characters, fix this!"
-        )
-        text = text[:400]
+    if len(text) > _MAX_CHARACTERS_PER_TTS:
+        logger.warning("Text is too long to be processed by TTS, truncating, fix this!")
+        text = text[:_MAX_CHARACTERS_PER_TTS]
     # Escape text for SSML
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     # Build SSML tree
@@ -368,7 +364,7 @@ async def handle_recognize_ivr(
     choices: list[RecognitionChoice],
     client: CallAutomationClient,
     text: str,
-    context: Optional[ContextEnum] = None,
+    context: ContextEnum | None = None,
 ) -> None:
     """
     Recognize an IVR response after playing a text.
@@ -390,9 +386,7 @@ async def handle_recognize_ivr(
                     text=text,
                 ),
                 speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(
-                    call.initiate.phone_number
-                ),  # pyright: ignore
+                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # pyright: ignore
             )
     except ResourceNotFoundError:
         logger.debug("Call hung up before recognizing")
@@ -420,7 +414,7 @@ async def handle_transfer(
     client: CallAutomationClient,
     call: CallStateModel,
     target: str,
-    context: Optional[ContextEnum] = None,
+    context: ContextEnum | None = None,
 ) -> None:
     logger.info("Transferring call: %s", target)
     try:
@@ -439,7 +433,7 @@ async def handle_transfer(
             raise e
 
 
-def _context_builder(contexts: Optional[set[Optional[ContextEnum]]]) -> Optional[str]:
+def _context_builder(contexts: set[ContextEnum | None] | None) -> str | None:
     if not contexts:
         return None
     return json.dumps([context.value for context in contexts if context])

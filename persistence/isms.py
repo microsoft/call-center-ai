@@ -6,7 +6,6 @@ from models.readiness import ReadinessEnum
 
 
 class ISms(ABC):
-
     @abstractmethod
     @tracer.start_as_current_span("sms_areadiness")
     async def areadiness(self) -> ReadinessEnum:

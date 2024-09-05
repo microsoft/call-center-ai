@@ -2,7 +2,6 @@ import asyncio
 import json
 import re
 from datetime import datetime
-from typing import Optional
 
 import pytest
 from deepeval import assert_test
@@ -16,7 +15,7 @@ from deepeval.metrics import (
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume  # pylint: disable=no-name-in-module # pyright: ignore
+from pytest import assume
 
 from helpers.call_events import (
     on_call_connected,
@@ -58,8 +57,8 @@ class ClaimRelevancyMetric(BaseMetric):
     async def a_measure(
         self,
         test_case: LLMTestCase,
-        *args,
-        **kwargs,
+        *args,  # noqa: ARG002
+        **kwargs,  # noqa: ARG002
     ) -> float:
         assert test_case.input
         # Extract claim data
@@ -83,7 +82,7 @@ class ClaimRelevancyMetric(BaseMetric):
         self.success = self.score >= self.threshold
         return self.score
 
-    async def _score_data(self, key: str, throry: str, real: Optional[str]) -> float:
+    async def _score_data(self, key: str, throry: str, real: str | None) -> float:
         res, _ = await self.model.a_generate(
             f"""
             Assistant is a data analyst expert with 20 years of experience.
@@ -230,7 +229,7 @@ class ClaimRelevancyMetric(BaseMetric):
 
 @with_conversations
 @pytest.mark.asyncio(scope="session")
-async def test_llm(
+async def test_llm(  # noqa: PLR0913
     call: CallStateModel,
     claim_tests_excl: list[str],
     deepeval_model: GPTModel,

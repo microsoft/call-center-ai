@@ -1,5 +1,4 @@
 import hashlib
-from typing import Optional, Union
 from uuid import uuid4
 
 from opentelemetry.instrumentation.redis import RedisInstrumentor
@@ -68,11 +67,11 @@ class RedisCache(ICache):
             logger.error("Readiness test failed", exc_info=True)
         except RedisError:
             logger.error("Error requesting Redis", exc_info=True)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.error("Unknown error while checking Redis readiness", exc_info=True)
         return ReadinessEnum.FAIL
 
-    async def aget(self, key: str) -> Optional[bytes]:
+    async def aget(self, key: str) -> bytes | None:
         """
         Get a value from the cache.
 
@@ -88,7 +87,7 @@ class RedisCache(ICache):
             logger.error("Error getting value", exc_info=True)
         return res
 
-    async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
+    async def aset(self, key: str, value: str | bytes | None) -> bool:
         """
         Set a value in the cache.
 

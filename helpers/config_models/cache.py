@@ -1,6 +1,5 @@
 from enum import Enum
-from functools import lru_cache
-from typing import Optional
+from functools import cache
 
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
@@ -15,9 +14,9 @@ class ModeEnum(str, Enum):
 class MemoryModel(BaseModel, frozen=True):
     max_size: int = Field(default=100, ge=10)
 
-    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    @cache
     def instance(self) -> ICache:
-        from persistence.memory import (  # pylint: disable=import-outside-toplevel
+        from persistence.memory import (
             MemoryCache,
         )
 
@@ -31,9 +30,9 @@ class RedisModel(BaseModel, frozen=True):
     port: int = 6379
     ssl: bool = True
 
-    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    @cache
     def instance(self) -> ICache:
-        from persistence.redis import (  # pylint: disable=import-outside-toplevel
+        from persistence.redis import (
             RedisCache,
         )
 
@@ -41,17 +40,17 @@ class RedisModel(BaseModel, frozen=True):
 
 
 class CacheModel(BaseModel):
-    memory: Optional[MemoryModel] = MemoryModel()  # Object is fully defined by default
+    memory: MemoryModel | None = MemoryModel()  # Object is fully defined by default
     mode: ModeEnum = ModeEnum.MEMORY
-    redis: Optional[RedisModel] = None
+    redis: RedisModel | None = None
 
     @field_validator("redis")
     @classmethod
     def _validate_sqlite(
         cls,
-        redis: Optional[RedisModel],
+        redis: RedisModel | None,
         info: ValidationInfo,
-    ) -> Optional[RedisModel]:
+    ) -> RedisModel | None:
         if not redis and info.data.get("mode", None) == ModeEnum.REDIS:
             raise ValueError("Redis config required")
         return redis
@@ -60,9 +59,9 @@ class CacheModel(BaseModel):
     @classmethod
     def _validate_memory(
         cls,
-        memory: Optional[MemoryModel],
+        memory: MemoryModel | None,
         info: ValidationInfo,
-    ) -> Optional[MemoryModel]:
+    ) -> MemoryModel | None:
         if not memory and info.data.get("mode", None) == ModeEnum.MEMORY:
             raise ValueError("Memory config required")
         return memory

@@ -21,7 +21,7 @@ class IStore(ABC):
 
     @abstractmethod
     @tracer.start_as_current_span("store_call_aget")
-    async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
+    async def call_aget(self, call_id: UUID) -> CallStateModel | None:
         pass
 
     @abstractmethod
@@ -31,7 +31,7 @@ class IStore(ABC):
 
     @abstractmethod
     @tracer.start_as_current_span("store_call_adel")
-    async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
+    async def call_asearch_one(self, phone_number: str) -> CallStateModel | None:
         pass
 
     @abstractmethod
@@ -39,8 +39,8 @@ class IStore(ABC):
     async def call_asearch_all(
         self,
         count: int,
-        phone_number: Optional[str] = None,
-    ) -> tuple[Optional[list[CallStateModel]], int]:
+        phone_number: str | None = None,
+    ) -> tuple[list[CallStateModel] | None, int]:
         pass
 
     def _cache_key_call_id(self, call_id: UUID) -> str:

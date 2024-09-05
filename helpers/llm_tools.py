@@ -1,7 +1,8 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from html import escape
 from inspect import getmembers, isfunction
-from typing import Annotated, Awaitable, Callable, Literal
+from typing import Annotated, Literal
 
 from azure.communication.callautomation.aio import CallAutomationClient
 from openai.types.chat import ChatCompletionToolParam
@@ -586,8 +587,8 @@ class LlmPlugins:
     async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
         return await asyncio.gather(
             *[
-                function_schema(type, call=call)
-                for name, type in getmembers(LlmPlugins, isfunction)
+                function_schema(arg_type, call=call)
+                for name, arg_type in getmembers(LlmPlugins, isfunction)
                 if not name.startswith("_") and name != "to_openai"
             ]
         )
