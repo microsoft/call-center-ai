@@ -16,6 +16,8 @@ name_sanitized := $(shell echo $(name) | tr '[:upper:]' '[:lower:]')
 bot_phone_number ?= $(shell cat config.yaml | yq '.communication_services.phone_number')
 event_subscription_name ?= $(shell echo '$(name_sanitized)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
 twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
+# Bicep inputs
+prompt_content_filter ?= true
 # Bicep outputs
 app_url ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["blobStoragePublicName"].value')
@@ -139,6 +141,7 @@ deploy-bicep:
 			'functionappLocation=$(functionapp_location)' \
 			'instance=$(name)' \
 			'openaiLocation=$(openai_location)' \
+			'promptContentFilter=$(prompt_content_filter)' \
 			'searchLocation=$(search_location)' \
 			'version=$(version_full)' \
 		--template-file bicep/main.bicep \

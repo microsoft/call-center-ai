@@ -1,5 +1,5 @@
 param cognitiveCommunicationLocation string
-param embeddingDeploymentType string = 'Standard'  // Pay-as-you-go in a single region
+param embeddingDeploymentType string = 'Standard' // Pay-as-you-go in a single region
 param embeddingModel string = 'text-embedding-ada-002'
 param embeddingQuota int = 100
 param embeddingVersion string = '2'
@@ -17,6 +17,7 @@ param llmSlowQuota int = 400
 param llmSlowVersion string = '2024-05-13'
 param location string = deployment().location
 param openaiLocation string
+param promptContentFilter bool = true // Should be set to false but requires a custom approval from Microsoft
 param searchLocation string
 param version string
 
@@ -64,6 +65,7 @@ module app 'app.bicep' = {
     llmSlowVersion: llmSlowVersion
     location: location
     openaiLocation: openaiLocation
+    promptContentFilter: promptContentFilter
     searchLocation: searchLocation
     tags: tags
     version: version

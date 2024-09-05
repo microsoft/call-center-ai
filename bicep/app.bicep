@@ -16,6 +16,7 @@ param llmSlowQuota int
 param llmSlowVersion string
 param location string
 param openaiLocation string
+param promptContentFilter bool
 param searchLocation string
 param tags object
 param version string
@@ -473,6 +474,7 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
     contentFilters: [
       // Indirect attacks
       {
+        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'indirect_attack'
@@ -480,6 +482,7 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
       }
       // Jailbreak
       {
+        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'jailbreak'
@@ -487,63 +490,73 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
       }
       // Prompt
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'hate'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'sexual'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'selfharm'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'violence'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'profanity'
         source: 'Prompt'
       }
       // Completion
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'hate'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'sexual'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'selfharm'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'violence'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'profanity'
         source: 'Completion'
       }
