@@ -80,17 +80,8 @@ upgrade:
 	az bicep upgrade
 
 test:
-	@echo "➡️ Test generic formatter (Black)..."
-	python3 -m black --check .
-
-	@echo "➡️ Test import formatter (isort)..."
-	python3 -m isort --jobs -1 --check .
-
-	@echo "➡️ Test dependencies issues (deptry)..."
-	python3 -m deptry .
-
-	@echo "➡️ Test code smells (Pylint)..."
-	python3 -m pylint .
+	@echo "➡️ Test code smells (Ruff)..."
+	python3 -m ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
 
 	@echo "➡️ Test types (Pyright)..."
 	python3 -m pyright .
@@ -101,11 +92,11 @@ test:
 		tests/*.py
 
 lint:
-	@echo "➡️ Fix with generic formatter (Black)..."
-	python3 -m black .
+	@echo "➡️ Fix with formatter..."
+	python3 -m ruff format
 
-	@echo "➡️ Fix with import formatter (isort)..."
-	python3 -m isort --jobs -1 .
+	@echo "➡️ Lint with linter..."
+	python3 -m ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
 
 tunnel:
 	@echo "➡️ Creating tunnel..."

@@ -1,14 +1,14 @@
 {
-  "python.analysis.autoImportCompletions": true,
-  "python.analysis.typeCheckingMode": "standard",
   "python.languageServer": "Pylance",
+  "python.analysis.typeCheckingMode": "basic",
+  "ruff.nativeServer": "on",
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
-    "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "always"
-    },
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    }
   },
   "[markdown]": {
     "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
