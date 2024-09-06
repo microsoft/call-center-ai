@@ -13,8 +13,8 @@ param llmFastVersion string = '2024-07-18'
 param llmSlowContext int = 128000
 param llmSlowDeploymentType string = 'GlobalStandard'  // Pay-as-you-go in all regions
 param llmSlowModel string = 'gpt-4o'
-param llmSlowQuota int = 400
-param llmSlowVersion string = '2024-05-13'
+param llmSlowQuota int = 300
+param llmSlowVersion string = '2024-08-06'
 param location string = deployment().location
 param openaiLocation string
 param promptContentFilter bool = true // Should be set to false but requires a custom approval from Microsoft
