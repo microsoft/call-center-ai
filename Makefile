@@ -13,17 +13,13 @@ search_location := francecentral
 # Sanitize variables
 name_sanitized := $(shell echo $(name) | tr '[:upper:]' '[:lower:]')
 # App configuration
-bot_phone_number ?= $(shell cat config.yaml | yq '.communication_services.phone_number')
-event_subscription_name ?= $(shell echo '$(name_sanitized)-$(bot_phone_number)' | tr -dc '[:alnum:]-')
 twilio_phone_number ?= $(shell cat config.yaml | yq '.sms.twilio.phone_number')
 # Bicep inputs
 prompt_content_filter ?= true
 # Bicep outputs
 app_url ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["blobStoragePublicName"].value')
-communication_id ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["communicationId"].value')
 function_app_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["functionAppName"].value')
-log_analytics_workspace_customer_id ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["logAnalyticsWorkspaceName"].value')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c

@@ -114,7 +114,6 @@ var config = {
 
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
-output communicationId string = communicationServices.id
 output functionAppName string = functionAppName
 output logAnalyticsCustomerId string = logAnalytics.properties.customerId
 

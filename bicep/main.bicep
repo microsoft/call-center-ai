@@ -25,7 +25,6 @@ targetScope = 'subscription'
 
 output appUrl string = app.outputs.appUrl
 output blobStoragePublicName string = app.outputs.blobStoragePublicName
-output communicationId string = app.outputs.communicationId
 output functionAppName string = app.outputs.functionAppName
 output logAnalyticsCustomerId string = app.outputs.logAnalyticsCustomerId
 
