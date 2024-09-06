@@ -5,11 +5,11 @@ param embeddingQuota int = 100
 param embeddingVersion string = '2'
 param functionappLocation string
 param instance string
-param llmFastContext int = 16385
-param llmFastDeploymentType string = 'Standard'  // Pay-as-you-go in a single region
-param llmFastModel string = 'gpt-35-turbo'
-param llmFastQuota int = 200
-param llmFastVersion string = '1106'
+param llmFastContext int = 128000
+param llmFastDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
+param llmFastModel string = 'gpt-4o-mini'
+param llmFastQuota int = 600
+param llmFastVersion string = '2024-07-18'
 param llmSlowContext int = 128000
 param llmSlowDeploymentType string = 'GlobalStandard'  // Pay-as-you-go in all regions
 param llmSlowModel string = 'gpt-4o'

@@ -173,7 +173,7 @@ class ConversationModel(BaseModel):
         serialization_alias="voice_timeout_after_silence_sec",  # Compatibility with v7
     )
     slow_llm_for_chat: bool = Field(
-        default=True,
+        default=False,
         serialization_alias="use_slow_llm_for_chat_as_default",  # Compatibility with v7
     )
     voice_recognition_retry_max: int = Field(
