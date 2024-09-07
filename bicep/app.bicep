@@ -422,19 +422,6 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-04-01
   }
 }
 
-resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
-  name: '${prefix}-${location}-document'
-  location: location
-  tags: tags
-  sku: {
-    name: 'S0' // Pay-as-you-go
-  }
-  kind: 'FormRecognizer'
-  properties: {
-    customSubDomainName: '${prefix}-${location}-document'
-  }
-}
-
 // Cognitive Services OpenAI Contributor
 resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'a001fd3d-188f-4b5d-821b-7da978bf7442'
