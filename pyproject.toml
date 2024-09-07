@@ -4,7 +4,7 @@ dynamic = ["version"]
 license = {file = "LICENSE"}
 name = "call-center-ai"
 readme = "README.md"
-requires-python = "==3.11"
+requires-python = ">=3.11"
 dependencies = [
   "aiohttp-retry==2.8.3",  # Retry middleware for aiohttp, used with Twilio SDK
   "aiohttp[speedups]==3.9.5",  # Async HTTP client for Azure and Twilio SDKs, plus async DNS resolver and async Brotli compression
