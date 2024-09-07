@@ -62,7 +62,7 @@ curl \
 - [x] Customizable prompts
 - [x] Disengaging from a human agent when needed
 - [x] Filter out inappropriate content from the LLM, like profanity or concurrence company names
-- [x] Fine understanding of the customer request with GPT-4 Turbo
+- [x] Fine understanding of the customer request with GPT-4o and GPT 4o-mini
 - [x] Follow a specific data schema for the claim
 - [x] Has access to a documentation database (few-shot training / RAG)
 - [x] Help the user to find the information needed to complete the claim
@@ -380,16 +380,16 @@ llm:
     azure_openai:
       api_key: xxx
       context: 16385
-      deployment: gpt-35-turbo-0125
+      deployment: gpt-4o-mini-2024-07-18
       endpoint: https://xxx.openai.azure.com
-      model: gpt-35-turbo
+      model: gpt-4o-mini
       streaming: true
   slow:
     mode: azure_openai
     azure_openai:
       api_key: xxx
       context: 128000
-      deployment: gpt-4o-2024-05-13
+      deployment: gpt-4o-2024-08-06
       endpoint: https://xxx.openai.azure.com
       model: gpt-4o
       streaming: true
@@ -620,9 +620,9 @@ llm:
     mode: openai
     openai:
       api_key: xxx
-      context: 16385
+      context: 128000
       endpoint: https://api.openai.com
-      model: gpt-35-turbo
+      model: gpt-4o-mini
       streaming: true
   slow:
     mode: openai
@@ -630,7 +630,7 @@ llm:
       api_key: xxx
       context: 128000
       endpoint: https://api.openai.com
-      model: gpt-4
+      model: gpt-4o
       streaming: true
 ```
 
