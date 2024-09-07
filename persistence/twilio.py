@@ -1,5 +1,3 @@
-from typing import Optional
-
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
@@ -12,7 +10,7 @@ from persistence.isms import ISms
 
 
 class TwilioSms(ISms):
-    _client: Optional[Client] = None
+    _client: Client | None = None
     _config: TwilioModel
 
     def __init__(self, config: TwilioModel):
@@ -34,7 +32,7 @@ class TwilioSms(ISms):
             return ReadinessEnum.OK
         except AssertionError:
             logger.error("Readiness test failed", exc_info=True)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.error("Unknown error while checking Twilio readiness", exc_info=True)
         return ReadinessEnum.FAIL
 

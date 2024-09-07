@@ -1,15 +1,30 @@
 # Local dev
+__pycache__/
 .devcontainer/
 .gitmodules/
+.python_packages/
 .python-version
+.ruff_cache/
 .syft.yaml
+.venv/
+.version.cache
+.version.config
+.vscode/
+*.egg-info/
+*.pyc
 *.sqlite*
-bicep/
-cicd/
+build/
+configs/
+DevTunnels/
 Makefile
 requirements-dev.txt
 
-# Local app config file
+# CICD
+.github/
+bicep/
+cicd/
+
+# Config
 *.env
 *.settings.json
 config.*
@@ -20,21 +35,7 @@ sbom-reports/
 test-reports/
 tests/
 
-# Documentation and examples
+# Documentation
 *.md
 docs/
 examples/
-
-# Local cache
-__pycache__/
-.python_packages/
-.venv/
-.version.cache
-.version.config
-*.egg-info/
-*.pyc
-build/
-DevTunnels/
-
-# GitHub
-.github/

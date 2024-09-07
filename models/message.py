@@ -3,7 +3,7 @@ import re
 from datetime import UTC, datetime
 from enum import Enum
 from inspect import getmembers, isfunction
-from typing import Any, Optional, Union
+from typing import Any
 
 from json_repair import repair_json
 from openai.types.chat import (
@@ -82,7 +82,7 @@ class ToolModel(BaseModel):
         return self
 
     async def execute_function(self, plugins: object) -> None:
-        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
+        from helpers.logging import logger
 
         json_str = self.function_arguments
         name = self.function_name
@@ -131,7 +131,7 @@ class ToolModel(BaseModel):
                 )
                 res = "Wrong arguments, please fix them and try again."
                 res_log = res
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except Exception as e:
                 logger.warning(
                     "Error executing function %s with args %s",
                     self.function_name,
@@ -145,7 +145,7 @@ class ToolModel(BaseModel):
 
     @staticmethod
     def _available_function_names() -> list[str]:
-        from helpers.llm_tools import (  # pylint: disable=import-outside-toplevel
+        from helpers.llm_tools import (
             LlmPlugins,
         )
 
@@ -177,11 +177,9 @@ class MessageModel(BaseModel):
     def to_openai(
         self,
     ) -> list[
-        Union[
-            ChatCompletionAssistantMessageParam,
-            ChatCompletionToolMessageParam,
-            ChatCompletionUserMessageParam,
-        ]
+        ChatCompletionAssistantMessageParam
+        | ChatCompletionToolMessageParam
+        | ChatCompletionUserMessageParam
     ]:
         # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
         content = " ".join([line.strip() for line in self.content.splitlines()])
@@ -211,14 +209,14 @@ class MessageModel(BaseModel):
                 tool_calls=[tool_call.to_openai() for tool_call in self.tool_calls],
             )
         )
-        for tool_call in self.tool_calls:
-            res.append(
-                ChatCompletionToolMessageParam(
-                    content=tool_call.content,
-                    role="tool",
-                    tool_call_id=tool_call.tool_id,
-                )
+        res.extend(
+            ChatCompletionToolMessageParam(
+                content=tool_call.content,
+                role="tool",
+                tool_call_id=tool_call.tool_id,
             )
+            for tool_call in self.tool_calls
+        )
         return res
 
 
@@ -236,7 +234,7 @@ def remove_message_action(text: str) -> str:
         return text
 
 
-def extract_message_style(text: str) -> tuple[Optional[StyleEnum], str]:
+def extract_message_style(text: str) -> tuple[StyleEnum | None, str]:
     """
     Detect the style of a message.
     """

@@ -12,6 +12,6 @@ class ClaimTypeEnum(str, Enum):
 
 
 class ClaimFieldModel(BaseModel):
-    description: Optional[str] = None
+    description: str | None = None
     name: str
     type: ClaimTypeEnum

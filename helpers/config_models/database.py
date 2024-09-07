@@ -1,6 +1,5 @@
 from enum import Enum
-from functools import lru_cache
-from typing import Optional
+from functools import cache
 
 from pydantic import BaseModel, SecretStr, ValidationInfo, field_validator
 
@@ -18,10 +17,10 @@ class CosmosDbModel(BaseModel, frozen=True):
     database: str
     endpoint: str
 
-    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    @cache
     def instance(self) -> IStore:
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
-        from persistence.cosmos_db import (  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
+        from persistence.cosmos_db import (
             CosmosDbStore,
         )
 
@@ -41,10 +40,10 @@ class SqliteModel(BaseModel, frozen=True):
         """
         return f"{self.path}-v{self.schema_version}.sqlite"
 
-    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    @cache
     def instance(self) -> IStore:
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
-        from persistence.sqlite import (  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
+        from persistence.sqlite import (
             SqliteStore,
         )
 
@@ -52,17 +51,17 @@ class SqliteModel(BaseModel, frozen=True):
 
 
 class DatabaseModel(BaseModel):
-    cosmos_db: Optional[CosmosDbModel] = None
+    cosmos_db: CosmosDbModel | None = None
     mode: ModeEnum = ModeEnum.SQLITE
-    sqlite: Optional[SqliteModel] = SqliteModel()  # Object is fully defined by default
+    sqlite: SqliteModel | None = SqliteModel()  # Object is fully defined by default
 
     @field_validator("cosmos_db")
     @classmethod
     def _validate_cosmos_db(
         cls,
-        cosmos_db: Optional[CosmosDbModel],
+        cosmos_db: CosmosDbModel | None,
         info: ValidationInfo,
-    ) -> Optional[CosmosDbModel]:
+    ) -> CosmosDbModel | None:
         if not cosmos_db and info.data.get("mode", None) == ModeEnum.COSMOS_DB:
             raise ValueError("Cosmos DB config required")
         return cosmos_db
@@ -71,9 +70,9 @@ class DatabaseModel(BaseModel):
     @classmethod
     def _validate_sqlite(
         cls,
-        sqlite: Optional[SqliteModel],
+        sqlite: SqliteModel | None,
         info: ValidationInfo,
-    ) -> Optional[SqliteModel]:
+    ) -> SqliteModel | None:
         if not sqlite and info.data.get("mode", None) == ModeEnum.SQLITE:
             raise ValueError("SQLite config required")
         return sqlite

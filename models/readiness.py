@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import List
 
 from pydantic import BaseModel
 
@@ -15,5 +14,5 @@ class ReadinessCheckModel(BaseModel):
 
 
 class ReadinessModel(BaseModel):
-    checks: List[ReadinessCheckModel]
+    checks: list[ReadinessCheckModel]
     status: ReadinessEnum

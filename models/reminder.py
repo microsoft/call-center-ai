@@ -10,5 +10,5 @@ class ReminderModel(BaseModel):
     # Editable fields
     description: str
     due_date_time: datetime
-    owner: Optional[str] = None  # Optional for backwards compatibility
+    owner: str | None = None  # Optional for backwards compatibility
     title: str

@@ -25,5 +25,5 @@ class ISearch(ABC):
         lang: str,
         text: str,
         cache_only: bool = False,
-    ) -> Optional[list[TrainingModel]]:
+    ) -> list[TrainingModel] | None:
         pass

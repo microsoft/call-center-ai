@@ -2,8 +2,9 @@ import hashlib
 import random
 import string
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from textwrap import dedent
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 import pytest
 import yaml
@@ -45,10 +46,10 @@ class CallConnectionClientMock(CallConnectionClient):
 
     async def start_recognizing_media(
         self,
-        play_prompt: Union[FileSource, TextSource, SsmlSource],
-        *args,
-        operation_context: Optional[str] = None,
-        **kwargs,
+        play_prompt: FileSource | TextSource | SsmlSource,
+        *args,  # noqa: ARG002
+        operation_context: str | None = None,
+        **kwargs,  # noqa: ARG002
     ) -> None:
         contexts = _str_to_contexts(operation_context)
         for context in contexts or []:
@@ -57,10 +58,10 @@ class CallConnectionClientMock(CallConnectionClient):
 
     async def play_media(
         self,
-        play_source: Union[FileSource, TextSource, SsmlSource],
-        *args,
-        operation_context: Optional[str] = None,
-        **kwargs,
+        play_source: FileSource | TextSource | SsmlSource,
+        *args,  # noqa: ARG002
+        operation_context: str | None = None,
+        **kwargs,  # noqa: ARG002
     ) -> None:
         contexts = _str_to_contexts(operation_context)
         for context in contexts or []:
@@ -69,16 +70,16 @@ class CallConnectionClientMock(CallConnectionClient):
 
     async def transfer_call_to_participant(
         self,
-        *args,
-        **kwargs,
+        *args,  # noqa: ARG002
+        **kwargs,  # noqa: ARG002
     ) -> TransferCallResult:
         self._transfer_callback()
         return TransferCallResult()
 
     async def hang_up(
         self,
-        *args,
-        **kwargs,
+        *args,  # noqa: ARG002
+        **kwargs,  # noqa: ARG002
     ) -> None:
         self._hang_up_callback()
 
@@ -89,9 +90,7 @@ class CallConnectionClientMock(CallConnectionClient):
     ) -> None:
         pass
 
-    def _log_media(
-        self, play_source: Union[FileSource, TextSource, SsmlSource]
-    ) -> None:
+    def _log_media(self, play_source: FileSource | TextSource | SsmlSource) -> None:
         if isinstance(play_source, TextSource):
             self._play_media_callback(play_source.text.strip())
         elif isinstance(play_source, SsmlSource):
@@ -118,8 +117,8 @@ class CallAutomationClientMock(CallAutomationClient):
 
     def get_call_connection(
         self,
-        *args,
-        **kwargs,
+        *args,  # noqa: ARG002
+        **kwargs,  # noqa: ARG002
     ) -> CallConnectionClientMock:
         return self._call_client
 
@@ -202,9 +201,7 @@ class DeepEvalAzureOpenAI(GPTModel):
         return True
 
     def _cache_key(self, prompt: str) -> str:
-        llm_string = self._model._get_llm_string(
-            input=prompt
-        )  # pylint: disable=protected-access
+        llm_string = self._model._get_llm_string(input=prompt)
         llm_hash = hashlib.sha256(llm_string.encode(), usedforsecurity=False).digest()
         return f"call-center-ai/{llm_hash}"
 
@@ -221,7 +218,6 @@ def with_conversations(fn=None) -> MarkDecorator:
     with open(
         encoding="utf-8",
         file="tests/conversations.yaml",
-        mode="r",
     ) as f:
         file: dict = yaml.safe_load(f)
     conversations: list[Conversation] = []
@@ -230,7 +226,7 @@ def with_conversations(fn=None) -> MarkDecorator:
             conversations.append(Conversation.model_validate(conv))
         except ValidationError:
             logger.error("Failed to parse conversation", exc_info=True)
-    print(f"Loaded {len(conversations)} conversations")
+    print(f"Loaded {len(conversations)} conversations")  # noqa: T201
     keys = sorted(Conversation.model_fields.keys() - {"id"})
     values = [
         pytest.param(

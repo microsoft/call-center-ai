@@ -1,7 +1,7 @@
 import asyncio
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
 from uuid import UUID
 
 from aiosqlite import Connection, connect as sqlite_connect
@@ -52,11 +52,11 @@ class SqliteStore(IStore):
             async with self._use_db() as db:
                 await db.execute("SELECT 1")
             return ReadinessEnum.OK
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.error("Unknown error while checking SQLite readiness", exc_info=True)
         return ReadinessEnum.FAIL
 
-    async def call_aget(self, call_id: UUID) -> Optional[CallStateModel]:
+    async def call_aget(self, call_id: UUID) -> CallStateModel | None:
         logger.debug("Loading call %s", call_id)
 
         # Try cache
@@ -116,7 +116,7 @@ class SqliteStore(IStore):
 
         return True
 
-    async def call_asearch_one(self, phone_number: str) -> Optional[CallStateModel]:
+    async def call_asearch_one(self, phone_number: str) -> CallStateModel | None:
         logger.debug("Loading last call for %s", phone_number)
 
         # Try cache
@@ -154,8 +154,8 @@ class SqliteStore(IStore):
     async def call_asearch_all(
         self,
         count: int,
-        phone_number: Optional[str] = None,
-    ) -> tuple[Optional[list[CallStateModel]], int]:
+        phone_number: str | None = None,
+    ) -> tuple[list[CallStateModel] | None, int]:
         logger.debug("Searching calls, for %s and count %s", phone_number, count)
         # TODO: Cache results
         calls, total = await asyncio.gather(
@@ -167,8 +167,8 @@ class SqliteStore(IStore):
     async def _call_asearch_all_calls_worker(
         self,
         count: int,
-        phone_number: Optional[str] = None,
-    ) -> Optional[list[CallStateModel]]:
+        phone_number: str | None = None,
+    ) -> list[CallStateModel] | None:
         calls: list[CallStateModel] = []
         async with self._use_db() as db:
             where_clause = (
@@ -200,7 +200,7 @@ class SqliteStore(IStore):
 
     async def _call_asearch_all_total_worker(
         self,
-        phone_number: Optional[str] = None,
+        phone_number: str | None = None,
     ) -> int:
         async with self._use_db() as db:
             where_clause = (

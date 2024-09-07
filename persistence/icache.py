@@ -6,7 +6,6 @@ from models.readiness import ReadinessEnum
 
 
 class ICache(ABC):
-
     @abstractmethod
     @tracer.start_as_current_span("cache_areadiness")
     async def areadiness(self) -> ReadinessEnum:
@@ -14,12 +13,12 @@ class ICache(ABC):
 
     @abstractmethod
     @tracer.start_as_current_span("cache_aconnect")
-    async def aget(self, key: str) -> Optional[bytes]:
+    async def aget(self, key: str) -> bytes | None:
         pass
 
     @abstractmethod
     @tracer.start_as_current_span("cache_aset")
-    async def aset(self, key: str, value: Union[str, bytes, None]) -> bool:
+    async def aset(self, key: str, value: str | bytes | None) -> bool:
         pass
 
     @abstractmethod

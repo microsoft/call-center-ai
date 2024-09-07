@@ -3,7 +3,6 @@ import json
 from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
-from typing import Any, Optional, Union
 from urllib.parse import quote_plus, urljoin
 from uuid import UUID
 
@@ -66,7 +65,7 @@ _jinja.filters["markdown"] = lambda x: (
 )  # pyright: ignore
 
 # Azure Communication Services
-_automation_client: Optional[CallAutomationClient] = None
+_automation_client: CallAutomationClient | None = None
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
 logger.info("Using phone number %s", CONFIG.communication_services.phone_number)
 _communication_services_jwks_client = jwt.PyJWKClient(
@@ -97,7 +96,9 @@ logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
     methods=["GET"],
 )
 @tracer.start_as_current_span("openapi_get")
-async def openapi_get(req: func.HttpRequest) -> func.HttpResponse:
+async def openapi_get(
+    req: func.HttpRequest,  # noqa: ARG001
+) -> func.HttpResponse:
     """
     Generate the OpenAPI specification for the API.
 
@@ -105,10 +106,9 @@ async def openapi_get(req: func.HttpRequest) -> func.HttpResponse:
 
     Returns a JSON object with the OpenAPI specification.
     """
-    with open(
+    with open(  # noqa: ASYNC230
         encoding="utf-8",
         file=resources_dir("openapi.json"),
-        mode="r",
     ) as f:
         openapi = json.load(f)
         openapi["info"]["version"] = CONFIG.version
@@ -130,7 +130,9 @@ async def openapi_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
 )
 @tracer.start_as_current_span("health_liveness_get")
-async def health_liveness_get(req: func.HttpRequest) -> func.HttpResponse:
+async def health_liveness_get(
+    req: func.HttpRequest,  # noqa: ARG001
+) -> func.HttpResponse:
     """
     Check if the service is running.
 
@@ -146,7 +148,9 @@ async def health_liveness_get(req: func.HttpRequest) -> func.HttpResponse:
     methods=["GET"],
 )
 @tracer.start_as_current_span("health_readiness_get")
-async def health_readiness_get(req: func.HttpRequest) -> func.HttpResponse:
+async def health_readiness_get(
+    req: func.HttpRequest,  # noqa: ARG001
+) -> func.HttpResponse:
     """
     Check if the service is ready to serve requests.
 
@@ -415,9 +419,7 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
         # deepcode ignore AttributeLoadOnNone: Phone number is validated with Pydantic
-        target_participant=PhoneNumberIdentifier(
-            initiate.phone_number
-        ),  # pyright: ignore
+        target_participant=PhoneNumberIdentifier(initiate.phone_number),  # pyright: ignore
     )
     logger.info(
         "Created call with connection id: %s",
@@ -556,7 +558,7 @@ async def communicationservices_event_post(
     Returns a 204 No Content if the events are properly fomatted. A 401 Unauthorized if the JWT token is invalid. Otherwise, returns a 400 Bad Request.
     """
     # Validate JWT token
-    service_jwt: Union[str, None] = req.headers.get("Authorization")
+    service_jwt: str | None = req.headers.get("Authorization")
     if not service_jwt:
         return _standard_error(
             message="Authorization header missing",
@@ -614,7 +616,8 @@ async def communicationservices_event_post(
     return func.HttpResponse(status_code=HTTPStatus.NO_CONTENT)
 
 
-async def _communicationservices_event_worker(
+# TODO: Refacto, too long (and remove PLR0912/PLR0915 ignore)
+async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
     call_id: UUID,
     event_dict: dict,
     post: func.Out[str],
@@ -688,7 +691,7 @@ async def _communicationservices_event_worker(
         recognition_result: str = event.data["recognitionType"]
 
         if recognition_result == "speech":  # Handle voice
-            speech_text: Optional[str] = event.data["speechResult"]["speech"]
+            speech_text: str | None = event.data["speechResult"]["speech"]
             if speech_text:
                 await on_speech_recognized(
                     call=call,
@@ -835,7 +838,7 @@ def _trigger_post_event(
 
 
 async def _communicationservices_event_url(
-    phone_number: PhoneNumber, initiate: Optional[CallInitiateModel] = None
+    phone_number: PhoneNumber, initiate: CallInitiateModel | None = None
 ) -> tuple[str, CallStateModel]:
     """
     Generate the callback URL for a call.
@@ -933,7 +936,7 @@ async def twilio_sms_post(
     )
 
 
-def _str_to_contexts(value: Optional[str]) -> Optional[set[CallContextEnum]]:
+def _str_to_contexts(value: str | None) -> set[CallContextEnum] | None:
     """
     Convert a string to a set of contexts.
 
@@ -965,12 +968,7 @@ def _validation_error(
     Response body is a JSON object with the following structure:
 
     ```
-    {
-        "error": {
-            "message": "Validation error",
-            "details": ["Error message"]
-        }
-    }
+    {"error": {"message": "Validation error", "details": ["Error message"]}}
     ```
 
     Returns a 400 Bad Request with a JSON body.
@@ -991,7 +989,7 @@ def _validation_error(
 
 def _standard_error(
     message: str,
-    details: Optional[list[str]] = None,
+    details: list[str] | None = None,
     status_code: HTTPStatus = HTTPStatus.BAD_REQUEST,
 ) -> func.HttpResponse:
     """
@@ -1000,12 +998,7 @@ def _standard_error(
     Response body is a JSON object with the following structure:
 
     ```
-    {
-        "error": {
-            "message": "Error message",
-            "details": ["Error details"]
-        }
-    }
+    {"error": {"message": "Error message", "details": ["Error details"]}}
     ```
 
     Returns a JOSN with a JSON body and the specified status code.
@@ -1031,7 +1024,7 @@ async def _use_automation_client() -> CallAutomationClient:
 
     Returns a `CallAutomationClient` instance.
     """
-    global _automation_client  # pylint: disable=global-statement
+    global _automation_client  # noqa: PLW0603
     if not isinstance(_automation_client, CallAutomationClient):
         _automation_client = CallAutomationClient(
             # Deployment

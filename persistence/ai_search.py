@@ -1,5 +1,3 @@
-from typing import Optional
-
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import (
     HttpResponseError,
@@ -35,7 +33,7 @@ from persistence.isearch import ISearch
 
 
 class AiSearchSearch(ISearch):
-    _client: Optional[SearchClient] = None
+    _client: SearchClient | None = None
     _config: AiSearchModel
 
     def __init__(self, cache: ICache, config: AiSearchModel):
@@ -59,7 +57,7 @@ class AiSearchSearch(ISearch):
             logger.error("Error requesting AI Search", exc_info=True)
         except ServiceRequestError:
             logger.error("Error connecting to AI Search", exc_info=True)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.error(
                 "Unknown error while checking AI Search readiness", exc_info=True
             )
@@ -76,7 +74,7 @@ class AiSearchSearch(ISearch):
         lang: str,
         text: str,
         cache_only: bool = False,
-    ) -> Optional[list[TrainingModel]]:
+    ) -> list[TrainingModel] | None:
         logger.debug('Searching training data for "%s"', text)
         if not text:
             return None
@@ -140,7 +138,7 @@ class AiSearchSearch(ISearch):
                         )
                     except ValidationError as e:
                         logger.debug("Parsing error: %s", e.errors())
-        except ResourceNotFoundError as e:
+        except ResourceNotFoundError:
             logger.warning('AI Search index "%s" not found', self._config.index)
         except HttpResponseError as e:
             logger.error("Error requesting AI Search: %s", e)

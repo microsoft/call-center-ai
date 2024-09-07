@@ -7,7 +7,7 @@ from deepeval.metrics import BaseMetric
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume  # pylint: disable=no-name-in-module # pyright: ignore
+from pytest import assume
 
 from helpers.config import CONFIG
 from helpers.logging import logger
@@ -38,8 +38,8 @@ class RagRelevancyMetric(BaseMetric):
     async def a_measure(
         self,
         test_case: LLMTestCase,
-        *args,
-        **kwargs,
+        *args,  # noqa: ARG002
+        **kwargs,  # noqa: ARG002
     ) -> float:
         assert test_case.input
         assert test_case.retrieval_context
@@ -120,11 +120,11 @@ class RagRelevancyMetric(BaseMetric):
 @with_conversations
 @pytest.mark.asyncio(scope="session")
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
-async def test_relevancy(
+async def test_relevancy(  # noqa: PLR0913
     call: CallStateModel,
-    claim_tests_excl: list[str],
+    claim_tests_excl: list[str],  # noqa: ARG001
     deepeval_model: GPTModel,
-    expected_output: str,
+    expected_output: str,  # noqa: ARG001
     speeches: list[str],
     lang: str,
 ) -> None:

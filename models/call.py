@@ -2,7 +2,7 @@ import asyncio
 import random
 import string
 from datetime import UTC, datetime, tzinfo
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
@@ -27,13 +27,13 @@ class CallGetModel(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     # Editable fields
     initiate: CallInitiateModel = Field(frozen=True)
-    claim: dict[str, Any] = (
-        {}
-    )  # Place after "initiate" as it depends on it for validation
+    claim: dict[
+        str, Any
+    ] = {}  # Place after "initiate" as it depends on it for validation
     messages: list[MessageModel] = []
-    next: Optional[NextModel] = None
+    next: NextModel | None = None
     reminders: list[ReminderModel] = []
-    synthesis: Optional[SynthesisModel] = None
+    synthesis: SynthesisModel | None = None
 
     @computed_field
     @property
@@ -58,9 +58,9 @@ class CallGetModel(BaseModel):
     @field_validator("claim")
     @classmethod
     def _validate_claim(
-        cls, claim: Optional[dict[str, Any]], info: ValidationInfo
+        cls, claim: dict[str, Any] | None, info: ValidationInfo
     ) -> dict[str, Any]:
-        initiate: Optional[CallInitiateModel] = info.data.get("initiate", None)
+        initiate: CallInitiateModel | None = info.data.get("initiate", None)
         if not initiate:
             return {}
         return (
@@ -82,14 +82,14 @@ class CallStateModel(CallGetModel, extra="ignore"):
         frozen=True,
     )
     # Editable fields
-    lang_short_code: Optional[str] = None
+    lang_short_code: str | None = None
     recognition_retry: int = 0
-    voice_id: Optional[str] = None
+    voice_id: str | None = None
 
     @computed_field
     @property
     def lang(self) -> LanguageEntryModel:  # pyright: ignore
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
 
         lang = CONFIG.conversation.initiate.lang
         default = lang.default_lang
@@ -114,7 +114,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
 
         Is using query expansion from last messages. Then, data is sorted by score.
         """
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
 
         with tracer.start_as_current_span("call_trainings"):
             search = CONFIG.ai_search.instance()

@@ -1,22 +1,23 @@
 param cognitiveCommunicationLocation string
-param embeddingDeploymentType string = 'Standard'  // Pay-as-you-go in a single region
+param embeddingDeploymentType string = 'Standard' // Pay-as-you-go in a single region
 param embeddingModel string = 'text-embedding-ada-002'
 param embeddingQuota int = 100
 param embeddingVersion string = '2'
 param functionappLocation string
 param instance string
-param llmFastContext int = 16385
-param llmFastDeploymentType string = 'Standard'  // Pay-as-you-go in a single region
-param llmFastModel string = 'gpt-35-turbo'
-param llmFastQuota int = 200
-param llmFastVersion string = '1106'
+param llmFastContext int = 128000
+param llmFastDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
+param llmFastModel string = 'gpt-4o-mini'
+param llmFastQuota int = 600
+param llmFastVersion string = '2024-07-18'
 param llmSlowContext int = 128000
-param llmSlowDeploymentType string = 'GlobalStandard'  // Pay-as-you-go in all regions
+param llmSlowDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
 param llmSlowModel string = 'gpt-4o'
-param llmSlowQuota int = 400
-param llmSlowVersion string = '2024-05-13'
+param llmSlowQuota int = 300
+param llmSlowVersion string = '2024-08-06'
 param location string = deployment().location
 param openaiLocation string
+param promptContentFilter bool = true // Should be set to false but requires a custom approval from Microsoft
 param searchLocation string
 param version string
 
@@ -24,7 +25,6 @@ targetScope = 'subscription'
 
 output appUrl string = app.outputs.appUrl
 output blobStoragePublicName string = app.outputs.blobStoragePublicName
-output communicationId string = app.outputs.communicationId
 output functionAppName string = app.outputs.functionAppName
 output logAnalyticsCustomerId string = app.outputs.logAnalyticsCustomerId
 
@@ -64,6 +64,7 @@ module app 'app.bicep' = {
     llmSlowVersion: llmSlowVersion
     location: location
     openaiLocation: openaiLocation
+    promptContentFilter: promptContentFilter
     searchLocation: searchLocation
     tags: tags
     version: version

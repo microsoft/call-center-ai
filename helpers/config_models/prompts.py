@@ -4,7 +4,6 @@ from functools import cached_property
 from html import escape
 from logging import Logger
 from textwrap import dedent
-from typing import Optional
 
 from azure.core.exceptions import HttpResponseError
 from openai.types.chat import ChatCompletionSystemMessageParam
@@ -23,14 +22,14 @@ class SoundModel(BaseModel):
     ready_tpl: str = "{public_url}/ready.wav"
 
     def loading(self) -> str:
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
 
         return self.loading_tpl.format(
             public_url=CONFIG.resources.public_url,
         )
 
     def ready(self) -> str:
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
 
         return self.ready_tpl.format(
             public_url=CONFIG.resources.public_url,
@@ -320,7 +319,7 @@ class LlmModel(BaseModel):
     """
 
     def default_system(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
 
         return self._format(
             self.default_system_tpl.format(
@@ -337,7 +336,7 @@ class LlmModel(BaseModel):
     def chat_system(
         self, call: CallStateModel, trainings: list[TrainingModel]
     ) -> list[ChatCompletionSystemMessageParam]:
-        from models.message import (  # pylint: disable=import-outside-toplevel
+        from models.message import (
             ActionEnum as MessageActionEnum,
             StyleEnum as MessageStyleEnum,
         )
@@ -441,7 +440,7 @@ class LlmModel(BaseModel):
     def _format(
         self,
         prompt_tpl: str,
-        trainings: Optional[list[TrainingModel]] = None,
+        trainings: list[TrainingModel] | None = None,
         **kwargs: str,
     ) -> str:
         # Remove possible indentation then render the template
@@ -486,34 +485,26 @@ class LlmModel(BaseModel):
 
     @cached_property
     def logger(self) -> Logger:
-        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
+        from helpers.logging import logger
 
         return logger
 
 
 class TtsModel(BaseModel):
     tts_lang: str = "en-US"
-    calltransfer_failure_tpl: str = (
-        "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
-    )
-    connect_agent_tpl: str = (
-        "I'm sorry, I wasn't able to respond your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly."
-    )
+    calltransfer_failure_tpl: str = "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
+    connect_agent_tpl: str = "I'm sorry, I wasn't able to respond your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly."
     end_call_to_connect_agent_tpl: str = (
         "Of course, stay on the line. I will transfer you to an agent."
     )
     error_tpl: str = (
         "I'm sorry, I have encountered an error. Could you repeat your request?"
     )
-    goodbye_tpl: str = (
-        "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
-    )
+    goodbye_tpl: str = "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
     hello_tpl: str = """
         Hello, I'm {bot_name}, the virtual assistant {bot_company}! Here's how I work: while I'm processing your information, wou will hear a music. Feel free to speak to me in a natural way - I'm designed to understand your requests. During the conversation, you can also send me text messages.
 """
-    timeout_silence_tpl: str = (
-        "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
-    )
+    timeout_silence_tpl: str = "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
     welcome_back_tpl: str = "Hello, I'm {bot_name}, from {bot_company}!"
     timeout_loading_tpl: str = (
         "It's taking me longer than expected to reply. Thank you for your patience…"
@@ -551,7 +542,7 @@ class TtsModel(BaseModel):
         return await self._translate(self.timeout_silence_tpl, call)
 
     async def welcome_back(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG  # pylint: disable=import-outside-toplevel
+        from helpers.config import CONFIG
 
         return await self._translate(
             self.welcome_back_tpl,
@@ -589,7 +580,7 @@ class TtsModel(BaseModel):
 
         If the translation fails, the initial prompt is returned.
         """
-        from helpers.translation import (  # pylint: disable=import-outside-toplevel
+        from helpers.translation import (
             translate_text,
         )
 
@@ -606,7 +597,7 @@ class TtsModel(BaseModel):
 
     @cached_property
     def logger(self) -> Logger:
-        from helpers.logging import logger  # pylint: disable=import-outside-toplevel
+        from helpers.logging import logger
 
         return logger
 

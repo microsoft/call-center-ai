@@ -4,7 +4,7 @@ dynamic = ["version"]
 license = {file = "LICENSE"}
 name = "call-center-ai"
 readme = "README.md"
-requires-python = "==3.11"
+requires-python = ">=3.11"
 dependencies = [
   "aiohttp-retry==2.8.3",  # Retry middleware for aiohttp, used with Twilio SDK
   "aiohttp[speedups]==3.9.5",  # Async HTTP client for Azure and Twilio SDKs, plus async DNS resolver and async Brotli compression
@@ -47,18 +47,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "black[jupyter]==24.4.2",  # Code formatter
   "deepeval==0.21.59",  # LLM model evaluation
   "deptry==0.16.1",  # Dependency tree testing
-  "isort==5.13.2",  # Import sorter
   "pip-tools==7.4.1",  # Compile requirements.txt from pyproject.toml
-  "pylint==3.2.5",  # Linter
   "pyright==1.1.371",  # Static type checker
   "pytest-assume==2.4.3",  # Pytest plugin for conditional tests
   "pytest-asyncio==0.23.7",  # Pytest plugin for async tests
   "pytest-repeat==0.9.3",  # Pytest plugin for repeating tests
   "pytest-xdist[psutil]==3.6.1",  # Pytest plugin for parallel testing
   "pytest==8.2.2",  # Testing framework
+  "ruff==0.6.2",  # Linter
 ]
 
 [tool.setuptools]
@@ -81,27 +79,14 @@ DEP002 = [
   "aiodns",  # Resolver is required for the AIOHTTP AsyncResolver TCP resolver
 ]
 
-[tool.black]
-target-version = ["py311"]
+[tool.ruff]
+target-version = "py311"
 
-[tool.isort]
-combine_as_imports = true
-profile = "black"
-skip_gitignore = true
+[tool.ruff.lint.isort]
+combine-as-imports = true
 
-[tool.pylint.MAIN]
-fail-under = 8.0
-ignore-paths = [
-  ".python_packages/.+",  # Azure Functions local build
-  ".venv/.+",  # Python virtual environment
-]
-init-hook='import sys; sys.path.append(".")'
-jobs = 0
-py-version = "3.11"
-recursive = true
-
-[tool.pylint.format]
-max-line-length = "88"
+[tool.ruff.format]
+docstring-code-format = true
 
 [tool.pyright]
 pythonVersion = "3.11"

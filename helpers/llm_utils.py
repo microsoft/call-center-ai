@@ -4,8 +4,9 @@ See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd
 """
 
 import inspect
+from collections.abc import Callable
 from textwrap import dedent
-from typing import Any, Callable, ForwardRef, Tuple, TypeVar, Union
+from typing import Annotated, Any, ForwardRef, TypeVar
 
 from jinja2 import Environment
 from openai.types.chat import ChatCompletionToolParam
@@ -13,7 +14,6 @@ from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import eval_type_lenient
 from pydantic.json_schema import JsonSchemaValue
-from typing_extensions import Annotated
 
 from helpers.logging import logger
 
@@ -125,7 +125,7 @@ def _typed_signature(func: Callable[..., Any]) -> inspect.Signature:
 
 def _param_annotations(
     typed_signature: inspect.Signature,
-) -> dict[str, Union[Annotated[type[Any], str], type[Any]]]:
+) -> dict[str, Annotated[type[Any], str] | type[Any]]:
     """
     Get the type annotations of the parameters of a function and return a dictionary of the annotated parameters.
     """
@@ -138,7 +138,7 @@ def _param_annotations(
 
 async def _parameter_json_schema(
     name: str,
-    value: Union[Annotated[type[Any], str], type[Any]],
+    value: Annotated[type[Any], str] | type[Any],
     default_values: dict[str, Any],
     **kwargs: Any,
 ) -> JsonSchemaValue:
@@ -148,9 +148,7 @@ async def _parameter_json_schema(
     Kwargs are passed to the Jinja template for rendering the parameter description.
     """
 
-    def _description(
-        name: str, value: Union[Annotated[type[Any], str], type[Any]]
-    ) -> str:
+    def _description(name: str, value: Annotated[type[Any], str] | type[Any]) -> str:
         # Handles Annotated
         if hasattr(value, "__metadata__"):
             retval = value.__metadata__[0]
@@ -199,7 +197,7 @@ def _default_values(typed_signature: inspect.Signature) -> dict[str, Any]:
 
 async def _parameters(
     required_params: set[str],
-    param_annotations: dict[str, Union[Annotated[type[Any], str], type[Any]]],
+    param_annotations: dict[str, Annotated[type[Any], str] | type[Any]],
     default_values: dict[str, Any],
     **kwargs: Any,
 ) -> Parameters:

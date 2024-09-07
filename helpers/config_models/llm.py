@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any
 
 from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -23,8 +23,8 @@ class AbstractPlatformModel(BaseModel):
 
 
 class AzureOpenaiPlatformModel(AbstractPlatformModel):
-    _client: Optional[AsyncAzureOpenAI] = None
-    api_key: Optional[SecretStr] = None
+    _client: AsyncAzureOpenAI | None = None
+    api_key: SecretStr | None = None
     deployment: str
     endpoint: str
 
@@ -53,7 +53,7 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
 
 
 class OpenaiPlatformModel(AbstractPlatformModel):
-    _client: Optional[AsyncOpenAI] = None
+    _client: AsyncOpenAI | None = None
     api_key: SecretStr
     endpoint: str
 
@@ -70,17 +70,17 @@ class OpenaiPlatformModel(AbstractPlatformModel):
 
 
 class SelectedPlatformModel(BaseModel):
-    azure_openai: Optional[AzureOpenaiPlatformModel] = None
+    azure_openai: AzureOpenaiPlatformModel | None = None
     mode: ModeEnum
-    openai: Optional[OpenaiPlatformModel] = None
+    openai: OpenaiPlatformModel | None = None
 
     @field_validator("azure_openai")
     @classmethod
     def _validate_azure_openai(
         cls,
-        azure_openai: Optional[AzureOpenaiPlatformModel],
+        azure_openai: AzureOpenaiPlatformModel | None,
         info: ValidationInfo,
-    ) -> Optional[AzureOpenaiPlatformModel]:
+    ) -> AzureOpenaiPlatformModel | None:
         if not azure_openai and info.data.get("mode", None) == ModeEnum.AZURE_OPENAI:
             raise ValueError("Azure OpenAI config required")
         return azure_openai
@@ -89,14 +89,14 @@ class SelectedPlatformModel(BaseModel):
     @classmethod
     def _validate_openai(
         cls,
-        openai: Optional[OpenaiPlatformModel],
+        openai: OpenaiPlatformModel | None,
         info: ValidationInfo,
-    ) -> Optional[OpenaiPlatformModel]:
+    ) -> OpenaiPlatformModel | None:
         if not openai and info.data.get("mode", None) == ModeEnum.OPENAI:
             raise ValueError("OpenAI config required")
         return openai
 
-    def selected(self) -> Union[AzureOpenaiPlatformModel, OpenaiPlatformModel]:
+    def selected(self) -> AzureOpenaiPlatformModel | OpenaiPlatformModel:
         platform = (
             self.azure_openai if self.mode == ModeEnum.AZURE_OPENAI else self.openai
         )
@@ -112,8 +112,6 @@ class LlmModel(BaseModel):
         serialization_alias="primary",  # Backwards compatibility with v6
     )
 
-    def selected(
-        self, is_fast: bool
-    ) -> Union[AzureOpenaiPlatformModel, OpenaiPlatformModel]:
+    def selected(self, is_fast: bool) -> AzureOpenaiPlatformModel | OpenaiPlatformModel:
         platform = self.fast if is_fast else self.slow
         return platform.selected()

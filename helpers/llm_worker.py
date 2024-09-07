@@ -1,7 +1,8 @@
 import json
+from collections.abc import AsyncGenerator, Callable
 from functools import lru_cache
 from os import environ
-from typing import AsyncGenerator, Callable, Optional, TypeVar, Union
+from typing import TypeVar
 
 import tiktoken
 from json_repair import repair_json
@@ -85,7 +86,7 @@ async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
     system: list[ChatCompletionSystemMessageParam],
-    tools: Optional[list[ChatCompletionToolParam]] = None,
+    tools: list[ChatCompletionToolParam] | None = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
     """
     Returns a stream of completions.
@@ -114,7 +115,7 @@ async def completion_stream(
                 ):
                     yield chunck
                 return
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         if not any(isinstance(e, exception) for exception in _retried_exceptions):
             raise e
         logger.warning(
@@ -135,12 +136,13 @@ async def completion_stream(
                 yield chunck
 
 
-async def _completion_stream_worker(
+# TODO: Refacto, too long (and remove PLR0912 ignore)
+async def _completion_stream_worker(  # noqa: PLR0912
     is_fast: bool,
     max_tokens: int,
     messages: list[MessageModel],
     system: list[ChatCompletionSystemMessageParam],
-    tools: Optional[list[ChatCompletionToolParam]] = None,
+    tools: list[ChatCompletionToolParam] | None = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
     """
     Returns a stream of completions.
@@ -171,11 +173,11 @@ async def _completion_stream_worker(
 
     try:
         if platform.streaming:  # Streaming
-            stream: AsyncStream[ChatCompletionChunk] = (
-                await client.chat.completions.create(
-                    **chat_kwargs,
-                    stream=True,
-                )
+            stream: AsyncStream[
+                ChatCompletionChunk
+            ] = await client.chat.completions.create(
+                **chat_kwargs,
+                stream=True,
             )
             async for chunck in stream:
                 choices = chunck.choices
@@ -246,14 +248,12 @@ async def _completion_stream_worker(
 async def completion_sync(
     res_type: type[T],
     system: list[ChatCompletionSystemMessageParam],
-    validation_callback: Callable[
-        [Optional[str]], tuple[bool, Optional[str], Optional[T]]
-    ],
+    validation_callback: Callable[[str | None], tuple[bool, str | None, T | None]],
     validate_json: bool = False,
-    _previous_result: Optional[str] = None,
+    _previous_result: str | None = None,
     _retries_remaining: int = 3,
-    _validation_error: Optional[str] = None,
-) -> Optional[T]:
+    _validation_error: str | None = None,
+) -> T | None:
     # Initialize prompts
     messages = system
     if _validation_error:
@@ -269,7 +269,7 @@ async def completion_sync(
         ]
 
     # Generate
-    res_content: Optional[str] = await _completion_sync_worker(
+    res_content: str | None = await _completion_sync_worker(
         is_fast=False,
         json_output=validate_json,
         system=messages,
@@ -307,8 +307,8 @@ async def _completion_sync_worker(
     is_fast: bool,
     system: list[ChatCompletionSystemMessageParam],
     json_output: bool = False,
-    max_tokens: Optional[int] = None,
-) -> Optional[str]:
+    max_tokens: int | None = None,
+) -> str | None:
     """
     Returns a completion.
     """
@@ -363,21 +363,19 @@ async def _completion_sync_worker(
     return choice.message.content if choice else None
 
 
-def _limit_messages(
+def _limit_messages(  # noqa: PLR0913
     context_window: int,
-    max_tokens: Optional[int],
+    max_tokens: int | None,
     messages: list[MessageModel],
     model: str,
     system: list[ChatCompletionSystemMessageParam],
     max_messages: int = 1000,
-    tools: Optional[list[ChatCompletionToolParam]] = None,
+    tools: list[ChatCompletionToolParam] | None = None,
 ) -> list[
-    Union[
-        ChatCompletionAssistantMessageParam,
-        ChatCompletionSystemMessageParam,
-        ChatCompletionToolMessageParam,
-        ChatCompletionUserMessageParam,
-    ]
+    ChatCompletionAssistantMessageParam
+    | ChatCompletionSystemMessageParam
+    | ChatCompletionToolMessageParam
+    | ChatCompletionUserMessageParam
 ]:
     """
     Returns a list of messages limited by the context size.
@@ -440,7 +438,7 @@ def _count_tokens(content: str, model: str) -> int:
 
 def _use_llm(
     is_fast: bool,
-) -> tuple[Union[AsyncAzureOpenAI, AsyncOpenAI], LlmAbstractPlatformModel]:
+) -> tuple[AsyncAzureOpenAI | AsyncOpenAI, LlmAbstractPlatformModel]:
     """
     Returns an LLM client and platform model.
 

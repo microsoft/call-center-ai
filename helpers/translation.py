@@ -1,5 +1,3 @@
-from typing import Optional
-
 from azure.ai.translation.text.aio import TextTranslationClient
 from azure.ai.translation.text.models import TranslatedTextItem
 from azure.core.credentials import AzureKeyCredential
@@ -18,7 +16,7 @@ from helpers.logging import logger
 logger.info("Using Translation %s", CONFIG.ai_translation.endpoint)
 
 _cache = CONFIG.cache.instance()
-_client = Optional[TextTranslationClient]
+_client: TextTranslationClient | None = None
 
 
 @retry(
@@ -27,9 +25,7 @@ _client = Optional[TextTranslationClient]
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.8, max=8),
 )
-async def translate_text(
-    text: str, source_lang: str, target_lang: str
-) -> Optional[str]:
+async def translate_text(text: str, source_lang: str, target_lang: str) -> str | None:
     """
     Translate text from source language to target language.
 
@@ -45,7 +41,7 @@ async def translate_text(
         return cached.decode()
 
     # Try live
-    translation: Optional[str] = None
+    translation: str | None = None
     client = await _use_client()
     res: list[TranslatedTextItem] = await client.translate(
         body=[text],
@@ -64,7 +60,7 @@ async def _use_client() -> TextTranslationClient:
     """
     Generate the Translation client and close it after use.
     """
-    global _client  # pylint: disable=global-statement
+    global _client  # noqa: PLW0603
     if not isinstance(_client, TextTranslationClient):
         _client = TextTranslationClient(
             # Performance

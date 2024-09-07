@@ -16,6 +16,7 @@ param llmSlowQuota int
 param llmSlowVersion string
 param location string
 param openaiLocation string
+param promptContentFilter bool
 param searchLocation string
 param tags object
 param version string
@@ -113,7 +114,6 @@ var config = {
 
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
-output communicationId string = communicationServices.id
 output functionAppName string = functionAppName
 output logAnalyticsCustomerId string = logAnalytics.properties.customerId
 
@@ -422,19 +422,6 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-04-01
   }
 }
 
-resource cognitiveDocument 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
-  name: '${prefix}-${location}-document'
-  location: location
-  tags: tags
-  sku: {
-    name: 'S0' // Pay-as-you-go
-  }
-  kind: 'FormRecognizer'
-  properties: {
-    customSubDomainName: '${prefix}-${location}-document'
-  }
-}
-
 // Cognitive Services OpenAI Contributor
 resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'a001fd3d-188f-4b5d-821b-7da978bf7442'
@@ -473,6 +460,7 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
     contentFilters: [
       // Indirect attacks
       {
+        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'indirect_attack'
@@ -480,6 +468,7 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
       }
       // Jailbreak
       {
+        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'jailbreak'
@@ -487,63 +476,73 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04
       }
       // Prompt
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'hate'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'sexual'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'selfharm'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'violence'
         source: 'Prompt'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'profanity'
         source: 'Prompt'
       }
       // Completion
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'hate'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'sexual'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'selfharm'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'violence'
         source: 'Completion'
       }
       {
-        blocking: false
-        enabled: false
+        allowedContentLevel: 'Low'
+        blocking: !promptContentFilter
+        enabled: !promptContentFilter
         name: 'profanity'
         source: 'Completion'
       }

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, create_model
 from pydantic.fields import FieldInfo
@@ -15,7 +15,7 @@ class LanguageEntryModel(BaseModel):
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#supported-languages
     """
 
-    custom_voice_endpoint_id: Optional[str] = None
+    custom_voice_endpoint_id: str | None = None
     pronunciations_en: list[str]
     short_code: str
     voice: str
@@ -128,9 +128,7 @@ class WorkflowInitiateModel(BaseModel):
         ge=0.75,
         le=1.25,
     )
-    task: str = (
-        "Helping the customer to file an insurance claim. The customer is probably calling because they have a problem with something covered by their policy, but it's not certain. The assistant needs information from the customer to complete the claim. The conversation is over when all the data relevant to the case has been collected. Filling in as much information as possible is important for further processing."
-    )
+    task: str = "Helping the customer to file an insurance claim. The customer is probably calling because they have a problem with something covered by their policy, but it's not certain. The assistant needs information from the customer to complete the claim. The conversation is over when all the data relevant to the case has been collected. Filling in as much information as possible is important for further processing."
 
     def claim_model(self) -> type[BaseModel]:
         return _fields_to_pydantic(
@@ -175,7 +173,7 @@ class ConversationModel(BaseModel):
         serialization_alias="voice_timeout_after_silence_sec",  # Compatibility with v7
     )
     slow_llm_for_chat: bool = Field(
-        default=True,
+        default=False,
         serialization_alias="use_slow_llm_for_chat_as_default",  # Compatibility with v7
     )
     voice_recognition_retry_max: int = Field(
@@ -197,10 +195,10 @@ def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseMo
 
 def _field_to_pydantic(
     field: ClaimFieldModel,
-) -> Union[Annotated[Any, ...], tuple[type, FieldInfo]]:
+) -> Annotated[Any, ...] | tuple[type, FieldInfo]:
     field_type = _type_to_pydantic(field.type)
     return (
-        Optional[field_type],
+        field_type | None,
         Field(
             default=None,
             description=field.description,
@@ -210,7 +208,7 @@ def _field_to_pydantic(
 
 def _type_to_pydantic(
     data: ClaimTypeEnum,
-) -> Union[type, Annotated[Any, ...]]:
+) -> type | Annotated[Any, ...]:
     if data == ClaimTypeEnum.DATETIME:
         return datetime
     if data == ClaimTypeEnum.EMAIL:
