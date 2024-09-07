@@ -54,6 +54,12 @@ def tts_sentence_split(
     """
     Split a text into sentences.
 
+    Whitespaces are not returned, but punctiation is kept as it was in the original text.
+
+    Example:
+    - Input: "Hello, world! How are you? I'm fine. Thank you... Goodbye!"
+    - Output: [("Hello, world!", 13), ("How are you?", 12), ("I'm fine.", 9), ("Thank you...", 13), ("Goodbye!", 8)]
+
     Returns a generator of tuples with the sentence and the original sentence length.
     """
     # Split by sentence by punctuation
@@ -313,12 +319,19 @@ async def _chunk_before_tts(
     chunks = []
     chunk = ""
     for to_add, _ in tts_sentence_split(text, True):
-        if len(chunk) + len(to_add) >= _MAX_CHARACTERS_PER_TTS:
-            chunks.append(chunk.strip())  # Remove trailing space
+        if (
+            len(chunk) + len(to_add) >= _MAX_CHARACTERS_PER_TTS
+        ):  # If chunck overflows TTS capacity, start a new record
+            # Remove trailing space as sentences are separated by spaces
+            chunks.append(chunk.strip())
+            # Reset chunk
             chunk = ""
-        chunk += to_add
-    if chunk:
-        chunks.append(chunk)
+        # Add space to separate sentences
+        chunk += to_add + " "
+
+    if chunk:  # If there is a remaining chunk, add it
+        # Remove trailing space as sentences are separated by spaces
+        chunks.append(chunk.strip())
 
     return chunks
 
