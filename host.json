@@ -26,9 +26,12 @@
     "queues": {
       "batchSize": 32,
       "maxDequeueCount": 4,
-      "maxPollingInterval": "00:00:03",
+      "maxPollingInterval": "00:00:00.250",
       "visibilityTimeout": "00:00:01"
     }
   },
-  "watchFiles": ["config.yaml", ".env"]
+  "watchFiles": [
+    "config.yaml",
+    ".env"
+  ]
 }

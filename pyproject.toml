@@ -6,57 +6,57 @@ name = "call-center-ai"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "aiohttp-retry==2.8.3",  # Retry middleware for aiohttp, used with Twilio SDK
-  "aiohttp[speedups]==3.9.5",  # Async HTTP client for Azure and Twilio SDKs, plus async DNS resolver and async Brotli compression
-  "aiosqlite==0.20.0",  # Async SQLite3 driver
-  "azure-ai-translation-text==1.0.0",  # Azure Cognitive Services Text Translation
-  "azure-communication-callautomation==1.2.0",  # Azure Communication Services Call Automation
-  "azure-communication-sms==1.0.1",  # Azure Communication Services SMS
-  "azure-cosmos==4.7.0",  # Azure Cosmos DB
-  "azure-eventgrid==4.20.0",  # Azure Event Grid
-  "azure-functions==1.20.0",  # Azure Functions
-  "azure-identity==1.17.0",  # Azure identity library
-  "azure-monitor-opentelemetry==1.6.0",  # Azure Monitor OpenTelemetry
+  "aiohttp-retry~=2.8",  # Retry middleware for aiohttp, used with Twilio SDK
+  "aiohttp[speedups]~=3.9",  # Async HTTP client for Azure and Twilio SDKs, plus async DNS resolver and async Brotli compression
+  "aiosqlite~=0.20",  # Async SQLite3 driver
+  "azure-ai-translation-text~=1.0",  # Azure Cognitive Services Text Translation
+  "azure-communication-callautomation~=1.2",  # Azure Communication Services Call Automation
+  "azure-communication-sms~=1.0",  # Azure Communication Services SMS
+  "azure-cosmos~=4.7",  # Azure Cosmos DB
+  "azure-eventgrid~=4.20",  # Azure Event Grid
+  "azure-functions~=1.20",  # Azure Functions
+  "azure-identity~=1.17",  # Azure identity library
+  "azure-monitor-opentelemetry~=1.6",  # Azure Monitor OpenTelemetry
   "azure-search-documents==11.6.0b4",  # Azure AI Search
-  "azure-storage-queue==12.10.0",  # Azure Storage Queue
-  "django-htmlmin==0.11.0",  # Minify HTML
-  "jinja2==3.1.4",  # Template engine, used for prompts and web views
-  "json-repair==0.25.1",  # Repair JSON files from LLM
-  "mistune==3.0.2",  # Markdown parser for web views
-  "openai==1.35.3",  # OpenAI client
-  "opentelemetry-instrumentation-aiohttp-client==0.46b0",  # OpenTelemetry instrumentation for aiohttp client
-  "opentelemetry-instrumentation-httpx==0.46b0",  # OpenTelemetry instrumentation for HTTPX
-  "opentelemetry-instrumentation-openai==0.23.0",  # OpenTelemetry instrumentation for OpenAI
-  "opentelemetry-instrumentation-redis==0.46b0",  # OpenTelemetry instrumentation for Redis
-  "opentelemetry-instrumentation-sqlite3==0.46b0",  # OpenTelemetry instrumentation for SQLite3
-  "opentelemetry-semantic-conventions==0.46b0",  # OpenTelemetry conventions, to standardize telemetry data
-  "phonenumbers==8.13.39",  # Phone number parsing and formatting, used with Pydantic
-  "pydantic-extra-types==2.8.2",  # Extra types for Pydantic
-  "pydantic-settings==2.3.3",  # Application configuration management with Pydantic
-  "pydantic[email]==2.7.4",  # Data serialization and validation, plus email validation
-  "pyjwt==2.8.0",  # Secure inbound calls from Communication Services
-  "python-dotenv==1.0.1",  # Load environment variables from .env file
-  "pytz==2024.1",  # Time zone handling
-  "pyyaml==6.0.1",  # YAML parser
-  "redis==5.0.6",  # Redis client
-  "tenacity==8.2.3",  # Async retrying library
-  "tiktoken==0.7.0",  # Tokenization library for OpenAI models
-  "twilio==9.2.1",  # Twilio SDK, used for SMS
-  "typing-extensions==4.12.2",  # Typing extensions for Python 3.6+
+  "azure-storage-queue~=12.10",  # Azure Storage Queue
+  "django-htmlmin~=0.11",  # Minify HTML
+  "jinja2~=3.1",  # Template engine, used for prompts and web views
+  "json-repair~=0.25",  # Repair JSON files from LLM
+  "mistune~=3.0",  # Markdown parser for web views
+  "openai~=1.35",  # OpenAI client
+  "opentelemetry-instrumentation-aiohttp-client~=0.0",  # OpenTelemetry instrumentation for aiohttp client
+  "opentelemetry-instrumentation-httpx~=0.0",  # OpenTelemetry instrumentation for HTTPX
+  "opentelemetry-instrumentation-openai~=0.0",  # OpenTelemetry instrumentation for OpenAI
+  "opentelemetry-instrumentation-redis~=0.0",  # OpenTelemetry instrumentation for Redis
+  "opentelemetry-instrumentation-sqlite3~=0.0",  # OpenTelemetry instrumentation for SQLite3
+  "opentelemetry-semantic-conventions~=0.0",  # OpenTelemetry conventions, to standardize telemetry data
+  "phonenumbers~=8.13",  # Phone number parsing and formatting, used with Pydantic
+  "pydantic-extra-types~=2.8",  # Extra types for Pydantic
+  "pydantic-settings~=2.3",  # Application configuration management with Pydantic
+  "pydantic[email]~=2.7",  # Data serialization and validation, plus email validation
+  "pyjwt~=2.8",  # Secure inbound calls from Communication Services
+  "python-dotenv~=1.0",  # Load environment variables from .env file
+  "pytz~=2024.0",  # Time zone handling
+  "pyyaml~=6.0",  # YAML parser
+  "redis~=5.0",  # Redis client
+  "tenacity~=8.2",  # Async retrying library
+  "tiktoken~=0.7",  # Tokenization library for OpenAI models
+  "twilio~=9.2",  # Twilio SDK, used for SMS
+  "typing-extensions~=4.12",  # Typing extensions for Python 3.6+
 ]
 
 [project.optional-dependencies]
 dev = [
-  "deepeval==0.21.59",  # LLM model evaluation
-  "deptry==0.16.1",  # Dependency tree testing
-  "pip-tools==7.4.1",  # Compile requirements.txt from pyproject.toml
-  "pyright==1.1.371",  # Static type checker
-  "pytest-assume==2.4.3",  # Pytest plugin for conditional tests
-  "pytest-asyncio==0.23.7",  # Pytest plugin for async tests
-  "pytest-repeat==0.9.3",  # Pytest plugin for repeating tests
-  "pytest-xdist[psutil]==3.6.1",  # Pytest plugin for parallel testing
-  "pytest==8.2.2",  # Testing framework
-  "ruff==0.6.2",  # Linter
+  "deepeval~=0.21",  # LLM model evaluation
+  "deptry~=0.16",  # Dependency tree testing
+  "pip-tools~=7.4",  # Compile requirements.txt from pyproject.toml
+  "pyright~=1.1",  # Static type checker
+  "pytest-assume~=2.4",  # Pytest plugin for conditional tests
+  "pytest-asyncio~=0.23",  # Pytest plugin for async tests
+  "pytest-repeat~=0.9",  # Pytest plugin for repeating tests
+  "pytest-xdist[psutil]~=3.6",  # Pytest plugin for parallel testing
+  "pytest~=8.2",  # Testing framework
+  "ruff~=0.6",  # Linter
 ]
 
 [tool.setuptools]
