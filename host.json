@@ -30,5 +30,8 @@
       "visibilityTimeout": "00:00:01"
     }
   },
-  "watchFiles": ["config.yaml", ".env"]
+  "watchFiles": [
+    "config.yaml",
+    ".env"
+  ]
 }
