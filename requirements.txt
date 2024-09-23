@@ -883,9 +883,9 @@ opentelemetry-instrumentation-httpx==0.46b0 \
     --hash=sha256:1d704937e46943a14c869cfad9e6cf8013c70a9cb2f5b26dffdb536f2fadc2cc \
     --hash=sha256:e08bcc9ac4086a207d216d81cf1e998253d197f3292327c8a43a5a420f98a109
     # via call-center-ai (pyproject.toml)
-opentelemetry-instrumentation-openai==0.23.0 \
-    --hash=sha256:3b4f1af2395739c190a15c79b2fe594f5eda4b2fd4030c80e49f44faf3380199 \
-    --hash=sha256:44999e0c096d17179025fec63751fd132da10a9c12ca8885305c5fbd60b7cae6
+opentelemetry-instrumentation-openai==0.30.1 \
+    --hash=sha256:7dbd15b5fbe9f855a47796871eaf7a55de18dbd87e823ec1e23f879fe4f2f25f \
+    --hash=sha256:da066a20724e66a7dc7f2af12d694687d4f9c1c8baaadb3b40f4755d45da9bde
     # via call-center-ai (pyproject.toml)
 opentelemetry-instrumentation-psycopg2==0.46b0 \
     --hash=sha256:1a115ed99165c71cdb467b08e76c09fbfc3d25f8bf76863066cbecbefcb94899 \
