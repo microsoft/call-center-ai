@@ -427,7 +427,7 @@ resource assignmentsCommunicationServicesCognitiveUser 'Microsoft.Authorization/
   }
 }
 
-resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
+resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   name: '${prefix}-${cognitiveCommunicationLocation}-communication'
   location: cognitiveCommunicationLocation
   tags: tags
@@ -455,7 +455,7 @@ resource assignmentsFunctionAppOpenaiContributor 'Microsoft.Authorization/roleAs
   }
 }
 
-resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
+resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   name: '${prefix}-${openaiLocation}-openai'
   location: openaiLocation
   tags: tags
@@ -468,107 +468,107 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-previe
   }
 }
 
-resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04-01-preview' = {
+resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: 'disabled'
   tags: tags
   properties: {
     basePolicyName: 'Microsoft.Default'
-    mode: 'Deferred' // Async moderation
+    mode: 'Asynchronous_filter'
     contentFilters: [
       // Indirect attacks
       {
-        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'indirect_attack'
+        severityThreshold: 'Medium'
         source: 'Prompt'
       }
       // Jailbreak
       {
-        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'jailbreak'
+        severityThreshold: 'Medium'
         source: 'Prompt'
       }
       // Prompt
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'hate'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'sexual'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'selfharm'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'violence'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'profanity'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       // Completion
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'hate'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'sexual'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'selfharm'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'violence'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'profanity'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
     ]
   }
 }
 
-resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
+resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: llmSlowModelFullName
   tags: tags
@@ -587,7 +587,7 @@ resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
   }
 }
 
-resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
+resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: llmFastModelFullName
   tags: tags
@@ -609,7 +609,7 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
   ]
 }
 
-resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
+resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: embeddingModelFullName
   tags: tags
@@ -713,7 +713,7 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
   }
 }
 
-resource search 'Microsoft.Search/searchServices@2024-03-01-preview' = {
+resource search 'Microsoft.Search/searchServices@2024-06-01-preview' = {
   name: prefix
   location: searchLocation
   tags: tags
@@ -728,7 +728,7 @@ resource search 'Microsoft.Search/searchServices@2024-03-01-preview' = {
   }
 }
 
-resource translate 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
+resource translate 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   name: '${prefix}-${location}-translate'
   location: location
   tags: tags
@@ -741,7 +741,7 @@ resource translate 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   }
 }
 
-resource redis 'Microsoft.Cache/redis@2023-08-01' = {
+resource redis 'Microsoft.Cache/redis@2024-03-01' = {
   name: prefix
   location: location
   tags: tags
