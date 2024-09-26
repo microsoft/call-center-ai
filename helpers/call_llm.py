@@ -191,15 +191,9 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
         if not continue_chat or _iterations_remaining < 1:  # Maximum retries reached
             logger.warning("Maximum retries reached, stopping chat")
             content = await CONFIG.prompts.tts.error(call)
-            style = MessageStyleEnum.NONE
-            await _tts_callback(content, style)
-            call.messages.append(
-                MessageModel(
-                    content=content,
-                    persona=MessagePersonaEnum.ASSISTANT,
-                    style=style,
-                )
-            )
+            # Speak the error
+            await _tts_callback(content, MessageStyleEnum.NONE)
+            # Never store the error message in the call history, it has caused hallucinations in the LLM
 
         else:  # Retry chat after an error
             logger.info("Retrying chat, %s remaining", _iterations_remaining - 1)
