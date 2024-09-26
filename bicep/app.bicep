@@ -302,16 +302,6 @@ resource assignmentCommunicationServicesContributor 'Microsoft.Authorization/rol
   }
 }
 
-resource assignmentFunctionAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, communicationServices.name, 'assignmentFunctionAppContributor')
-  scope: communicationServices
-  properties: {
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: roleDataContributor.id
-  }
-}
-
 resource communicationServices 'Microsoft.Communication/CommunicationServices@2023-06-01-preview' existing = {
   name: prefix
 }
