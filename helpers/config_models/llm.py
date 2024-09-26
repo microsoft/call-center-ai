@@ -32,7 +32,7 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
             self._client = AsyncAzureOpenAI(
                 **self._client_kwargs,
                 # Deployment
-                api_version="2023-12-01-preview",
+                api_version="2024-06-01",
                 azure_deployment=self.deployment,
                 azure_endpoint=self.endpoint,
                 # Authentication
