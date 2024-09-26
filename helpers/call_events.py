@@ -24,6 +24,7 @@ from helpers.call_utils import (
     handle_transfer,
 )
 from helpers.config import CONFIG
+from helpers.features import recording_enabled, voice_recognition_retry_max
 from helpers.llm_worker import completion_sync
 from helpers.logging import logger
 from helpers.monitoring import CallAttributes, span_attribute, tracer
@@ -173,12 +174,12 @@ async def on_recognize_timeout_error(
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
     ):  # Retry IVR recognition
         span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
-        if call.recognition_retry < CONFIG.conversation.voice_recognition_retry_max:
+        if call.recognition_retry < await voice_recognition_retry_max():
             call.recognition_retry += 1
             logger.info(
                 "Timeout, retrying language selection (%s/%s)",
                 call.recognition_retry,
-                CONFIG.conversation.voice_recognition_retry_max,
+                await voice_recognition_retry_max(),
             )
             await _handle_ivr_language(call=call, client=client)
         else:  # IVR retries are exhausted, end call
@@ -190,7 +191,7 @@ async def on_recognize_timeout_error(
         return
 
     if (
-        call.recognition_retry >= CONFIG.conversation.voice_recognition_retry_max
+        call.recognition_retry >= await voice_recognition_retry_max()
     ):  # Voice retries are exhausted, end call
         logger.info("Timeout, ending call")
         await _handle_goodbye(
@@ -205,7 +206,7 @@ async def on_recognize_timeout_error(
     logger.info(
         "Timeout, retrying voice recognition (%s/%s)",
         call.recognition_retry,
-        CONFIG.conversation.voice_recognition_retry_max,
+        await voice_recognition_retry_max(),
     )
     # Never store the warning message in the call history, it has caused hallucinations in the LLM
     await handle_recognize_text(
@@ -614,7 +615,7 @@ async def _handle_recording(
     client: CallAutomationClient,
     server_call_id: str,
 ) -> None:
-    if not CONFIG.communication_services.recording_enabled:
+    if not await recording_enabled():
         return
 
     assert CONFIG.communication_services.recording_container_url

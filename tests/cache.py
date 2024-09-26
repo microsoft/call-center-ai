@@ -44,7 +44,11 @@ async def test_acid(random_text: str, cache_mode: CacheModeEnum) -> None:
     assume(not await cache.aget(test_key))
 
     # Insert test call
-    await cache.aset(test_key, test_value)
+    await cache.aset(
+        key=test_key,
+        ttl_sec=60,
+        value=test_value,
+    )
 
     # Check point read
     assume(await cache.aget(test_key) == test_value.encode())

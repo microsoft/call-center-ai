@@ -1,4 +1,5 @@
 import hashlib
+from datetime import timedelta
 from uuid import uuid4
 
 from opentelemetry.instrumentation.redis import RedisInstrumentor
@@ -87,7 +88,7 @@ class RedisCache(ICache):
             logger.error("Error getting value", exc_info=True)
         return res
 
-    async def aset(self, key: str, value: str | bytes | None) -> bool:
+    async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
         """
         Set a value in the cache.
 
@@ -97,7 +98,11 @@ class RedisCache(ICache):
         """
         sha_key = self._key_to_hash(key)
         try:
-            await self._client.set(sha_key, value if value else "")
+            await self._client.set(
+                ex=timedelta(seconds=ttl_sec),
+                name=sha_key,
+                value=value if value else "",
+            )
         except RedisError:
             logger.error("Error setting value", exc_info=True)
             return False

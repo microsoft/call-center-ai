@@ -60,7 +60,6 @@ var config = {
     phone_number: localConfig.communication_services.phone_number
     post_queue_name: postQueue.name
     recording_container_url: '${storageAccount.properties.primaryEndpoints.blob}${recordingsBlob.name}'
-    recording_enabled: localConfig.communication_services.recording_enabled
     resource_id: communicationServices.properties.immutableResourceId
     sms_queue_name: smsQueue.name
     trainings_queue_name: trainingsQueue.name
@@ -113,6 +112,9 @@ var config = {
       password: redis.listKeys().primaryKey
       port: redis.properties.sslPort
     }
+  }
+  app_configuration: {
+    connection_string: configStore.listKeys().value[0].connectionString
   }
 }
 
@@ -732,3 +734,29 @@ resource redis 'Microsoft.Cache/redis@2024-03-01' = {
     redisVersion: '6' // v6.x
   }
 }
+
+resource configStore 'Microsoft.AppConfiguration/configurationStores@2023-03-01' = {
+  name: prefix
+  location: location
+  sku: {
+    name: 'Standard'
+  }
+}
+
+resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@2023-03-01' = [
+  for item in items({
+    answer_hard_timeout_sec: 180
+    answer_soft_timeout_sec: 30
+    callback_timeout_hour: 72
+    phone_silence_timeout_sec: 1
+    recording_enabled: false
+    slow_llm_for_chat: true
+    voice_recognition_retry_max: 2
+  }): {
+    parent: configStore
+    name: item.key
+    properties: {
+      value: string(item.value)
+    }
+  }
+]

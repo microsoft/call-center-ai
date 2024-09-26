@@ -69,6 +69,7 @@ curl \
 - [x] Jailbreak detection
 - [x] Lower AI Search cost by usign a Redis cache
 - [x] Monitoring and tracing with Application Insights
+- [x] Perform user tests with feature flags
 - [x] Receive SMS during a conversation for explicit wordings
 - [x] Record the calls for audit and quality assurance
 - [x] Responses are streamed from the LLM to the user, to avoid long pauses
@@ -299,7 +300,6 @@ conversation:
 communication_services:
   # Phone number purshased from Communication Services
   phone_number: "+33612345678"
-  recording_enabled: false
 
 sms: {}
 
@@ -368,7 +368,7 @@ communication_services:
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
   post_queue_name: post-33612345678
-  recording_enabled: false
+  recording_container_url: https://xxx.blob.core.windows.net/recordings
   resource_id: xxx
   sms_queue_name: sms-33612345678
 
@@ -465,16 +465,7 @@ make dev
 Call recording is disabled by default. To enable it:
 
 1. Create a new container in the Azure Storage account (i.e. `recordings`), it is already done if you deployed the solution on Azure
-2. Update the configuration
-
-Configuration is the following:
-
-```yaml
-# config.yaml
-communication_services:
-  recording_container_url: https://xxx.blob.core.windows.net/recordings  # Only needed for local deployment
-  recording_enabled: true
-```
+2. Update the feature flag `recording_enabled` in App Configuration to `true`
 
 ### Add my custom training data with AI Search
 
@@ -594,18 +585,17 @@ Task can be customized for each call, by adding the `task` field in the `POST /c
 
 ### Customize the conversation
 
-Conversation options are documented in [conversation.py](helpers/config_models/conversation.py). The options can all be overridden in `config.yaml` file:
+Conversation options are represented as features. They can be configured from App Configuration, without the need to redeploy or restart the application. Once a feature is updated, a delay of 60 seconds is needed to make the change effective.
 
-```yaml
-# config.yaml
-conversation:
-  answer_hard_timeout_sec: 180
-  answer_soft_timeout_sec: 30
-  callback_timeout_hour: 72
-  phone_silence_timeout_sec: 1
-  slow_llm_for_chat: true
-  voice_recognition_retry_max: 2
-```
+| Name | Description | Type | Default |
+|-|-|-|
+| `answer_hard_timeout_sec` | The hard timeout for the bot answer in seconds. | `int` | 180 |
+| `answer_soft_timeout_sec` | The soft timeout for the bot answer in seconds. | `int` | 30 |
+| `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 72 |
+| `phone_silence_timeout_sec` | The timeout for phone silence in seconds. | `int` | 1 |
+| `recording_enabled` | Whether call recording is enabled. | `bool` | false |
+| `slow_llm_for_chat` | Whether to use the slower LLM for chat. | `bool` | true |
+| `voice_recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
 
 ### Use an OpenAI compatible model for the LLM
 

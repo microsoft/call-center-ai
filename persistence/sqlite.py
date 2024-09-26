@@ -8,8 +8,8 @@ from aiosqlite import Connection, connect as sqlite_connect
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from pydantic import ValidationError
 
-from helpers.config import CONFIG
 from helpers.config_models.database import SqliteModel
+from helpers.features import callback_timeout_hour
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.readiness import ReadinessEnum
@@ -84,7 +84,11 @@ class SqliteStore(IStore):
 
         # Update cache
         if call:
-            await self._cache.aset(cache_key, call.model_dump_json())
+            await self._cache.aset(
+                key=cache_key,
+                ttl_sec=60 * 60 * 24,  # 1 day
+                value=call.model_dump_json(),
+            )
 
         return call
 
@@ -106,7 +110,11 @@ class SqliteStore(IStore):
 
         # Update cache
         cache_key_id = self._cache_key_call_id(call.call_id)
-        await self._cache.aset(cache_key_id, data)  # Update for ID
+        await self._cache.aset(
+            key=cache_key_id,
+            ttl_sec=60 * 60 * 24,  # 1 day
+            value=data,
+        )  # Update for ID
         cache_key_phone_number = self._cache_key_phone_number(
             call.initiate.phone_number
         )
@@ -132,7 +140,7 @@ class SqliteStore(IStore):
         call = None
         async with self._use_db() as db:
             cursor = await db.execute(
-                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{CONFIG.conversation.callback_timeout_hour} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
+                f"SELECT data FROM {self._config.table} WHERE (JSON_EXTRACT(data, '$.initiate.phone_number') LIKE ? OR JSON_EXTRACT(data, '$.claim.policyholder_phone') LIKE ?) AND DATETIME(JSON_EXTRACT(data, '$.created_at')) >= DATETIME('now', '-{await callback_timeout_hour()} hours') ORDER BY DATETIME(JSON_EXTRACT(data, '$.created_at')) DESC LIMIT 1",
                 (
                     phone_number,  # data.initiate.phone_number
                     phone_number,  # data.claim.policyholder_phone
@@ -147,7 +155,11 @@ class SqliteStore(IStore):
 
         # Update cache
         if call:
-            await self._cache.aset(cache_key, call.model_dump_json())
+            await self._cache.aset(
+                key=cache_key,
+                ttl_sec=60 * 60 * 24,  # 1 day
+                value=call.model_dump_json(),
+            )
 
         return call
 

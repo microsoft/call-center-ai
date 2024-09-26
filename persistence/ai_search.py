@@ -148,7 +148,9 @@ class AiSearchSearch(ISearch):
         # Update cache
         if trainings:
             await self._cache.aset(
-                cache_key, TypeAdapter(list[TrainingModel]).dump_json(trainings)
+                key=cache_key,
+                ttl_sec=60 * 60 * 24,  # 1 day
+                value=TypeAdapter(list[TrainingModel]).dump_json(trainings),
             )
 
         return trainings or None

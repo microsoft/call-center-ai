@@ -18,7 +18,7 @@ class ICache(ABC):
 
     @abstractmethod
     @tracer.start_as_current_span("cache_aset")
-    async def aset(self, key: str, value: str | bytes | None) -> bool:
+    async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
         pass
 
     @abstractmethod

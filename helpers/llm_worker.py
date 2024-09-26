@@ -43,6 +43,7 @@ from tenacity import (
 
 from helpers.config import CONFIG
 from helpers.config_models.llm import AbstractPlatformModel as LlmAbstractPlatformModel
+from helpers.features import slow_llm_for_chat
 from helpers.logging import logger
 from helpers.monitoring import tracer
 from helpers.resources import resources_dir
@@ -107,7 +108,7 @@ async def completion_stream(
         async for attempt in retryed:
             with attempt:
                 async for chunck in _completion_stream_worker(
-                    is_fast=not CONFIG.conversation.slow_llm_for_chat,  # Let configuration decide
+                    is_fast=not await slow_llm_for_chat(),  # Let configuration decide
                     max_tokens=max_tokens,
                     messages=messages,
                     system=system,
@@ -127,7 +128,7 @@ async def completion_stream(
     async for attempt in retryed:
         with attempt:
             async for chunck in _completion_stream_worker(
-                is_fast=CONFIG.conversation.slow_llm_for_chat,  # Let configuration decide
+                is_fast=await slow_llm_for_chat(),  # Let configuration decide
                 max_tokens=max_tokens,
                 messages=messages,
                 system=system,

@@ -7,6 +7,7 @@ from pydantic_settings import (
 
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.config_models.ai_translation import AiTranslationModel
+from helpers.config_models.app_configuration import AppConfigurationModel
 from helpers.config_models.cache import CacheModel
 from helpers.config_models.cognitive_service import CognitiveServiceModel
 from helpers.config_models.communication_services import CommunicationServicesModel
@@ -49,6 +50,7 @@ class RootModel(BaseSettings):
     conversation: ConversationModel = Field(
         serialization_alias="workflow"
     )  # Compatibility with v7
+    app_configuration: AppConfigurationModel
 
     @classmethod
     def settings_customise_sources(
