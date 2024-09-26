@@ -12,7 +12,7 @@ class ICache(ABC):
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("cache_aconnect")
+    @tracer.start_as_current_span("cache_aget")
     async def aget(self, key: str) -> bytes | None:
         pass
 

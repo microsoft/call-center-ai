@@ -19,7 +19,7 @@ class ISearch(ABC):
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("search_asearch_all")
+    @tracer.start_as_current_span("search_training_asearch_all")
     async def training_asearch_all(
         self,
         lang: str,
