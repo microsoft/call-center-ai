@@ -233,6 +233,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
   kind: 'StorageV2'
   properties: {
+    allowSharedKeyAccess: true // In some companies policies enable this by default if not specified, we are not compatible, force disable
     supportsHttpsTrafficOnly: true
   }
 }
@@ -625,6 +626,7 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
       maxStalenessPrefix: 1000 // 1000 requests lags at max
     }
     databaseAccountOfferType: 'Standard'
+    disableLocalAuth: false // In some companies policies enable this by default if not specified, we are not compatible, force disable
     locations: [
       {
         locationName: location
