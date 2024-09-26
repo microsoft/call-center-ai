@@ -59,6 +59,8 @@ var config = {
     endpoint: communicationServices.properties.hostName
     phone_number: localConfig.communication_services.phone_number
     post_queue_name: postQueue.name
+    recording_container_url: '${storageAccount.properties.primaryEndpoints.blob}${recordingsBlob.name}'
+    recording_enabled: localConfig.communication_services.recording_enabled
     resource_id: communicationServices.properties.immutableResourceId
     sms_queue_name: smsQueue.name
     trainings_queue_name: trainingsQueue.name
@@ -273,6 +275,11 @@ resource publicBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2
   name: '$web'
 }
 
+resource recordingsBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'recordings'
+}
+
 resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: toLower(functionAppName)
@@ -281,6 +288,16 @@ resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/contain
 // Storage Blob Data Contributor
 resource roleDataContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+}
+
+resource assignmentCommunicationServicesContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentCommunicationServicesContributor')
+  scope: storageAccount
+  properties: {
+    principalId: communicationServices.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleDataContributor.id
+  }
 }
 
 resource assignmentFunctionAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

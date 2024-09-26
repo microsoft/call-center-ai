@@ -298,6 +298,7 @@ conversation:
 communication_services:
   # Phone number purshased from Communication Services
   phone_number: "+33612345678"
+  recording_enabled: false
 
 sms: {}
 
@@ -366,6 +367,7 @@ communication_services:
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
   post_queue_name: post-33612345678
+  recording_enabled: false
   resource_id: xxx
   sms_queue_name: sms-33612345678
 
@@ -456,6 +458,22 @@ make dev
 - The API server is available at `http://localhost:8080`
 
 ## Advanced usage
+
+## Enable call recording
+
+Call recording is disabled by default. To enable it:
+
+1. Create a new container in the Azure Storage account (i.e. `recordings`), it is already done if you deployed the solution on Azure
+2. Update the configuration
+
+Configuration is the following:
+
+```yaml
+# config.yaml
+communication_services:
+  recording_container_url: https://xxx.blob.core.windows.net/recordings  # Only needed for local deployment
+  recording_enabled: true
+```
 
 ### Add my custom training data with AI Search
 

@@ -1,7 +1,14 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 
-from azure.communication.callautomation import DtmfTone, RecognitionChoice
+from azure.communication.callautomation import (
+    AzureBlobContainerRecordingStorage,
+    DtmfTone,
+    RecognitionChoice,
+    RecordingChannel,
+    RecordingContent,
+    RecordingFormat,
+)
 from azure.communication.callautomation.aio import CallAutomationClient
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 from pydantic import ValidationError
@@ -81,6 +88,7 @@ async def on_new_call(
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
+    server_call_id: str,
 ) -> None:
     logger.info("Call connected, asking for language")
     call.recognition_retry = 0  # Reset recognition retry counter
@@ -97,7 +105,12 @@ async def on_call_connected(
         ),  # First, every time a call is answered, confirm the language
         _db.call_aset(
             call
-        ),  # save in DB allowing SMS answers to be more "in-sync", should be quick enough to be in sync with the next message
+        ),  # Second, save in DB allowing SMS answers to be more "in-sync", should be quick enough to be in sync with the next message
+        _handle_recording(
+            call=call,
+            client=client,
+            server_call_id=server_call_id,
+        ),  # Third, start recording the call
     )
 
 
@@ -591,4 +604,29 @@ async def _handle_ivr_language(
         client=client,
         context=CallContextEnum.IVR_LANG_SELECT,
         text=await CONFIG.prompts.tts.ivr_language(call),
+    )
+
+
+async def _handle_recording(
+    call: CallStateModel,
+    client: CallAutomationClient,
+    server_call_id: str,
+) -> None:
+    if not CONFIG.communication_services.recording_enabled:
+        return
+
+    assert CONFIG.communication_services.recording_container_url
+    recording = await client.start_recording(
+        recording_channel_type=RecordingChannel.UNMIXED,
+        recording_content_type=RecordingContent.AUDIO,
+        recording_format_type=RecordingFormat.WAV,
+        server_call_id=server_call_id,
+        recording_storage=AzureBlobContainerRecordingStorage(
+            CONFIG.communication_services.recording_container_url
+        ),
+    )
+    logger.info(
+        "Recording started for %s (%s)",
+        call.initiate.phone_number,
+        recording.recording_id,
     )
