@@ -281,7 +281,9 @@ Now that the prerequisites are configured (local + Azure), the deployment can be
 
 #### 1. Create the light config file
 
-File is named `config.yaml`:
+Local config file is named `config.yaml`. It will be used by install scripts (incl. Makefile and Bicep) to configure the Azure resources.
+
+Fill the file with the following content (must be customized for your need):
 
 ```yaml
 # config.yaml
@@ -343,12 +345,9 @@ make logs name=my-rg-name
 > ```
 
 > [!TIP]
-> If you already deployed the application to Azure and if it is working, you can:
->
-> - Copy the configuration from the Azure Function App to your local machine by using the content of the `CONFIG_JSON` application setting
-> - Then convert it to YAML format
+> If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from the Azure Function App to your local machine.
 
-File is named `config.yaml`:
+Local config file is named `config.yaml`:
 
 ```yaml
 # config.yaml

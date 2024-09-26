@@ -195,3 +195,7 @@ sbom:
 		--source-version $(version_full)  \
 		--output spdx-json=./sbom-reports/$(version_full).json \
 		.
+
+sync-local-config:
+	@echo "📥 Copying remote CONFIG_JSON to local config..."
+	az functionapp config appsettings list --name $(function_app_name) --resource-group $(name_sanitized) --query "[?name=='CONFIG_JSON'].value" --output tsv | yq --sort-keys --yaml-output > config.yaml
