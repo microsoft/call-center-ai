@@ -70,6 +70,7 @@ curl \
 - [x] Lower AI Search cost by usign a Redis cache
 - [x] Monitoring and tracing with Application Insights
 - [x] Receive SMS during a conversation for explicit wordings
+- [x] Record the calls for audit and quality assurance
 - [x] Responses are streamed from the LLM to the user, to avoid long pauses
 - [x] Send a SMS report after the call
 - [x] Take back a conversation after a disengagement
@@ -502,8 +503,6 @@ See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   initiate:
     lang:
@@ -521,8 +520,6 @@ If you built and deployed an [Azure Speech Custom Neural Voice (CNV)](https://le
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   initiate:
     lang:
@@ -561,8 +558,6 @@ Default schema, for inbound calls, is defined in the configuration:
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   default_initiate:
     claim:
@@ -589,8 +584,6 @@ Default task, for inbound calls, is defined in the configuration:
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   initiate:
     task: |
@@ -605,8 +598,6 @@ Conversation options are documented in [conversation.py](helpers/config_models/c
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   answer_hard_timeout_sec: 180
   answer_soft_timeout_sec: 30
@@ -630,8 +621,6 @@ Then, add the following in the `config.yaml` file:
 
 ```yaml
 # config.yaml
-[...]
-
 llm:
   fast:
     mode: openai
@@ -663,8 +652,6 @@ Then, add the following in the `config.yaml` file:
 
 ```yaml
 # config.yaml
-[...]
-
 sms:
   mode: twilio
   twilio:
@@ -681,8 +668,6 @@ Be sure to write all the TTS prompts in English. This language is used as a pivo
 
 ```yaml
 # config.yaml
-[...]
-
 prompts:
   tts:
     hello_tpl: |
