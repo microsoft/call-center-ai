@@ -315,7 +315,7 @@ resource roleQueueSender 'Microsoft.Authorization/roleDefinitions@2022-04-01' ex
 }
 
 resource assignmentEventgridTopicQueueSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, eventgridTopic.name, 'assignmentEventgridTopicQueueSender')
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentEventgridTopicQueueSender')
   scope: storageAccount
   properties: {
     principalId: eventgridTopic.identity.principalId
