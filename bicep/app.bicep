@@ -277,9 +277,9 @@ resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/contain
   name: toLower(functionAppName)
 }
 
-// Contributor
-resource roleContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: 'b24988ac-6180-42a0-ab88-20f7382dd24c'
+// Storage Blob Data Contributor
+resource roleDataContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 }
 
 resource assignmentFunctionAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -288,7 +288,7 @@ resource assignmentFunctionAppContributor 'Microsoft.Authorization/roleAssignmen
   properties: {
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: roleContributor.id
+    roleDefinitionId: roleDataContributor.id
   }
 }
 
