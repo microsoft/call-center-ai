@@ -89,7 +89,9 @@ async def on_new_call(
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
     server_call_id: str,
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Call connected, asking for language")
     call.recognition_retry = 0  # Reset recognition retry counter
@@ -102,7 +104,10 @@ async def on_call_connected(
     )
     await asyncio.gather(
         _handle_ivr_language(
-            call=call, client=client
+            call=call,
+            client=client,
+            post_callback=post_callback,
+            trainings_callback=trainings_callback,
         ),  # First, every time a call is answered, confirm the language
         _db.call_aset(
             call
@@ -578,9 +583,24 @@ async def _intelligence_next(call: CallStateModel) -> None:
 
 
 async def _handle_ivr_language(
-    client: CallAutomationClient,
     call: CallStateModel,
+    client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
+    # If only one language is available, skip the IVR
+    if len(CONFIG.conversation.initiate.lang.availables) == 1:
+        short_code = CONFIG.conversation.initiate.lang.availables[0].short_code
+        logger.info("Only one language available, selecting %s by default", short_code)
+        await on_ivr_recognized(
+            call=call,
+            client=client,
+            label=short_code,
+            post_callback=post_callback,
+            trainings_callback=trainings_callback,
+        )
+        return
+
     tones = [
         DtmfTone.ONE,
         DtmfTone.TWO,
