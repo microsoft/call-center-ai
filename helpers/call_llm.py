@@ -165,10 +165,11 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                         CONFIG.conversation.answer_soft_timeout_sec,
                     )
                     soft_timeout_triggered = True
+                    # Never store the error message in the call history, it has caused hallucinations in the LLM
                     await handle_recognize_text(
                         call=call,
                         client=client,
-                        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+                        store=False,
                         text=await CONFIG.prompts.tts.timeout_loading(call),
                     )
 

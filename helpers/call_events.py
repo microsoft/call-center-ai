@@ -207,11 +207,12 @@ async def on_recognize_timeout_error(
         call.recognition_retry,
         CONFIG.conversation.voice_recognition_retry_max,
     )
+    # Never store the warning message in the call history, it has caused hallucinations in the LLM
     await handle_recognize_text(
         call=call,
         client=client,
         no_response_error=True,
-        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+        store=False,
         text=await CONFIG.prompts.tts.timeout_silence(call),
     )
 
@@ -246,11 +247,12 @@ async def on_recognize_unknown_error(
             error_code,
         )
 
+    # Never store the error message in the call history, it has caused hallucinations in the LLM
     await handle_recognize_text(
         call=call,
         client=client,
         no_response_error=True,
-        store=False,  # Do not store error prompt as it perturbs the LLM and makes it hallucinate
+        store=False,
         text=await CONFIG.prompts.tts.error(call),
     )
 
