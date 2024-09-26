@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union
 
 from helpers.monitoring import tracer
 from models.readiness import ReadinessEnum
