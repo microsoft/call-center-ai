@@ -73,6 +73,7 @@ var config = {
     fast: {
       mode: 'azure_openai'
       azure_openai: {
+        api_key: cognitiveOpenai.listKeys().key1
         context: llmFastContext
         deployment: llmFast.name
         endpoint: cognitiveOpenai.properties.endpoint
@@ -83,6 +84,7 @@ var config = {
     slow: {
       mode: 'azure_openai'
       azure_openai: {
+        api_key: cognitiveOpenai.listKeys().key1
         context: llmSlowContext
         deployment: llmSlow.name
         endpoint: cognitiveOpenai.properties.endpoint
@@ -437,21 +439,6 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-06-01
   kind: 'CognitiveServices'
   properties: {
     customSubDomainName: '${prefix}-${cognitiveCommunicationLocation}-communication'
-  }
-}
-
-// Cognitive Services OpenAI Contributor
-resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: 'a001fd3d-188f-4b5d-821b-7da978bf7442'
-}
-
-resource assignmentsFunctionAppOpenaiContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, cognitiveOpenai.name, 'assignmentsFunctionAppOpenaiContributor')
-  scope: cognitiveOpenai
-  properties: {
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: roleOpenaiContributor.id
   }
 }
 

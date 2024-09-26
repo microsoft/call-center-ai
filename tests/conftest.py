@@ -15,7 +15,6 @@ from azure.communication.callautomation.aio import (
     CallAutomationClient,
     CallConnectionClient,
 )
-from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
 from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, ValidationError
@@ -147,18 +146,8 @@ class DeepEvalAzureOpenAI(GPTModel):
             "azure_deployment": platform.deployment,
             "azure_endpoint": platform.endpoint,
             "model": platform.model,
-            # Authentication, either RBAC or API
-            "api_key": (
-                platform.api_key.get_secret_value() if platform.api_key else None
-            ),  # pyright: ignore
-            "azure_ad_token_provider": (
-                get_bearer_token_provider(
-                    ManagedIdentityCredential(),
-                    "https://cognitiveservices.azure.com/.default",
-                )
-                if not platform.api_key
-                else None
-            ),
+            # Authentication
+            "api_key": platform.api_key.get_secret_value(),
             # DeepEval
             **kwargs,
         }

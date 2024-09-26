@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import Any
 
-from azure.identity import ManagedIdentityCredential, get_bearer_token_provider
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
@@ -24,21 +23,12 @@ class AbstractPlatformModel(BaseModel):
 
 class AzureOpenaiPlatformModel(AbstractPlatformModel):
     _client: AsyncAzureOpenAI | None = None
-    api_key: SecretStr | None = None
+    api_key: SecretStr
     deployment: str
     endpoint: str
 
     def instance(self) -> tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
         if not self._client:
-            api_key = self.api_key.get_secret_value() if self.api_key else None
-            token_func = (
-                get_bearer_token_provider(
-                    ManagedIdentityCredential(),
-                    "https://cognitiveservices.azure.com/.default",
-                )
-                if not self.api_key
-                else None
-            )
             self._client = AsyncAzureOpenAI(
                 **self._client_kwargs,
                 # Deployment
@@ -46,8 +36,7 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
                 azure_deployment=self.deployment,
                 azure_endpoint=self.endpoint,
                 # Authentication
-                api_key=api_key,
-                azure_ad_token_provider=token_func,
+                api_key=self.api_key.get_secret_value(),
             )
         return self._client, self
 
