@@ -165,6 +165,7 @@ class DeepEvalAzureOpenAI(GPTModel):
         res = super().generate(prompt)
         # Update cache
         self._cache.set(cache_key, res)
+        # Return
         return res
 
     async def a_generate(self, prompt: str) -> tuple[str, float]:
@@ -178,6 +179,7 @@ class DeepEvalAzureOpenAI(GPTModel):
         res = await super().a_generate(prompt)
         # Update cache
         self._cache.set(cache_key, res)
+        # Return
         return res
 
     def get_model_name(self) -> str:

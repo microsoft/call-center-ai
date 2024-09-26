@@ -49,7 +49,8 @@ class MemoryCache(ICache):
         res = self._cache.get(sha_key, None)
         if not res:
             return None
-        self._cache.move_to_end(sha_key, last=False)  # Move to first
+        # Move to first
+        self._cache.move_to_end(sha_key, last=False)
         return res
 
     async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
@@ -57,8 +58,9 @@ class MemoryCache(ICache):
         Set a value in the cache.
         """
         sha_key = self._key_to_hash(key)
+        # Delete the last if full
         if len(self._cache) >= self._config.max_size:
-            self._cache.popitem()  # Delete the last
+            self._cache.popitem()
         # Add to first
         self._cache[sha_key] = value.encode() if isinstance(value, str) else value
         self._cache.move_to_end(sha_key, last=False)
