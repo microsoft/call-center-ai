@@ -42,16 +42,20 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> str |
 
     # Try live
     translation: str | None = None
-    client = await _use_client()
-    res: list[TranslatedTextItem] = await client.translate(
-        body=[text],
-        from_language=source_lang,
-        to_language=[target_lang],
-    )
+    async with await _use_client() as client:
+        res: list[TranslatedTextItem] = await client.translate(
+            body=[text],
+            from_language=source_lang,
+            to_language=[target_lang],
+        )
     translation = res[0].translations[0].text if res and res[0].translations else None
 
     # Update cache
-    await _cache.aset(cache_key, translation)
+    await _cache.aset(
+        key=cache_key,
+        ttl_sec=60 * 60 * 24,  # 1 day
+        value=translation,
+    )
 
     return translation
 

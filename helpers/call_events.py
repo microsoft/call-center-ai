@@ -1,7 +1,14 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 
-from azure.communication.callautomation import DtmfTone, RecognitionChoice
+from azure.communication.callautomation import (
+    AzureBlobContainerRecordingStorage,
+    DtmfTone,
+    RecognitionChoice,
+    RecordingChannel,
+    RecordingContent,
+    RecordingFormat,
+)
 from azure.communication.callautomation.aio import CallAutomationClient
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 from pydantic import ValidationError
@@ -17,6 +24,7 @@ from helpers.call_utils import (
     handle_transfer,
 )
 from helpers.config import CONFIG
+from helpers.features import recording_enabled, voice_recognition_retry_max
 from helpers.llm_worker import completion_sync
 from helpers.logging import logger
 from helpers.monitoring import CallAttributes, span_attribute, tracer
@@ -81,6 +89,9 @@ async def on_new_call(
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    server_call_id: str,
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Call connected, asking for language")
     call.recognition_retry = 0  # Reset recognition retry counter
@@ -93,11 +104,19 @@ async def on_call_connected(
     )
     await asyncio.gather(
         _handle_ivr_language(
-            call=call, client=client
+            call=call,
+            client=client,
+            post_callback=post_callback,
+            trainings_callback=trainings_callback,
         ),  # First, every time a call is answered, confirm the language
         _db.call_aset(
             call
-        ),  # save in DB allowing SMS answers to be more "in-sync", should be quick enough to be in sync with the next message
+        ),  # Second, save in DB allowing SMS answers to be more "in-sync", should be quick enough to be in sync with the next message
+        _handle_recording(
+            call=call,
+            client=client,
+            server_call_id=server_call_id,
+        ),  # Third, start recording the call
     )
 
 
@@ -160,12 +179,12 @@ async def on_recognize_timeout_error(
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
     ):  # Retry IVR recognition
         span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
-        if call.recognition_retry < CONFIG.conversation.voice_recognition_retry_max:
+        if call.recognition_retry < await voice_recognition_retry_max():
             call.recognition_retry += 1
             logger.info(
                 "Timeout, retrying language selection (%s/%s)",
                 call.recognition_retry,
-                CONFIG.conversation.voice_recognition_retry_max,
+                await voice_recognition_retry_max(),
             )
             await _handle_ivr_language(call=call, client=client)
         else:  # IVR retries are exhausted, end call
@@ -177,7 +196,7 @@ async def on_recognize_timeout_error(
         return
 
     if (
-        call.recognition_retry >= CONFIG.conversation.voice_recognition_retry_max
+        call.recognition_retry >= await voice_recognition_retry_max()
     ):  # Voice retries are exhausted, end call
         logger.info("Timeout, ending call")
         await _handle_goodbye(
@@ -192,13 +211,14 @@ async def on_recognize_timeout_error(
     logger.info(
         "Timeout, retrying voice recognition (%s/%s)",
         call.recognition_retry,
-        CONFIG.conversation.voice_recognition_retry_max,
+        await voice_recognition_retry_max(),
     )
+    # Never store the warning message in the call history, it has caused hallucinations in the LLM
     await handle_recognize_text(
         call=call,
         client=client,
         no_response_error=True,
-        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+        store=False,
         text=await CONFIG.prompts.tts.timeout_silence(call),
     )
 
@@ -233,11 +253,12 @@ async def on_recognize_unknown_error(
             error_code,
         )
 
+    # Never store the error message in the call history, it has caused hallucinations in the LLM
     await handle_recognize_text(
         call=call,
         client=client,
         no_response_error=True,
-        store=False,  # Do not store error prompt as it perturbs the LLM and makes it hallucinate
+        store=False,
         text=await CONFIG.prompts.tts.error(call),
     )
 
@@ -562,9 +583,24 @@ async def _intelligence_next(call: CallStateModel) -> None:
 
 
 async def _handle_ivr_language(
-    client: CallAutomationClient,
     call: CallStateModel,
+    client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
+    # If only one language is available, skip the IVR
+    if len(CONFIG.conversation.initiate.lang.availables) == 1:
+        short_code = CONFIG.conversation.initiate.lang.availables[0].short_code
+        logger.info("Only one language available, selecting %s by default", short_code)
+        await on_ivr_recognized(
+            call=call,
+            client=client,
+            label=short_code,
+            post_callback=post_callback,
+            trainings_callback=trainings_callback,
+        )
+        return
+
     tones = [
         DtmfTone.ONE,
         DtmfTone.TWO,
@@ -591,4 +627,29 @@ async def _handle_ivr_language(
         client=client,
         context=CallContextEnum.IVR_LANG_SELECT,
         text=await CONFIG.prompts.tts.ivr_language(call),
+    )
+
+
+async def _handle_recording(
+    call: CallStateModel,
+    client: CallAutomationClient,
+    server_call_id: str,
+) -> None:
+    if not await recording_enabled():
+        return
+
+    assert CONFIG.communication_services.recording_container_url
+    recording = await client.start_recording(
+        recording_channel_type=RecordingChannel.UNMIXED,
+        recording_content_type=RecordingContent.AUDIO,
+        recording_format_type=RecordingFormat.WAV,
+        server_call_id=server_call_id,
+        recording_storage=AzureBlobContainerRecordingStorage(
+            CONFIG.communication_services.recording_container_url
+        ),
+    )
+    logger.info(
+        "Recording started for %s (%s)",
+        call.initiate.phone_number,
+        recording.recording_id,
     )

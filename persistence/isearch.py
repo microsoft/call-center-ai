@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from helpers.monitoring import tracer
 from models.readiness import ReadinessEnum
@@ -19,7 +18,7 @@ class ISearch(ABC):
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("search_asearch_all")
+    @tracer.start_as_current_span("search_training_asearch_all")
     async def training_asearch_all(
         self,
         lang: str,

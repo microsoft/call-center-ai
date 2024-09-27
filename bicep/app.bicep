@@ -59,6 +59,7 @@ var config = {
     endpoint: communicationServices.properties.hostName
     phone_number: localConfig.communication_services.phone_number
     post_queue_name: postQueue.name
+    recording_container_url: '${storageAccount.properties.primaryEndpoints.blob}${recordingsBlob.name}'
     resource_id: communicationServices.properties.immutableResourceId
     sms_queue_name: smsQueue.name
     trainings_queue_name: trainingsQueue.name
@@ -71,6 +72,7 @@ var config = {
     fast: {
       mode: 'azure_openai'
       azure_openai: {
+        api_key: cognitiveOpenai.listKeys().key1
         context: llmFastContext
         deployment: llmFast.name
         endpoint: cognitiveOpenai.properties.endpoint
@@ -81,6 +83,7 @@ var config = {
     slow: {
       mode: 'azure_openai'
       azure_openai: {
+        api_key: cognitiveOpenai.listKeys().key1
         context: llmSlowContext
         deployment: llmSlow.name
         endpoint: cognitiveOpenai.properties.endpoint
@@ -109,6 +112,9 @@ var config = {
       password: redis.listKeys().primaryKey
       port: redis.properties.sslPort
     }
+  }
+  app_configuration: {
+    connection_string: configStore.listKeys().value[0].connectionString
   }
 }
 
@@ -233,6 +239,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
   kind: 'StorageV2'
   properties: {
+    allowSharedKeyAccess: true // In some companies policies enable this by default if not specified, we are not compatible, force disable
     supportsHttpsTrafficOnly: true
   }
 }
@@ -272,23 +279,28 @@ resource publicBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2
   name: '$web'
 }
 
+resource recordingsBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'recordings'
+}
+
 resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: toLower(functionAppName)
 }
 
-// Contributor
-resource roleContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: 'b24988ac-6180-42a0-ab88-20f7382dd24c'
+// Storage Blob Data Contributor
+resource roleDataContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 }
 
-resource assignmentFunctionAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, communicationServices.name, 'assignmentFunctionAppContributor')
-  scope: communicationServices
+resource assignmentCommunicationServicesContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentCommunicationServicesContributor')
+  scope: storageAccount
   properties: {
-    principalId: functionApp.identity.principalId
+    principalId: communicationServices.identity.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: roleContributor.id
+    roleDefinitionId: roleDataContributor.id
   }
 }
 
@@ -315,7 +327,7 @@ resource roleQueueSender 'Microsoft.Authorization/roleDefinitions@2022-04-01' ex
 }
 
 resource assignmentEventgridTopicQueueSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, eventgridTopic.name, 'assignmentEventgridTopicQueueSender')
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentEventgridTopicQueueSender')
   scope: storageAccount
   properties: {
     principalId: eventgridTopic.identity.principalId
@@ -409,7 +421,7 @@ resource assignmentsCommunicationServicesCognitiveUser 'Microsoft.Authorization/
   }
 }
 
-resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
+resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   name: '${prefix}-${cognitiveCommunicationLocation}-communication'
   location: cognitiveCommunicationLocation
   tags: tags
@@ -422,22 +434,7 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-04-01
   }
 }
 
-// Cognitive Services OpenAI Contributor
-resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: 'a001fd3d-188f-4b5d-821b-7da978bf7442'
-}
-
-resource assignmentsFunctionAppOpenaiContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, prefix, cognitiveOpenai.name, 'assignmentsFunctionAppOpenaiContributor')
-  scope: cognitiveOpenai
-  properties: {
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: roleOpenaiContributor.id
-  }
-}
-
-resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
+resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   name: '${prefix}-${openaiLocation}-openai'
   location: openaiLocation
   tags: tags
@@ -450,107 +447,107 @@ resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-04-01-previe
   }
 }
 
-resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04-01-preview' = {
+resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: 'disabled'
   tags: tags
   properties: {
     basePolicyName: 'Microsoft.Default'
-    mode: 'Deferred' // Async moderation
+    mode: 'Asynchronous_filter'
     contentFilters: [
       // Indirect attacks
       {
-        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'indirect_attack'
+        severityThreshold: 'Medium'
         source: 'Prompt'
       }
       // Jailbreak
       {
-        allowedContentLevel: 'Medium'
         blocking: true
         enabled: true
         name: 'jailbreak'
+        severityThreshold: 'Medium'
         source: 'Prompt'
       }
       // Prompt
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'hate'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'sexual'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'selfharm'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'violence'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'profanity'
+        severityThreshold: 'Low'
         source: 'Prompt'
       }
       // Completion
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'hate'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'sexual'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'selfharm'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'violence'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
       {
-        allowedContentLevel: 'Low'
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'profanity'
+        severityThreshold: 'Low'
         source: 'Completion'
       }
     ]
   }
 }
 
-resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
+resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: llmSlowModelFullName
   tags: tags
@@ -569,7 +566,7 @@ resource llmSlow 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
   }
 }
 
-resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
+resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: llmFastModelFullName
   tags: tags
@@ -591,7 +588,7 @@ resource llmFast 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-pr
   ]
 }
 
-resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
+resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-preview' = {
   parent: cognitiveOpenai
   name: embeddingModelFullName
   tags: tags
@@ -625,6 +622,7 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
       maxStalenessPrefix: 1000 // 1000 requests lags at max
     }
     databaseAccountOfferType: 'Standard'
+    disableLocalAuth: false // In some companies policies enable this by default if not specified, we are not compatible, force disable
     locations: [
       {
         locationName: location
@@ -694,7 +692,7 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
   }
 }
 
-resource search 'Microsoft.Search/searchServices@2024-03-01-preview' = {
+resource search 'Microsoft.Search/searchServices@2024-06-01-preview' = {
   name: prefix
   location: searchLocation
   tags: tags
@@ -709,7 +707,7 @@ resource search 'Microsoft.Search/searchServices@2024-03-01-preview' = {
   }
 }
 
-resource translate 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
+resource translate 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   name: '${prefix}-${location}-translate'
   location: location
   tags: tags
@@ -722,7 +720,7 @@ resource translate 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   }
 }
 
-resource redis 'Microsoft.Cache/redis@2023-08-01' = {
+resource redis 'Microsoft.Cache/redis@2024-03-01' = {
   name: prefix
   location: location
   tags: tags
@@ -736,3 +734,29 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' = {
     redisVersion: '6' // v6.x
   }
 }
+
+resource configStore 'Microsoft.AppConfiguration/configurationStores@2023-03-01' = {
+  name: prefix
+  location: location
+  sku: {
+    name: 'Standard'
+  }
+}
+
+resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@2023-03-01' = [
+  for item in items({
+    answer_hard_timeout_sec: 180
+    answer_soft_timeout_sec: 30
+    callback_timeout_hour: 72
+    phone_silence_timeout_sec: 1
+    recording_enabled: false
+    slow_llm_for_chat: true
+    voice_recognition_retry_max: 2
+  }): {
+    parent: configStore
+    name: item.key
+    properties: {
+      value: string(item.value)
+    }
+  }
+]

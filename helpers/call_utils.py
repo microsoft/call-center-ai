@@ -18,6 +18,7 @@ from azure.communication.callautomation.aio import (
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 
 from helpers.config import CONFIG
+from helpers.features import phone_silence_timeout_sec
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.message import (
@@ -100,7 +101,7 @@ async def _handle_recognize_media(
         assert call.voice_id, "Voice ID is required for recognizing media"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.start_recognizing_media(
-                end_silence_timeout=CONFIG.conversation.phone_silence_timeout_sec,
+                end_silence_timeout=await phone_silence_timeout_sec(),
                 input_type=RecognizeInputType.SPEECH,
                 interrupt_prompt=True,
                 operation_context=_context_builder({context}),

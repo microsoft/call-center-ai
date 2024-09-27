@@ -12,6 +12,7 @@ from helpers.call_utils import (
     tts_sentence_split,
 )
 from helpers.config import CONFIG
+from helpers.features import answer_hard_timeout_sec, answer_soft_timeout_sec
 from helpers.llm_tools import LlmPlugins
 from helpers.llm_worker import (
     MaximumTokensReachedError,
@@ -77,7 +78,11 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
     # Pointer
     pointer_cache_key = f"{__name__}-load_llm_chat-pointer-{call.call_id}"
     pointer_current = time.time()  # Get system current time
-    await _cache.aset(pointer_cache_key, str(pointer_current))
+    await _cache.aset(
+        key=pointer_cache_key,
+        ttl_sec=await answer_hard_timeout_sec(),
+        value=str(pointer_current),
+    )
 
     # Chat
     chat_task = asyncio.create_task(
@@ -100,10 +105,10 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
     # Timeouts
     soft_timeout_triggered = False
     soft_timeout_task = asyncio.create_task(
-        asyncio.sleep(CONFIG.conversation.answer_soft_timeout_sec)
+        asyncio.sleep(await answer_soft_timeout_sec())
     )
     hard_timeout_task = asyncio.create_task(
-        asyncio.sleep(CONFIG.conversation.answer_hard_timeout_sec)
+        asyncio.sleep(await answer_hard_timeout_sec())
     )
 
     await handle_media(
@@ -150,7 +155,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
             if hard_timeout_task.done():  # Break when hard timeout is reached
                 logger.warning(
                     "Hard timeout of %ss reached",
-                    CONFIG.conversation.answer_hard_timeout_sec,
+                    await answer_hard_timeout_sec(),
                 )
                 # Clean up
                 _clear_tasks()
@@ -165,10 +170,11 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                         CONFIG.conversation.answer_soft_timeout_sec,
                     )
                     soft_timeout_triggered = True
+                    # Never store the error message in the call history, it has caused hallucinations in the LLM
                     await handle_recognize_text(
                         call=call,
                         client=client,
-                        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+                        store=False,
                         text=await CONFIG.prompts.tts.timeout_loading(call),
                     )
 
@@ -190,15 +196,9 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
         if not continue_chat or _iterations_remaining < 1:  # Maximum retries reached
             logger.warning("Maximum retries reached, stopping chat")
             content = await CONFIG.prompts.tts.error(call)
-            style = MessageStyleEnum.NONE
-            await _tts_callback(content, style)
-            call.messages.append(
-                MessageModel(
-                    content=content,
-                    persona=MessagePersonaEnum.ASSISTANT,
-                    style=style,
-                )
-            )
+            # Speak the error
+            await _tts_callback(content, MessageStyleEnum.NONE)
+            # Never store the error message in the call history, it has caused hallucinations in the LLM
 
         else:  # Retry chat after an error
             logger.info("Retrying chat, %s remaining", _iterations_remaining - 1)

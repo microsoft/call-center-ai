@@ -38,7 +38,7 @@ def load_config() -> RootModel:
             print(f'Config loaded from file "{path}"')  # noqa: T201
             return config
     except ValidationError as e:
-        raise ConfigBadFormat("Config values are not valid") from e
+        raise ConfigBadFormat(f"Config values are not valid: {e.errors()}") from e
     except Exception as e:
         raise ConfigBadFormat("Config YAML format is not valid") from e
 

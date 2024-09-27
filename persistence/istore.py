@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 from uuid import UUID
 
 from helpers.monitoring import tracer
@@ -30,12 +29,12 @@ class IStore(ABC):
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("store_call_adel")
+    @tracer.start_as_current_span("store_call_asearch_one")
     async def call_asearch_one(self, phone_number: str) -> CallStateModel | None:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("store_call_adel")
+    @tracer.start_as_current_span("store_call_asearch_all")
     async def call_asearch_all(
         self,
         count: int,

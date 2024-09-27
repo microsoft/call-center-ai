@@ -1,5 +1,3 @@
-from typing import Optional
-
 from azure.communication.sms import SmsSendResult
 from azure.communication.sms.aio import SmsClient
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError

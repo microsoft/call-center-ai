@@ -155,31 +155,8 @@ class WorkflowInitiateModel(BaseModel):
 
 
 class ConversationModel(BaseModel):
+    # TODO: This could be simplified by removing the parent class but would cause a breaking change
     initiate: WorkflowInitiateModel
-    answer_hard_timeout_sec: int = Field(
-        default=180,  # 3 mins
-        serialization_alias="intelligence_hard_timeout_sec",  # Compatibility with v7
-    )
-    answer_soft_timeout_sec: int = Field(
-        default=30,  # 30 secs
-        serialization_alias="intelligence_soft_timeout_sec",  # Compatibility with v7
-    )
-    callback_timeout_hour: int = Field(
-        default=72,  # 3 days
-        serialization_alias="conversation_timeout_hour",  # Compatibility with v7
-    )
-    phone_silence_timeout_sec: int = Field(
-        default=1,  # 1 second
-        serialization_alias="voice_timeout_after_silence_sec",  # Compatibility with v7
-    )
-    slow_llm_for_chat: bool = Field(
-        default=False,
-        serialization_alias="use_slow_llm_for_chat_as_default",  # Compatibility with v7
-    )
-    voice_recognition_retry_max: int = Field(
-        default=2,  # 2 retries
-        serialization_alias="max_voice_recognition_retry",  # Compatibility with v7
-    )
 
 
 def _fields_to_pydantic(name: str, fields: list[ClaimFieldModel]) -> type[BaseModel]:

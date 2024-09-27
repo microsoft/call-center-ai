@@ -1,6 +1,6 @@
 import hashlib
 from collections import OrderedDict
-from typing import Optional, Union
+from datetime import UTC, datetime, timedelta
 
 from helpers.config_models.cache import MemoryModel
 from helpers.logging import logger
@@ -19,6 +19,7 @@ class MemoryCache(ICache):
 
     _cache: OrderedDict[str, bytes | None] = OrderedDict()
     _config: MemoryModel
+    _ttl: dict[str, datetime] = {}
 
     def __init__(self, config: MemoryModel):
         logger.warning(
@@ -40,22 +41,31 @@ class MemoryCache(ICache):
         If the key does not exist, return `None`.
         """
         sha_key = self._key_to_hash(key)
+        # Check TTL
+        if sha_key in self._ttl:
+            if self._ttl[sha_key] < datetime.now(UTC):
+                return None
+        # Get from cache
         res = self._cache.get(sha_key, None)
         if not res:
             return None
-        self._cache.move_to_end(sha_key, last=False)  # Move to first
+        # Move to first
+        self._cache.move_to_end(sha_key, last=False)
         return res
 
-    async def aset(self, key: str, value: str | bytes | None) -> bool:
+    async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
         """
         Set a value in the cache.
         """
         sha_key = self._key_to_hash(key)
+        # Delete the last if full
         if len(self._cache) >= self._config.max_size:
-            self._cache.popitem()  # Delete the last
+            self._cache.popitem()
         # Add to first
         self._cache[sha_key] = value.encode() if isinstance(value, str) else value
         self._cache.move_to_end(sha_key, last=False)
+        # Set the TTL
+        self._ttl[sha_key] = datetime.now(UTC) + timedelta(seconds=ttl_sec)
         return True
 
     async def adel(self, key: str) -> bool:
@@ -63,8 +73,12 @@ class MemoryCache(ICache):
         Delete a value from the cache.
         """
         sha_key = self._key_to_hash(key)
+        # Delete from cache
         if sha_key in self._cache:
             self._cache.pop(sha_key)
+        # Delete from TTL
+        if sha_key in self._ttl:
+            self._ttl.pop(sha_key)
         return True
 
     @staticmethod

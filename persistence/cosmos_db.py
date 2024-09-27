@@ -9,8 +9,8 @@ from azure.cosmos.aio import ContainerProxy, CosmosClient
 from azure.cosmos.exceptions import CosmosHttpResponseError
 from pydantic import ValidationError
 
-from helpers.config import CONFIG
 from helpers.config_models.database import CosmosDbModel
+from helpers.features import callback_timeout_hour
 from helpers.http import azure_transport
 from helpers.logging import logger
 from models.call import CallStateModel
@@ -117,7 +117,11 @@ class CosmosDbStore(IStore):
 
         # Update cache
         if call:
-            await self._cache.aset(cache_key, call.model_dump_json())
+            await self._cache.aset(
+                key=cache_key,
+                ttl_sec=await callback_timeout_hour(),
+                value=call.model_dump_json(),
+            )
 
         return call
 
@@ -140,7 +144,9 @@ class CosmosDbStore(IStore):
         if res:
             cache_key_id = self._cache_key_call_id(call.call_id)
             await self._cache.aset(
-                cache_key_id, call.model_dump_json()
+                key=cache_key_id,
+                ttl_sec=await callback_timeout_hour(),
+                value=call.model_dump_json(),
             )  # Update for ID
             cache_key_phone_number = self._cache_key_phone_number(
                 call.initiate.phone_number
@@ -169,7 +175,7 @@ class CosmosDbStore(IStore):
             async with self._use_client() as db:
                 items = db.query_items(
                     max_item_count=1,
-                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{CONFIG.conversation.callback_timeout_hour}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
+                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{await callback_timeout_hour()}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
                     parameters=[
                         {
                             "name": "@phone_number",
@@ -189,7 +195,11 @@ class CosmosDbStore(IStore):
 
         # Update cache
         if call:
-            await self._cache.aset(cache_key, call.model_dump_json())
+            await self._cache.aset(
+                key=cache_key,
+                ttl_sec=await callback_timeout_hour(),
+                value=call.model_dump_json(),
+            )
 
         return call
 

@@ -9,6 +9,7 @@ class CommunicationServicesModel(BaseModel):
     endpoint: str
     phone_number: PhoneNumber
     post_queue_name: str
+    recording_container_url: str
     resource_id: str
     sms_queue_name: str
     trainings_queue_name: str

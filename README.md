@@ -69,7 +69,9 @@ curl \
 - [x] Jailbreak detection
 - [x] Lower AI Search cost by usign a Redis cache
 - [x] Monitoring and tracing with Application Insights
+- [x] Perform user tests with feature flags
 - [x] Receive SMS during a conversation for explicit wordings
+- [x] Record the calls for audit and quality assurance
 - [x] Responses are streamed from the LLM to the user, to avoid long pauses
 - [x] Send a SMS report after the call
 - [x] Take back a conversation after a disengagement
@@ -281,7 +283,9 @@ Now that the prerequisites are configured (local + Azure), the deployment can be
 
 #### 1. Create the light config file
 
-File is named `config.yaml`:
+Local config file is named `config.yaml`. It will be used by install scripts (incl. Makefile and Bicep) to configure the Azure resources.
+
+Fill the file with the following content (must be customized for your need):
 
 ```yaml
 # config.yaml
@@ -343,12 +347,9 @@ make logs name=my-rg-name
 > ```
 
 > [!TIP]
-> If you already deployed the application to Azure and if it is working, you can:
->
-> - Copy the configuration from the Azure Function App to your local machine by using the content of the `CONFIG_JSON` application setting
-> - Then convert it to YAML format
+> If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from the Azure Function App to your local machine.
 
-File is named `config.yaml`:
+Local config file is named `config.yaml`:
 
 ```yaml
 # config.yaml
@@ -367,6 +368,7 @@ communication_services:
   endpoint: https://xxx.france.communication.azure.com
   phone_number: "+33612345678"
   post_queue_name: post-33612345678
+  recording_container_url: https://xxx.blob.core.windows.net/recordings
   resource_id: xxx
   sms_queue_name: sms-33612345678
 
@@ -458,6 +460,13 @@ make dev
 
 ## Advanced usage
 
+## Enable call recording
+
+Call recording is disabled by default. To enable it:
+
+1. Create a new container in the Azure Storage account (i.e. `recordings`), it is already done if you deployed the solution on Azure
+2. Update the feature flag `recording_enabled` in App Configuration to `true`
+
 ### Add my custom training data with AI Search
 
 Training data is stored on AI Search to be retrieved by the bot, on demand.
@@ -485,8 +494,6 @@ See the [list of supported languages](https://learn.microsoft.com/en-us/azure/ai
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   initiate:
     lang:
@@ -504,8 +511,6 @@ If you built and deployed an [Azure Speech Custom Neural Voice (CNV)](https://le
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   initiate:
     lang:
@@ -544,8 +549,6 @@ Default schema, for inbound calls, is defined in the configuration:
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   default_initiate:
     claim:
@@ -572,8 +575,6 @@ Default task, for inbound calls, is defined in the configuration:
 
 ```yaml
 # config.yaml
-[...]
-
 conversation:
   initiate:
     task: |
@@ -584,20 +585,17 @@ Task can be customized for each call, by adding the `task` field in the `POST /c
 
 ### Customize the conversation
 
-Conversation options are documented in [conversation.py](helpers/config_models/conversation.py). The options can all be overridden in `config.yaml` file:
+Conversation options are represented as features. They can be configured from App Configuration, without the need to redeploy or restart the application. Once a feature is updated, a delay of 60 seconds is needed to make the change effective.
 
-```yaml
-# config.yaml
-[...]
-
-conversation:
-  answer_hard_timeout_sec: 180
-  answer_soft_timeout_sec: 30
-  callback_timeout_hour: 72
-  phone_silence_timeout_sec: 1
-  slow_llm_for_chat: true
-  voice_recognition_retry_max: 2
-```
+| Name | Description | Type | Default |
+|-|-|-|
+| `answer_hard_timeout_sec` | The hard timeout for the bot answer in seconds. | `int` | 180 |
+| `answer_soft_timeout_sec` | The soft timeout for the bot answer in seconds. | `int` | 30 |
+| `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 72 |
+| `phone_silence_timeout_sec` | The timeout for phone silence in seconds. | `int` | 1 |
+| `recording_enabled` | Whether call recording is enabled. | `bool` | false |
+| `slow_llm_for_chat` | Whether to use the slower LLM for chat. | `bool` | true |
+| `voice_recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
 
 ### Use an OpenAI compatible model for the LLM
 
@@ -613,8 +611,6 @@ Then, add the following in the `config.yaml` file:
 
 ```yaml
 # config.yaml
-[...]
-
 llm:
   fast:
     mode: openai
@@ -646,8 +642,6 @@ Then, add the following in the `config.yaml` file:
 
 ```yaml
 # config.yaml
-[...]
-
 sms:
   mode: twilio
   twilio:
@@ -664,8 +658,6 @@ Be sure to write all the TTS prompts in English. This language is used as a pivo
 
 ```yaml
 # config.yaml
-[...]
-
 prompts:
   tts:
     hello_tpl: |

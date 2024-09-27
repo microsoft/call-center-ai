@@ -673,9 +673,13 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
         _trigger_trainings_event(call=_call, trainings=trainings)
 
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
+        server_call_id = event.data["serverCallId"]
         await on_call_connected(
             call=call,
             client=automation_client,
+            post_callback=_post_callback,
+            server_call_id=server_call_id,
+            trainings_callback=_trainings_callback,
         )
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up

@@ -542,14 +542,14 @@ class TtsModel(BaseModel):
         return await self._translate(self.timeout_silence_tpl, call)
 
     async def welcome_back(self, call: CallStateModel) -> str:
-        from helpers.config import CONFIG
+        from helpers.features import callback_timeout_hour
 
         return await self._translate(
             self.welcome_back_tpl,
             call,
             bot_company=call.initiate.bot_company,
             bot_name=call.initiate.bot_name,
-            conversation_timeout_hour=CONFIG.conversation.callback_timeout_hour,
+            conversation_timeout_hour=await callback_timeout_hour(),
         )
 
     async def timeout_loading(self, call: CallStateModel) -> str:
