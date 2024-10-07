@@ -30,7 +30,7 @@ jobs:
       VERSION_FULL: ${{ steps.version.outputs.version_full }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.0
         with:
           # We need all Git history for "version.sh"
           fetch-depth: 0
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.0
         with:
           # We need all Git history for testing credentials
           fetch-depth: 0
@@ -72,7 +72,7 @@ jobs:
       image: returntocorp/semgrep
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.0
 
       - name: Run tests
         # Semgrep can be used to break the build when it detects security issues. In this case we want to upload the issues to GitHub Security
@@ -98,7 +98,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.2
+        uses: actions/checkout@v4.2.0
 
       - name: Configure Git
         run: |
@@ -170,7 +170,7 @@ jobs:
     if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.0
 
       - name: Create release
         id: create-release
