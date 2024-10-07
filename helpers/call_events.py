@@ -91,7 +91,7 @@ async def on_call_connected(
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     server_call_id: str,
-    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Call connected, asking for language")
     call.recognition_retry = 0  # Reset recognition retry counter
@@ -107,7 +107,7 @@ async def on_call_connected(
             call=call,
             client=client,
             post_callback=post_callback,
-            trainings_callback=trainings_callback,
+            training_callback=training_callback,
         ),  # First, every time a call is answered, confirm the language
         _db.call_aset(
             call
@@ -140,7 +140,7 @@ async def on_speech_recognized(
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     text: str,
-    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Voice recognition: %s", text)
     span_attribute(CallAttributes.CALL_CHANNEL, "voice")
@@ -161,7 +161,7 @@ async def on_speech_recognized(
             call=call,
             client=client,
             post_callback=post_callback,
-            trainings_callback=trainings_callback,
+            training_callback=training_callback,
         ),  # Second, the LLM should be loaded to continue the conversation
         _db.call_aset(
             call
@@ -325,7 +325,7 @@ async def on_ivr_recognized(
     client: CallAutomationClient,
     label: str,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
-    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("IVR recognized: %s", label)
     span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
@@ -356,7 +356,7 @@ async def on_ivr_recognized(
                 call=call,
                 client=client,
                 post_callback=post_callback,
-                trainings_callback=trainings_callback,
+                training_callback=training_callback,
             ),  # Third, the LLM should be loaded to continue the conversation
         )  # All in parallel to lower the response latency
 
@@ -373,7 +373,7 @@ async def on_ivr_recognized(
                 call=call,
                 client=client,
                 post_callback=post_callback,
-                trainings_callback=trainings_callback,
+                training_callback=training_callback,
             ),  # Third, the LLM should be loaded to continue the conversation
         )
 
@@ -406,7 +406,7 @@ async def on_sms_received(
     client: CallAutomationClient,
     message: str,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
-    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> bool:
     logger.info("SMS received from %s: %s", call.initiate.phone_number, message)
     span_attribute(CallAttributes.CALL_CHANNEL, "sms")
@@ -427,7 +427,7 @@ async def on_sms_received(
             call=call,
             client=client,
             post_callback=post_callback,
-            trainings_callback=trainings_callback,
+            training_callback=training_callback,
         )
     return True
 
@@ -586,7 +586,7 @@ async def _handle_ivr_language(
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
-    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     # If only one language is available, skip the IVR
     if len(CONFIG.conversation.initiate.lang.availables) == 1:
@@ -597,7 +597,7 @@ async def _handle_ivr_language(
             client=client,
             label=short_code,
             post_callback=post_callback,
-            trainings_callback=trainings_callback,
+            training_callback=training_callback,
         )
         return
 

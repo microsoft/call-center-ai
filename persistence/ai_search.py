@@ -1,4 +1,3 @@
-from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceNotFoundError,
@@ -25,6 +24,7 @@ from tenacity import (
 
 from helpers.config_models.ai_search import AiSearchModel
 from helpers.http import azure_transport
+from helpers.identity import credential
 from helpers.logging import logger
 from models.readiness import ReadinessEnum
 from models.training import TrainingModel
@@ -164,8 +164,6 @@ class AiSearchSearch(ISearch):
                 # Performance
                 transport=await azure_transport(),
                 # Authentication
-                credential=AzureKeyCredential(
-                    self._config.access_key.get_secret_value()
-                ),
+                credential=await credential(),
             )
         return self._client

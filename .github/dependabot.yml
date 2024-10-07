@@ -15,3 +15,8 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
+  - package-ecosystem: docker
+    directory: ""
+    target-branch: develop
+    schedule:
+      interval: weekly

@@ -14,6 +14,13 @@ on:
       - hotfix/*
       - main
 
+env:
+  CONTAINER_NAME: ${{ github.repository }}
+  CONTAINER_REGISTRY_GHCR: ghcr.io
+  CONTAINER_PLATFORMS: linux/amd64,linux/arm64/v8
+  # https://github.com/docker/buildx/releases
+  BUILDX_VERSION: 0.17.1
+
 jobs:
   init:
     name: Init
@@ -71,7 +78,7 @@ jobs:
         # Semgrep can be used to break the build when it detects security issues. In this case we want to upload the issues to GitHub Security
         continue-on-error: true
         env:
-          SEMGREP_RULES: p/cwe-top-25 p/owasp-top-ten
+          SEMGREP_RULES: p/cwe-top-25 p/owasp-top-ten p/dockerfile
         run: semgrep ci --sarif --output=semgrep.sarif
 
       - name: Upload results to GitHub Security
@@ -79,12 +86,80 @@ jobs:
         with:
           sarif_file: semgrep.sarif
 
-  create-release:
-    name: Create release
+  build-image:
+    name: Build & publish image
     needs:
       - init
       - sast-creds
       - sast-semgrep
+    runs-on: ubuntu-22.04
+    permissions:
+      # Allow to write to GitHub Packages
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.2
+
+      - name: Configure Git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Setup QEMU
+        id: setup-qemu
+        uses: docker/setup-qemu-action@v3.0.0
+        with:
+          platforms: ${{ env.CONTAINER_PLATFORMS }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3.3.0
+        with:
+          version: v${{ env.BUILDX_VERSION }}
+
+      - name: Login to registry - GitHub
+        uses: docker/login-action@v3.1.0
+        with:
+          registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Container meta
+        id: meta
+        uses: docker/metadata-action@v5.5.1
+        with:
+          images: ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=schedule
+            type=schedule,pattern={{date 'YYYYMMDD'}}
+            type=semver,pattern={{version}},value=${{ needs.init.outputs.VERSION_FULL }}
+            type=sha
+          labels: |
+            org.opencontainers.image.documentation=https://github.com/${{ env.CONTAINER_NAME }}
+            org.opencontainers.image.vendor=${{ github.actor }}
+
+      - name: Build/push container
+        uses: docker/build-push-action@v5.3.0
+        with:
+          build-args: |
+            VERSION=${{ needs.init.outputs.VERSION_FULL }}
+          cache-from: type=gha
+          cache-to: type=gha
+          context: .
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ env.CONTAINER_PLATFORMS }}
+          provenance: true
+          push: true
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  create-release:
+    name: Create release
+    needs:
+      - init
+      - build-image
     permissions:
       # Allow to create releases
       contents: write
@@ -118,45 +193,6 @@ jobs:
               target_commitish: context.ref,
             });
             return data.id
-
-  attest-dependencies:
-    name: Attest - Dependencies
-    permissions:
-      # Allow to write to GitHub Security
-      contents: write
-    runs-on: ubuntu-22.04
-    needs:
-      - create-release
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.7
-
-      - name: Run attestation
-        uses: advanced-security/component-detection-dependency-submission-action@v0.0.2
-        with:
-          directoryExclusionList: tests,docs,examples
-
-  attest-sbom:
-    name: Attest - SBOM
-    runs-on: ubuntu-22.04
-    needs:
-      - create-release
-      - init
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.7
-
-      - name: Init Syft
-        uses: anchore/sbom-action/download-syft@v0.16.1
-
-      - name: Run attestation
-        run: make sbom version_full=${{ needs.init.outputs.VERSION_FULL }}
-
-      - name: Upload results to release
-        uses: actions/upload-artifact@v4.3.4
-        with:
-          name: sbom
-          path: sbom-reports/*
 
   publish-release:
     name: Publish release

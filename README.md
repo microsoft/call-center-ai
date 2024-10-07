@@ -281,6 +281,11 @@ Now that the prerequisites are configured (local + Azure), the deployment can be
 
 ### Remote (on Azure)
 
+A pre-built container image is available on GitHub Actions, it will be used to deploy the solution on Azure:
+
+- Latest version from a branch: `ghcr.io/clemlesne/call-center-ai:main`
+- Specific tag: `ghcr.io/clemlesne/call-center-ai:0.1.0` (recommended)
+
 #### 1. Create the light config file
 
 Local config file is named `config.yaml`. It will be used by install scripts (incl. Makefile and Bicep) to configure the Azure resources.
@@ -380,7 +385,6 @@ llm:
   fast:
     mode: azure_openai
     azure_openai:
-      api_key: xxx
       context: 16385
       deployment: gpt-4o-mini-2024-07-18
       endpoint: https://xxx.openai.azure.com
@@ -389,7 +393,6 @@ llm:
   slow:
     mode: azure_openai
     azure_openai:
-      api_key: xxx
       context: 128000
       deployment: gpt-4o-2024-08-06
       endpoint: https://xxx.openai.azure.com
@@ -615,7 +618,6 @@ llm:
   fast:
     mode: openai
     openai:
-      api_key: xxx
       context: 128000
       endpoint: https://api.openai.com
       model: gpt-4o-mini
@@ -623,7 +625,6 @@ llm:
   slow:
     mode: openai
     openai:
-      api_key: xxx
       context: 128000
       endpoint: https://api.openai.com
       model: gpt-4o

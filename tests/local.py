@@ -49,7 +49,7 @@ async def main() -> None:
     async def _post_callback(_call: CallStateModel) -> None:
         await on_end_call(call=_call)
 
-    async def _trainings_callback(_call: CallStateModel) -> None:
+    async def _training_callback(_call: CallStateModel) -> None:
         await _call.trainings(cache_only=False)
 
     # Connect call
@@ -64,7 +64,7 @@ async def main() -> None:
         client=automation_client,
         label=call.lang.short_code,
         post_callback=_post_callback,
-        trainings_callback=_trainings_callback,
+        training_callback=_training_callback,
     )
 
     # Simulate conversation
@@ -78,7 +78,7 @@ async def main() -> None:
             client=automation_client,
             post_callback=_post_callback,
             text=message,
-            trainings_callback=_trainings_callback,
+            training_callback=_training_callback,
         )
         # Receip
         await on_play_completed(
