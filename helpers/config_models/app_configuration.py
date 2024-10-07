@@ -1,6 +1,6 @@
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel
 
 
 class AppConfigurationModel(BaseModel):
-    connection_string: SecretStr
+    endpoint: str
     ttl_sec: int = 60  # 1 min

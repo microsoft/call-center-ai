@@ -1,8 +1,11 @@
+from abc import abstractmethod
 from enum import Enum
 from typing import Any
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
+
+from helpers.identity import token
 
 
 class ModeEnum(str, Enum):
@@ -20,14 +23,19 @@ class AbstractPlatformModel(BaseModel):
     model: str
     streaming: bool
 
+    @abstractmethod
+    async def instance(
+        self,
+    ) -> tuple[AsyncAzureOpenAI | AsyncOpenAI, "AbstractPlatformModel"]:
+        pass
+
 
 class AzureOpenaiPlatformModel(AbstractPlatformModel):
     _client: AsyncAzureOpenAI | None = None
-    api_key: SecretStr
     deployment: str
     endpoint: str
 
-    def instance(self) -> tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
+    async def instance(self) -> tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
         if not self._client:
             self._client = AsyncAzureOpenAI(
                 **self._client_kwargs,
@@ -36,7 +44,9 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
                 azure_deployment=self.deployment,
                 azure_endpoint=self.endpoint,
                 # Authentication
-                api_key=self.api_key.get_secret_value(),
+                azure_ad_token_provider=await token(
+                    "https://cognitiveservices.azure.com/.default"
+                ),
             )
         return self._client, self
 
@@ -46,7 +56,7 @@ class OpenaiPlatformModel(AbstractPlatformModel):
     api_key: SecretStr
     endpoint: str
 
-    def instance(self) -> tuple[AsyncOpenAI, AbstractPlatformModel]:
+    async def instance(self) -> tuple[AsyncOpenAI, AbstractPlatformModel]:
         if not self._client:
             self._client = AsyncOpenAI(
                 **self._client_kwargs,

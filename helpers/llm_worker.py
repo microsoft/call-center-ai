@@ -148,7 +148,7 @@ async def _completion_stream_worker(  # noqa: PLR0912
     """
     Returns a stream of completions.
     """
-    client, platform = _use_llm(is_fast)
+    client, platform = await _use_llm(is_fast)
     extra = {}
     if tools:
         extra["tools"] = tools  # Add tools if any
@@ -313,7 +313,7 @@ async def _completion_sync_worker(
     """
     Returns a completion.
     """
-    client, platform = _use_llm(is_fast)
+    client, platform = await _use_llm(is_fast)
     extra = {}
     if json_output:
         extra["response_format"] = {"type": "json_object"}
@@ -437,7 +437,7 @@ def _count_tokens(content: str, model: str) -> int:
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 
-def _use_llm(
+async def _use_llm(
     is_fast: bool,
 ) -> tuple[AsyncAzureOpenAI | AsyncOpenAI, LlmAbstractPlatformModel]:
     """
@@ -445,4 +445,4 @@ def _use_llm(
 
     The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
     """
-    return CONFIG.llm.selected(is_fast).instance()
+    return await CONFIG.llm.selected(is_fast).instance()

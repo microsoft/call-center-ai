@@ -42,7 +42,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
-    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
     """
@@ -146,7 +146,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                 is_error, continue_chat, call = (
                     chat_task.result()
                 )  # Store updated chat model
-                await trainings_callback(call)  # Trigger trainings generation
+                await training_callback(call)  # Trigger trainings generation
                 await _db.call_aset(
                     call
                 )  # Save ASAP in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
@@ -206,7 +206,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                 call=call,
                 client=client,
                 post_callback=post_callback,
-                trainings_callback=trainings_callback,
+                training_callback=training_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
     else:
@@ -216,7 +216,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                 call=call,
                 client=client,
                 post_callback=post_callback,
-                trainings_callback=trainings_callback,
+                training_callback=training_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )  # Recursive chat (like for for retry or tools)
 

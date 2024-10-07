@@ -16,6 +16,7 @@ from helpers.config_models.database import DatabaseModel
 from helpers.config_models.llm import LlmModel
 from helpers.config_models.monitoring import MonitoringModel
 from helpers.config_models.prompts import PromptsModel
+from helpers.config_models.queue import QueueModel
 from helpers.config_models.resources import ResourcesModel
 from helpers.config_models.sms import SmsModel
 
@@ -51,6 +52,7 @@ class RootModel(BaseSettings):
         serialization_alias="workflow"
     )  # Compatibility with v7
     app_configuration: AppConfigurationModel
+    queue: QueueModel
 
     @classmethod
     def settings_customise_sources(

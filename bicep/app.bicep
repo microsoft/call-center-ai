@@ -3,7 +3,7 @@ param embeddingDeploymentType string
 param embeddingModel string
 param embeddingQuota int
 param embeddingVersion string
-param functionappLocation string
+param imageVersion string
 param llmFastContext int
 param llmFastDeploymentType string
 param llmFastModel string
@@ -19,12 +19,10 @@ param openaiLocation string
 param promptContentFilter bool
 param searchLocation string
 param tags object
-param version string
 
 var appName = 'call-center-ai'
 var prefix = deployment().name
-var functionAppName = '${prefix}-${appName}'
-var appUrl = 'https://${functionAppName}.azurewebsites.net'
+var appUrl = 'https://call-center-ai.${acaEnv.properties.defaultDomain}'
 var llmFastModelFullName = toLower('${llmFastModel}-${llmFastVersion}')
 var llmSlowModelFullName = toLower('${llmSlowModel}-${llmSlowVersion}')
 var embeddingModelFullName = toLower('${embeddingModel}-${embeddingVersion}')
@@ -36,7 +34,6 @@ var config = {
   database: {
     mode: 'cosmos_db'
     cosmos_db: {
-      access_key: cosmos.listKeys().primaryMasterKey
       container: container.name
       database: database.name
       endpoint: cosmos.properties.documentEndpoint
@@ -55,14 +52,17 @@ var config = {
   }
   communication_services: {
     access_key: communicationServices.listKeys().primaryKey
-    call_queue_name: callQueue.name
     endpoint: communicationServices.properties.hostName
     phone_number: localConfig.communication_services.phone_number
-    post_queue_name: postQueue.name
     recording_container_url: '${storageAccount.properties.primaryEndpoints.blob}${recordingsBlob.name}'
     resource_id: communicationServices.properties.immutableResourceId
-    sms_queue_name: smsQueue.name
-    trainings_queue_name: trainingsQueue.name
+  }
+  queue: {
+    account_url: storageAccount.properties.primaryEndpoints.queue
+    call_name: callQueue.name
+    post_name: postQueue.name
+    sms_name: smsQueue.name
+    training_name: trainingsQueue.name
   }
   sms: localConfig.sms
   cognitive_service: {
@@ -72,7 +72,6 @@ var config = {
     fast: {
       mode: 'azure_openai'
       azure_openai: {
-        api_key: cognitiveOpenai.listKeys().key1
         context: llmFastContext
         deployment: llmFast.name
         endpoint: cognitiveOpenai.properties.endpoint
@@ -83,7 +82,6 @@ var config = {
     slow: {
       mode: 'azure_openai'
       azure_openai: {
-        api_key: cognitiveOpenai.listKeys().key1
         context: llmSlowContext
         deployment: llmSlow.name
         endpoint: cognitiveOpenai.properties.endpoint
@@ -93,7 +91,6 @@ var config = {
     }
   }
   ai_search: {
-    access_key: search.listAdminKeys().primaryKey
     endpoint: 'https://${search.name}.search.windows.net'
     index: 'trainings'
   }
@@ -114,13 +111,12 @@ var config = {
     }
   }
   app_configuration: {
-    connection_string: configStore.listKeys().value[0].connectionString
+    endpoint: configStore.properties.endpoint
   }
 }
 
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
-output functionAppName string = functionAppName
 output logAnalyticsCustomerId string = logAnalytics.properties.customerId
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -146,85 +142,123 @@ resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-resource flexFuncPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+resource acaEnv 'Microsoft.App/managedEnvironments@2024-02-02-preview' = {
   name: prefix
-  location: functionappLocation
+  location: location
   tags: tags
-  sku: {
-    tier: 'FlexConsumption'
-    name: 'FC1'
-  }
   properties: {
-    reserved: true
+    appLogsConfiguration: {
+      destination: 'log-analytics'
+      logAnalyticsConfiguration: {
+        customerId: logAnalytics.properties.customerId
+        sharedKey: logAnalytics.listKeys().primarySharedKey
+      }
+    }
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+    ]
   }
 }
 
-resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
-  name: functionAppName
-  location: functionappLocation
+var containerAppScaleRules = [
+  for queue in [
+    callQueue.name
+    postQueue.name
+    smsQueue.name
+    trainingsQueue.name
+  ]: {
+    name: 'queue-${queue}'
+    azureQueue: {
+      accountName: storageAccount.name
+      identity: 'system'
+      queueLength: 1
+      queueName: queue
+    }
+  }
+]
+
+resource containerApp 'Microsoft.App/containerApps@2024-02-02-preview' = {
+  name: appName
+  location: location
   tags: tags
-  kind: 'functionapp,linux'
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
-    serverFarmId: flexFuncPlan.id
-    siteConfig: {
-      appSettings: [
-        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#azurewebjobsstorage
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 8080
+      }
+    }
+    environmentId: acaEnv.id
+    template: {
+      containers: [
         {
-          name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
-        }
-        // See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#applicationinsights_connection_string
-        {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: applicationInsights.properties.ConnectionString
-        }
-        // See: https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration?tabs=python#enable-sampling
-        {
-          name: 'OTEL_TRACES_SAMPLER_ARG'
-          value: '0.5'
-        }
-        {
-          name: 'CONFIG_JSON'
-          value: string(config)
-        }
-        {
-          name: 'VERSION'
-          value: version
+          image: 'ghcr.io/microsoft/call-center-ai:${imageVersion}'
+          name: 'call-center-ai'
+          env: [
+            // App configuration
+            {
+              name: 'CONFIG_JSON'
+              value: string(config)
+            }
+            // Application Insights
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: applicationInsights.properties.ConnectionString
+            }
+          ]
+          resources: {
+            cpu: 1
+            memory: '2Gi'
+          }
+          probes: [
+            {
+              type: 'Startup'
+              tcpSocket: {
+                port: 8080
+              }
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health/liveness'
+                port: 8080
+              }
+              periodSeconds: 10 // 2x the timeout
+              timeoutSeconds: 5 // Fast to check if the app is running
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health/readiness'
+                port: 8080
+              }
+              periodSeconds: 20 // 2x the timeout
+              timeoutSeconds: 10 // Database can take a while to be ready, query is necessary but expensive to run
+            }
+          ]
         }
       ]
-    }
-    functionAppConfig: {
-      deployment: {
-        storage: {
-          type: 'blobContainer'
-          value: '${storageAccount.properties.primaryEndpoints.blob}${functionAppBlob.name}'
-          authentication: {
-            storageAccountConnectionStringName: 'AzureWebJobsStorage'
-            type: 'StorageAccountConnectionString'
-          }
-        }
-      }
-      scaleAndConcurrency: {
-        instanceMemoryMB: 2048 // Default and recommended
-        maximumInstanceCount: 100 // TODO: Avoid billing surprises, delete when sure
-        alwaysReady: [
+      scale: {
+        minReplicas: 1
+        rules: concat(containerAppScaleRules, [
           {
-            instanceCount: 2
-            name: 'http' // Handle "conversation" events
+            name: 'cpu-utilization'
+            custom: {
+              type: 'cpu'
+              metadata: {
+                type: 'Utilization'
+                value: '80'
+              }
+            }
           }
-        ]
-        triggers: {
-          http: {
-            perInstanceConcurrency: 4
-          }
-        }
-      }
-      runtime: {
-        name: 'python'
-        version: '3.11'
+        ])
       }
     }
   }
@@ -239,7 +273,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
   kind: 'StorageV2'
   properties: {
-    allowSharedKeyAccess: true // In some companies policies enable this by default if not specified, we are not compatible, force disable
+    allowSharedKeyAccess: false
     supportsHttpsTrafficOnly: true
   }
 }
@@ -284,11 +318,6 @@ resource recordingsBlob 'Microsoft.Storage/storageAccounts/blobServices/containe
   name: 'recordings'
 }
 
-resource functionAppBlob 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
-  parent: blobService
-  name: toLower(functionAppName)
-}
-
 // Storage Blob Data Contributor
 resource roleDataContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -301,6 +330,21 @@ resource assignmentCommunicationServicesContributor 'Microsoft.Authorization/rol
     principalId: communicationServices.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: roleDataContributor.id
+  }
+}
+
+// Storage Queue Data Contributor
+resource roleQueueContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+}
+
+resource assignmentContainerAppQueueContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, storageAccount.name, 'assignmentContainerAppQueueContributor')
+  scope: storageAccount
+  properties: {
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleQueueContributor.id
   }
 }
 
@@ -431,6 +475,21 @@ resource cognitiveCommunication 'Microsoft.CognitiveServices/accounts@2024-06-01
   kind: 'CognitiveServices'
   properties: {
     customSubDomainName: '${prefix}-${cognitiveCommunicationLocation}-communication'
+  }
+}
+
+// Cognitive Services OpenAI Contributor
+resource roleOpenaiContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'a001fd3d-188f-4b5d-821b-7da978bf7442'
+}
+
+resource assignmentsContainerAppOpenaiContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, cognitiveOpenai.name, 'assignmentsContainerAppOpenaiContributor')
+  scope: cognitiveOpenai
+  properties: {
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleOpenaiContributor.id
   }
 }
 
@@ -622,7 +681,7 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
       maxStalenessPrefix: 1000 // 1000 requests lags at max
     }
     databaseAccountOfferType: 'Standard'
-    disableLocalAuth: false // In some companies policies enable this by default if not specified, we are not compatible, force disable
+    disableLocalAuth: true
     locations: [
       {
         locationName: location
@@ -692,6 +751,22 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
   }
 }
 
+// Cosmos DB Built-in Data Contributor
+resource sqlRoleDefinition 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions@2024-05-15' existing = {
+  parent: cosmos
+  name: '00000000-0000-0000-0000-000000000002'
+}
+
+resource assignmentContainerAppCosmosBuiltinDataContributor 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
+  parent: cosmos
+  name: guid(cosmos.id, containerApp.id, sqlRoleDefinition.id)
+  properties: {
+    principalId: containerApp.identity.principalId
+    roleDefinitionId: sqlRoleDefinition.id
+    scope: cosmos.id
+  }
+}
+
 resource search 'Microsoft.Search/searchServices@2024-06-01-preview' = {
   name: prefix
   location: searchLocation
@@ -703,7 +778,23 @@ resource search 'Microsoft.Search/searchServices@2024-06-01-preview' = {
     type: 'SystemAssigned'
   }
   properties: {
+    disableLocalAuth: true
     semanticSearch: 'standard'
+  }
+}
+
+// Search Index Data Reader
+resource roleSearchDataReader 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '1407120a-92aa-4202-b7e9-c0e197c71c8f'
+}
+
+resource assignmentSearchDataReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, search.name, 'assignmentSearchDataReader')
+  scope: search
+  properties: {
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleSearchDataReader.id
   }
 }
 
@@ -740,6 +831,21 @@ resource configStore 'Microsoft.AppConfiguration/configurationStores@2023-03-01'
   location: location
   sku: {
     name: 'Standard'
+  }
+}
+
+// App Configuration Data Reader
+resource roleAppConfigurationDataReader 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '516239f1-63e1-4d78-a4de-a74fb236a071'
+}
+
+resource assignmentAppConfigurationDataReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, configStore.name, 'assignmentAppConfigurationDataReader')
+  scope: configStore
+  properties: {
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleAppConfigurationDataReader.id
   }
 }
 

@@ -1,17 +1,17 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from http import HTTPStatus
 from uuid import UUID, uuid4
 
 from azure.cosmos import ConsistencyLevel
 from azure.cosmos.aio import ContainerProxy, CosmosClient
-from azure.cosmos.exceptions import CosmosHttpResponseError
+from azure.cosmos.exceptions import CosmosResourceNotFoundError
 from pydantic import ValidationError
 
 from helpers.config_models.database import CosmosDbModel
 from helpers.features import callback_timeout_hour
 from helpers.http import azure_transport
+from helpers.identity import credential
 from helpers.logging import logger
 from models.call import CallStateModel
 from models.readiness import ReadinessEnum
@@ -79,10 +79,8 @@ class CosmosDbStore(IStore):
             try:
                 await db.read_item(item=test_id, partition_key=partition_key)
                 exist = True
-            except CosmosHttpResponseError as e:
-                if e.status_code != HTTPStatus.NOT_FOUND:
-                    logger.error("Error requesting CosmosDB: %s", e)
-                    exist = True
+            except CosmosResourceNotFoundError:
+                pass
         return exist
 
     async def call_aget(self, call_id: UUID) -> CallStateModel | None:
@@ -299,7 +297,7 @@ class CosmosDbStore(IStore):
                 # Deployment
                 url=self._config.endpoint,
                 # Authentication
-                credential=self._config.access_key.get_secret_value(),
+                credential=await credential(),
             )
         async with self._client as client:
             database = client.get_database_client(self._config.database)
