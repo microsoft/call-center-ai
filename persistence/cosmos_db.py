@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from azure.cosmos import ConsistencyLevel
 from azure.cosmos.aio import ContainerProxy, CosmosClient
-from azure.cosmos.exceptions import CosmosResourceNotFoundError
+from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
 from pydantic import ValidationError
 
 from helpers.config_models.database import CosmosDbModel
