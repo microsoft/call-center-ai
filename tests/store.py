@@ -1,5 +1,5 @@
 import pytest
-from pytest import assume
+from pytest_assume.plugin import assume
 
 from helpers.config import CONFIG
 from helpers.config_models.database import ModeEnum as DatabaseModeEnum

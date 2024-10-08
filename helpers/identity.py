@@ -8,7 +8,7 @@ _client: DefaultAzureCredential | None = None
 
 
 async def credential() -> DefaultAzureCredential:
-    global _client
+    global _client  # noqa: PLW0603
     if not _client:
         _client = DefaultAzureCredential(
             # Performance

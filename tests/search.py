@@ -7,7 +7,7 @@ from deepeval.metrics import BaseMetric
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume
+from pytest_assume.plugin import assume
 
 from helpers.config import CONFIG
 from helpers.logging import logger

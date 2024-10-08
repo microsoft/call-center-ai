@@ -105,7 +105,7 @@ logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # noqa: ARG001
     call_task = asyncio.create_task(
         _call_queue.trigger(
             arg="call",
@@ -843,7 +843,7 @@ async def twilio_sms_post(
 
 
 @api.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):  # noqa: ARG001
     """
     Handle HTTP exceptions and return the error in a standard format.
     """
@@ -854,7 +854,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 
 @api.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+async def validation_exception_handler(request: Request, exc: RequestValidationError):  # noqa: ARG001
     """
     Handle validation exceptions and return the error in a standard format.
     """

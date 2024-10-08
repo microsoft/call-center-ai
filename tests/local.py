@@ -56,6 +56,9 @@ async def main() -> None:
     await on_call_connected(
         call=call,
         client=automation_client,
+        post_callback=_post_callback,
+        server_call_id="dummy",
+        training_callback=_training_callback,
     )
 
     # First IVR

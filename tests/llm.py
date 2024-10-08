@@ -15,7 +15,7 @@ from deepeval.metrics import (
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume
+from pytest_assume.plugin import assume
 
 from helpers.call_events import (
     on_call_connected,
@@ -274,6 +274,9 @@ async def test_llm(  # noqa: PLR0913
     await on_call_connected(
         call=call,
         client=automation_client,
+        post_callback=_post_callback,
+        server_call_id="dummy",
+        training_callback=_training_callback,
     )
 
     # First IVR
