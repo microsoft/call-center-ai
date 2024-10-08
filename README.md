@@ -82,7 +82,7 @@ curl \
 
 A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
 
-[![French demo](https://img.youtube.com/vi/4r5s-NZ9CuY/maxresdefault.jpg)](https://youtube.com/watch?v=4r5s-NZ9CuY)
+[![French demo](https://img.youtube.com/vi/WvEVN5v8jW4/maxresdefault.jpg)](https://youtube.com/watch?v=WvEVN5v8jW4)
 
 Main interactions shown in the demo:
 
@@ -95,20 +95,50 @@ Extract of the data stored during the call:
 ```json
 {
   "claim": {
-    "incident_date_time": "2024-01-11T19:33:41",
-    "incident_description": "The vehicle began to travel with a burning smell and the driver pulled over to the side of the freeway.",
-    "policy_number": "B01371946",
-    "policyholder_phone": "[number masked for the demo]",
-    "policyholder_name": "Clémence Lesne",
-    "vehicle_info": "Ford Fiesta 2003"
+    "incident_datetime": "2024-10-08T02:00:00",
+    "incident_description": "La trottinette électrique fait des bruits bizarres et émet de la fumée blanche.",
+    "incident_location": "46 rue du Charles de Gaulle",
+    "injuries": "Douleur au genou suite à une chute.",
+    "involved_parties": "Lesne",
+    "policy_number": "B02131325XPGOLMP"
   },
-  "reminders": [
+  "messages": [
     {
-      "description": "Check that all the information in Clémence Lesne's file is correct and complete.",
-      "due_date_time": "2024-01-18T16:00:00",
-      "title": "Check Clémence file"
+      "created_at": "2024-10-08T11:23:41.824758Z",
+      "action": "call",
+      "content": "",
+      "persona": "human",
+      "style": "none",
+      "tool_calls": []
+    },
+    {
+      "created_at": "2024-10-08T11:23:55.421654Z",
+      "action": "talk",
+      "content": "Bonjour, je m'appelle Amélie, de Contoso Assurance ! Comment puis-je vous aider aujourd'hui ?",
+      "persona": "assistant",
+      "style": "cheerful",
+      "tool_calls": []
+    },
+    {
+      "created_at": "2024-10-08T11:24:19.972737Z",
+      "action": "talk",
+      "content": "Oui bien sûr. Bonjour, je vous appelle parce que j'ai un problème avec ma trottinette électrique. Elle marche plus depuis ce matin, elle fait des bruits bizarres et il y a une fumée blanche qui sort de la trottinette.",
+      "persona": "human",
+      "style": "none",
+      "tool_calls": []
     }
-  ]
+  ],
+  "next": {
+    "action": "case_closed",
+    "justification": "The customer provided all necessary information for the claim, and they expressed satisfaction with the assistance received. No further action is required at this time."
+  },
+  "synthesis": {
+    "long": "You reported an issue with your electric scooter, which started making strange noises and emitting white smoke. This incident occurred at 2:00 AM while you were riding it, leading to a fall and resulting in knee pain. The location of the incident was noted, and your policy details were confirmed. I have documented all the necessary information to file your claim. Please take care of your knee, and feel free to reach out if you need further assistance.",
+    "satisfaction": "high",
+    "short": "the breakdown of your scooter",
+    "improvement_suggestions": "Ensure that the assistant provides clear next steps and offers to schedule follow-up calls proactively to enhance customer support."
+  },
+  ...
 }
 ```
 
