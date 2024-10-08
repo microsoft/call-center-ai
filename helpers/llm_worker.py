@@ -166,8 +166,8 @@ async def _completion_stream_worker(  # noqa: PLR0912
         "max_tokens": max_tokens,
         "messages": prompt,
         "model": platform.model,
-        "seed": 42,  # Reproducible results
-        "temperature": 0,  # Most focused and deterministic
+        "seed": platform.seed,
+        "temperature": platform.temperature,
         **extra,
     }  # Shared kwargs for both streaming and non-streaming
     maximum_tokens_reached = False
@@ -345,8 +345,8 @@ async def _completion_sync_worker(
                     max_tokens=max_tokens,
                     messages=prompt,
                     model=platform.model,
-                    seed=42,  # Reproducible results
-                    temperature=0,  # Most focused and deterministic
+                    seed=platform.seed,
+                    temperature=platform.temperature,
                     **extra,
                 )
             except BadRequestError as e:

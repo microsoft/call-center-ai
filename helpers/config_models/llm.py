@@ -21,7 +21,9 @@ class AbstractPlatformModel(BaseModel):
     }
     context: int
     model: str
+    seed: int = 42  # Reproducible results
     streaming: bool
+    temperature: float = 0.0  # Most focused and deterministic
 
     @abstractmethod
     async def instance(
@@ -32,6 +34,7 @@ class AbstractPlatformModel(BaseModel):
 
 class AzureOpenaiPlatformModel(AbstractPlatformModel):
     _client: AsyncAzureOpenAI | None = None
+    api_version: str = "2024-06-01"
     deployment: str
     endpoint: str
 
@@ -40,7 +43,7 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
             self._client = AsyncAzureOpenAI(
                 **self._client_kwargs,
                 # Deployment
-                api_version="2024-06-01",
+                api_version=self.api_version,
                 azure_deployment=self.deployment,
                 azure_endpoint=self.endpoint,
                 # Authentication

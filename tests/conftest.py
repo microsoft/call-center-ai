@@ -139,11 +139,11 @@ class DeepEvalAzureOpenAI(GPTModel):
         _langchain_kwargs = {
             # Repeatability
             "model_kwargs": {
-                "seed": 42,
+                "seed": platform.seed,
             },
-            "temperature": 0,
+            "temperature": platform.temperature,
             # Deployment
-            "api_version": "2023-12-01-preview",
+            "api_version": platform.api_version,
             "azure_deployment": platform.deployment,
             "azure_endpoint": platform.endpoint,
             "model": platform.model,
