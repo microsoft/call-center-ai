@@ -1,11 +1,11 @@
 from typing import TypeVar, cast
 
 from azure.appconfiguration.aio import AzureAppConfigurationClient
-from helpers.identity import credential
 
 from helpers.config import CONFIG
 from helpers.config_models.cache import MemoryModel
 from helpers.http import azure_transport
+from helpers.identity import credential
 from persistence.icache import ICache
 from persistence.memory import MemoryCache
 
