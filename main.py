@@ -318,7 +318,7 @@ async def call_list_get(
     calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=count)
     if not calls:
         raise _standard_error(
-            message=f"Calls {phone_number} not found",
+            message=f"Call {phone_number} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
 
@@ -326,47 +326,35 @@ async def call_list_get(
     return TypeAdapter(list[CallGetModel]).dump_python(output)
 
 
-@api.get("/call/{phone_number}")
-@tracer.start_as_current_span("call_phone_number_get")
-async def call_phone_number_get(phone_number: str) -> CallGetModel:
+@api.get("/call/{call_id_or_phone_number}")
+@tracer.start_as_current_span("call_get")
+async def call_get(call_id_or_phone_number: str) -> CallGetModel:
     """
-    REST API to search for calls by phone number.
+    REST API to search for calls by call ID or phone number.
 
     Parameters:
-    - phone_number: Phone number to search for
+    - call_id_or_phone_number: Call ID or phone number to search for
 
     Returns a single call object `CallGetModel`, in JSON format.
     """
+    # First, try to get by call ID
     try:
-        phone_number = PhoneNumber(phone_number)
+        call_id = UUID(call_id_or_phone_number)
+        call = await _db.call_aget(call_id)
+        if call:
+            return TypeAdapter(CallGetModel).dump_python(call)
+    except ValueError:
+        pass
+
+    # Second, try to get by phone number
+    try:
+        phone_number = PhoneNumber(call_id_or_phone_number)
     except ValueError as e:
         raise _validation_error(e)
-
     call = await _db.call_asearch_one(phone_number=phone_number)
     if not call:
         raise _standard_error(
-            message=f"Calls {phone_number} not found",
-            status_code=HTTPStatus.NOT_FOUND,
-        )
-
-    return TypeAdapter(CallGetModel).dump_python(call)
-
-
-@api.get("/call/{call_id}")
-@tracer.start_as_current_span("call_id_get")
-async def call_id_get(call_id: UUID) -> CallGetModel:
-    """
-    REST API to get a single call by call ID.
-
-    Parameters:
-    - call_id: Call ID to search for
-
-    Returns a single call object `CallGetModel`, in JSON format.
-    """
-    call = await _db.call_aget(call_id)
-    if not call:
-        raise _standard_error(
-            message=f"Calls {call_id} not found",
+            message=f"Call {phone_number} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
     return TypeAdapter(CallGetModel).dump_python(call)
