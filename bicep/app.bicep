@@ -117,6 +117,7 @@ var config = {
 
 output appUrl string = appUrl
 output blobStoragePublicName string = storageAccount.name
+output containerAppName string = containerApp.name
 output logAnalyticsCustomerId string = logAnalytics.properties.customerId
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {

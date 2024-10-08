@@ -24,6 +24,7 @@ targetScope = 'subscription'
 
 output appUrl string = app.outputs.appUrl
 output blobStoragePublicName string = app.outputs.blobStoragePublicName
+output containerAppName string = app.outputs.containerAppName
 output logAnalyticsCustomerId string = app.outputs.logAnalyticsCustomerId
 
 var tags = {

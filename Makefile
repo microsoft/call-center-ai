@@ -22,6 +22,7 @@ prompt_content_filter ?= true
 # Bicep outputs
 app_url ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["blobStoragePublicName"].value')
+container_app_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["containerAppName"].value')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
@@ -200,4 +201,12 @@ watch-call:
 
 sync-local-config:
 	@echo "📥 Copying remote CONFIG_JSON to local config..."
-	az functionapp config appsettings list --name $(function_app_name) --resource-group $(name_sanitized) --query "[?name=='CONFIG_JSON'].value" --output tsv | yq --prettyPrint --output-format yaml > config.yaml
+	az containerapp revision list \
+		--name $(container_app_name) \
+		--output tsv \
+		--query "[0].properties.template.containers[0].env[?name=='CONFIG_JSON'].value" \
+		--resource-group $(name_sanitized) \
+			| yq \
+				--output-format yaml \
+				--prettyPrint \
+					> config.yaml
