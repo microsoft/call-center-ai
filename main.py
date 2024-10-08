@@ -22,10 +22,12 @@ from fastapi import (
     Request,
     Response,
 )
+from fastapi.exceptions import RequestValidationError, ValidationException
 from fastapi.responses import HTMLResponse, JSONResponse
 from htmlmin.minify import html_minify
 from jinja2 import Environment, FileSystemLoader
 from pydantic import Field, TypeAdapter, ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
 
 from helpers.call_events import (
@@ -298,7 +300,7 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
 @tracer.start_as_current_span("call_list_get")
 async def call_list_get(
     phone_number: str | None = None,
-) -> list[CallGetModel] | ErrorModel:
+) -> list[CallGetModel]:
     """
     REST API to list all calls.
 
@@ -310,12 +312,12 @@ async def call_list_get(
     try:
         phone_number = PhoneNumber(phone_number) if phone_number else None
     except ValueError as e:
-        return _validation_error(e)
+        raise _validation_error(e)
 
     count = 100
     calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=count)
     if not calls:
-        return _standard_error(
+        raise _standard_error(
             message=f"Calls {phone_number} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
@@ -326,7 +328,7 @@ async def call_list_get(
 
 @api.get("/call/{phone_number}")
 @tracer.start_as_current_span("call_phone_number_get")
-async def call_phone_number_get(phone_number: str) -> CallGetModel | ErrorModel:
+async def call_phone_number_get(phone_number: str) -> CallGetModel:
     """
     REST API to search for calls by phone number.
 
@@ -338,11 +340,11 @@ async def call_phone_number_get(phone_number: str) -> CallGetModel | ErrorModel:
     try:
         phone_number = PhoneNumber(phone_number)
     except ValueError as e:
-        return _validation_error(e)
+        raise _validation_error(e)
 
     call = await _db.call_asearch_one(phone_number=phone_number)
     if not call:
-        return _standard_error(
+        raise _standard_error(
             message=f"Calls {phone_number} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
@@ -352,7 +354,7 @@ async def call_phone_number_get(phone_number: str) -> CallGetModel | ErrorModel:
 
 @api.get("/call/{call_id}")
 @tracer.start_as_current_span("call_id_get")
-async def call_id_get(call_id: UUID) -> CallGetModel | ErrorModel:
+async def call_id_get(call_id: UUID) -> CallGetModel:
     """
     REST API to get a single call by call ID.
 
@@ -363,7 +365,7 @@ async def call_id_get(call_id: UUID) -> CallGetModel | ErrorModel:
     """
     call = await _db.call_aget(call_id)
     if not call:
-        return _standard_error(
+        raise _standard_error(
             message=f"Calls {call_id} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
@@ -375,7 +377,7 @@ async def call_id_get(call_id: UUID) -> CallGetModel | ErrorModel:
     status_code=HTTPStatus.CREATED,
 )
 @tracer.start_as_current_span("call_post")
-async def call_post(request: Request) -> CallGetModel | ErrorModel:
+async def call_post(request: Request) -> CallGetModel:
     """
     REST API to initiate a call.
 
@@ -387,7 +389,7 @@ async def call_post(request: Request) -> CallGetModel | ErrorModel:
         body = await request.json()
         initiate = CallInitiateModel.model_validate(body)
     except ValidationError as e:
-        return _validation_error(e)
+        raise _validation_error(e)
 
     url, call = await _communicationservices_event_url(initiate.phone_number, initiate)
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
@@ -498,7 +500,7 @@ async def communicationservices_event_post(
     # Validate JWT token
     service_jwt: str | None = request.headers.get("Authorization")
     if not service_jwt:
-        return _standard_error(
+        raise _standard_error(
             message="Authorization header missing",
             status_code=HTTPStatus.UNAUTHORIZED,
         )
@@ -519,21 +521,21 @@ async def communicationservices_event_post(
         )
     except jwt.PyJWTError:
         logger.warning("Invalid JWT token", exc_info=True)
-        raise HTTPException(
+        raise _standard_error(
+            message="Invalid JWT token",
             status_code=HTTPStatus.UNAUTHORIZED,
-            detail="Invalid JWT token",
         )
 
     # Validate request
     try:
         events = await request.json()
     except ValueError:
-        return _standard_error(
+        raise _standard_error(
             message="Invalid JSON format",
             status_code=HTTPStatus.BAD_REQUEST,
         )
     if not events or not isinstance(events, list):
-        return _standard_error(
+        raise _standard_error(
             message="Events must be a list",
             status_code=HTTPStatus.BAD_REQUEST,
         )
@@ -840,6 +842,25 @@ async def twilio_sms_post(
     )
 
 
+@api.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """
+    Handle HTTP exceptions and return the error in a standard format.
+    """
+    return _standard_error(
+        message=exc.detail,
+        status_code=HTTPStatus(exc.status_code),
+    )
+
+
+@api.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Handle validation exceptions and return the error in a standard format.
+    """
+    return _validation_error(exc)
+
+
 def _str_to_contexts(value: str | None) -> set[CallContextEnum] | None:
     """
     Convert a string to a set of contexts.
@@ -863,12 +884,12 @@ def _str_to_contexts(value: str | None) -> set[CallContextEnum] | None:
     return res or None
 
 
-def _validation_error(e: Exception) -> ErrorModel:
+def _validation_error(e: ValidationError | Exception) -> HTTPException:
     """
     Generate a standard validation error response.
     """
     messages = []
-    if isinstance(e, ValidationError):
+    if isinstance(e, ValidationError) or isinstance(e, ValidationException):
         messages = [
             str(x) for x in e.errors()
         ]  # Pydantic returns well formatted errors, use them
@@ -877,7 +898,7 @@ def _validation_error(e: Exception) -> ErrorModel:
     return _standard_error(
         details=messages,
         message="Validation error",
-        status_code=HTTPStatus.BAD_REQUEST,
+        status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
     )
 
 
@@ -885,15 +906,19 @@ def _standard_error(
     message: str,
     details: list[str] | None = None,
     status_code: HTTPStatus = HTTPStatus.BAD_REQUEST,
-) -> ErrorModel:
+) -> HTTPException:
     """
     Generate a standard error response.
     """
-    return ErrorModel(
+    model = ErrorModel(
         error=ErrorInnerModel(
             details=details or [],
             message=message,
         )
+    )
+    return HTTPException(
+        detail=model.model_dump_json(),
+        status_code=status_code,
     )
 
 
