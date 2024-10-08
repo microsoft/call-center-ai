@@ -3,7 +3,7 @@ param embeddingDeploymentType string = 'Standard' // Pay-as-you-go in a single r
 param embeddingModel string = 'text-embedding-ada-002'
 param embeddingQuota int = 100
 param embeddingVersion string = '2'
-param functionappLocation string
+param imageVersion string = 'main'
 param instance string
 param llmFastContext int = 128000
 param llmFastDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
@@ -19,13 +19,12 @@ param location string = deployment().location
 param openaiLocation string
 param promptContentFilter bool = true // Should be set to false but requires a custom approval from Microsoft
 param searchLocation string
-param version string
 
 targetScope = 'subscription'
 
 output appUrl string = app.outputs.appUrl
 output blobStoragePublicName string = app.outputs.blobStoragePublicName
-output functionAppName string = app.outputs.functionAppName
+output containerAppName string = app.outputs.containerAppName
 output logAnalyticsCustomerId string = app.outputs.logAnalyticsCustomerId
 
 var tags = {
@@ -33,7 +32,7 @@ var tags = {
   instance: instance
   managed_by: 'Bicep'
   sources: 'https://github.com/clemlesne/call-center-ai'
-  version: version
+  version: imageVersion
 }
 
 resource sub 'Microsoft.Resources/resourceGroups@2021-04-01' = {
@@ -51,7 +50,7 @@ module app 'app.bicep' = {
     embeddingModel: embeddingModel
     embeddingQuota: embeddingQuota
     embeddingVersion: embeddingVersion
-    functionappLocation: functionappLocation
+    imageVersion: imageVersion
     llmFastContext: llmFastContext
     llmFastDeploymentType: llmFastDeploymentType
     llmFastModel: llmFastModel
@@ -67,6 +66,5 @@ module app 'app.bicep' = {
     promptContentFilter: promptContentFilter
     searchLocation: searchLocation
     tags: tags
-    version: version
   }
 }

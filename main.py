@@ -1,12 +1,13 @@
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
+from typing import Annotated
 from urllib.parse import quote_plus, urljoin
 from uuid import UUID
 
-import azure.functions as func
 import jwt
 import mistune
 from azure.communication.callautomation import PhoneNumberIdentifier
@@ -14,9 +15,19 @@ from azure.communication.callautomation.aio import CallAutomationClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
 from azure.eventgrid import EventGridEvent, SystemEventNames
+from fastapi import (
+    FastAPI,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+)
+from fastapi.exceptions import RequestValidationError, ValidationException
+from fastapi.responses import HTMLResponse, JSONResponse
 from htmlmin.minify import html_minify
 from jinja2 import Environment, FileSystemLoader
-from pydantic import TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
 
 from helpers.call_events import (
@@ -40,15 +51,16 @@ from helpers.http import azure_transport
 from helpers.logging import logger
 from helpers.monitoring import CallAttributes, span_attribute, tracer
 from helpers.pydantic_types.phone_numbers import PhoneNumber
-from helpers.resources import resources_dir
 from models.call import CallGetModel, CallInitiateModel, CallStateModel
+from models.error import ErrorInnerModel, ErrorModel
 from models.next import ActionEnum as NextActionEnum
 from models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
+from persistence.azure_queue_storage import Message as AzureQueueStorageMessage
 
+# First log
 logger.info(
-    "call-center-ai v%s (Azure Functions v%s)",
+    "call-center-ai v%s",
     CONFIG.version,
-    getattr(func, "__version__"),
 )
 
 # Jinja configuration
@@ -75,12 +87,13 @@ _communication_services_jwks_client = jwt.PyJWKClient(
 
 # Persistences
 _cache = CONFIG.cache.instance()
+_call_queue = CONFIG.queue.call()
 _db = CONFIG.database.instance()
+_post_queue = CONFIG.queue.post()
 _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()
-
-# Azure Functions
-app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+_sms_queue = CONFIG.queue.sms()
+_training_queue = CONFIG.queue.training()
 
 # Communication Services callback
 assert CONFIG.public_domain, "public_domain config is not set"
@@ -91,48 +104,58 @@ _COMMUNICATIONSERVICES_CALLABACK_TPL = urljoin(
 logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
 
 
-@app.route(
-    "openapi.json",
-    methods=["GET"],
-)
-@tracer.start_as_current_span("openapi_get")
-async def openapi_get(
-    req: func.HttpRequest,  # noqa: ARG001
-) -> func.HttpResponse:
-    """
-    Generate the OpenAPI specification for the API.
-
-    No parameters are expected.
-
-    Returns a JSON object with the OpenAPI specification.
-    """
-    with open(  # noqa: ASYNC230
-        encoding="utf-8",
-        file=resources_dir("openapi.json"),
-    ) as f:
-        openapi = json.load(f)
-        openapi["info"]["version"] = CONFIG.version
-        openapi["servers"] = [
-            {
-                "description": "Public endpoint",
-                "url": str(CONFIG.public_domain),
-            }
-        ]
-        return func.HttpResponse(
-            body=json.dumps(openapi),
-            mimetype="application/json",
-            status_code=HTTPStatus.OK,
+@asynccontextmanager
+async def lifespan(app: FastAPI):  # noqa: ARG001
+    call_task = asyncio.create_task(
+        _call_queue.trigger(
+            arg="call",
+            func=call_event,
         )
+    )
+    post_task = asyncio.create_task(
+        _post_queue.trigger(
+            arg="post",
+            func=post_event,
+        )
+    )
+    sms_task = asyncio.create_task(
+        _sms_queue.trigger(
+            arg="sms",
+            func=sms_event,
+        )
+    )
+    training_task = asyncio.create_task(
+        _training_queue.trigger(
+            arg="training",
+            func=training_event,
+        )
+    )
+    yield
+    call_task.cancel()
+    post_task.cancel()
+    sms_task.cancel()
+    training_task.cancel()
 
 
-@app.route(
-    "health/liveness",
-    methods=["GET"],
+# FastAPI
+api = FastAPI(
+    contact={
+        "url": "https://github.com/microsoft/call-center-ai",
+    },
+    description="Send a phone call from AI agent, in an API call. Or, directly call the bot from the configured phone number!",
+    license_info={
+        "name": "Apache-2.0",
+        "url": "https://github.com/microsoft/call-center-ai/blob/master/LICENSE",
+    },
+    lifespan=lifespan,
+    title="call-center-ai",
+    version=CONFIG.version,
 )
+
+
+@api.get("/health/liveness")
 @tracer.start_as_current_span("health_liveness_get")
-async def health_liveness_get(
-    req: func.HttpRequest,  # noqa: ARG001
-) -> func.HttpResponse:
+async def health_liveness_get() -> None:
     """
     Check if the service is running.
 
@@ -140,17 +163,15 @@ async def health_liveness_get(
 
     Returns a 200 OK if the service is technically running.
     """
-    return func.HttpResponse(status_code=HTTPStatus.NO_CONTENT)
+    return
 
 
-@app.route(
-    "health/readiness",
-    methods=["GET"],
+@api.get(
+    "/health/readiness",
+    status_code=HTTPStatus.OK,
 )
 @tracer.start_as_current_span("health_readiness_get")
-async def health_readiness_get(
-    req: func.HttpRequest,  # noqa: ARG001
-) -> func.HttpResponse:
+async def health_readiness_get() -> JSONResponse:
     """
     Check if the service is ready to serve requests.
 
@@ -187,20 +208,18 @@ async def health_readiness_get(
             readiness.status = ReadinessEnum.FAIL
             status_code = HTTPStatus.SERVICE_UNAVAILABLE
             break
-    return func.HttpResponse(
-        body=readiness.model_dump_json(),
-        mimetype="application/json",
+    return JSONResponse(
+        content=readiness.model_dump_json(),
         status_code=status_code,
     )
 
 
-@app.route(
-    "report",
-    methods=["GET"],
-    trigger_arg_name="req",
+@api.get(
+    "/report",
+    response_class=HTMLResponse,
 )
 @tracer.start_as_current_span("report_get")
-async def report_get(req: func.HttpRequest) -> func.HttpResponse:
+async def report_get(phone_number: str | None = None) -> HTMLResponse:
     """
     List all calls with a web interface.
 
@@ -210,21 +229,18 @@ async def report_get(req: func.HttpRequest) -> func.HttpResponse:
     Returns a list of calls with a web interface.
     """
     try:
-        phone_number = (
-            PhoneNumber(req.params["phone_number"])
-            if "phone_number" in req.params
-            else None
-        )
+        phone_number = PhoneNumber(phone_number) if phone_number else None
     except ValueError as e:
-        return _validation_error(e)
+        return HTMLResponse(
+            content=f"Invalid phone number: {e}",
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+
     count = 100
     calls, total = (
-        await _db.call_asearch_all(
-            count=count,
-            phone_number=phone_number or None,
-        )
-        or []
+        await _db.call_asearch_all(count=count, phone_number=phone_number) or []
     )
+
     template = _jinja.get_template("list.html.jinja")
     render = await template.render_async(
         applicationinsights_connection_string=getenv(
@@ -238,20 +254,18 @@ async def report_get(req: func.HttpRequest) -> func.HttpResponse:
         version=CONFIG.version,
     )
     render = html_minify(render)  # Minify HTML
-    return func.HttpResponse(
-        body=render,
-        mimetype="text/html",
+    return HTMLResponse(
+        content=render,
         status_code=HTTPStatus.OK,
     )
 
 
-@app.route(
-    "report/{call_id:guid}",
-    methods=["GET"],
-    trigger_arg_name="req",
+@api.get(
+    "/report/{call_id}",
+    response_class=HTMLResponse,
 )
 @tracer.start_as_current_span("report_single_get")
-async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
+async def report_single_get(call_id: UUID) -> HTMLResponse:
     """
     Show a single call with a web interface.
 
@@ -259,16 +273,13 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
 
     Returns a single call with a web interface.
     """
-    try:
-        call_id = UUID(req.route_params["call_id"])
-    except ValueError as e:
-        return _validation_error(e)
     call = await _db.call_aget(call_id)
     if not call:
-        return _standard_error(
-            message=f"Call {call_id} not found",
+        return HTMLResponse(
+            content=f"Call {call_id} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
+
     template = _jinja.get_template("single.html.jinja")
     render = await template.render_async(
         applicationinsights_connection_string=getenv(
@@ -282,21 +293,14 @@ async def report_single_get(req: func.HttpRequest) -> func.HttpResponse:
         version=CONFIG.version,
     )
     render = html_minify(render)  # Minify HTML
-    return func.HttpResponse(
-        body=render,
-        mimetype="text/html",
-        status_code=HTTPStatus.OK,
-    )
+    return HTMLResponse(content=render, status_code=HTTPStatus.OK)
 
 
-# TODO: Add total (int) and calls (list) as a wrapper for the list of calls
-@app.route(
-    "call",
-    methods=["GET"],
-    trigger_arg_name="req",
-)
+@api.get("/call")
 @tracer.start_as_current_span("call_list_get")
-async def call_list_get(req: func.HttpRequest) -> func.HttpResponse:
+async def call_list_get(
+    phone_number: str | None = None,
+) -> list[CallGetModel]:
     """
     REST API to list all calls.
 
@@ -306,99 +310,62 @@ async def call_list_get(req: func.HttpRequest) -> func.HttpResponse:
     Returns a list of calls objects `CallGetModel`, for a phone number, in JSON format.
     """
     try:
-        phone_number = (
-            PhoneNumber(req.params["phone_number"])
-            if "phone_number" in req.params
-            else None
-        )
+        phone_number = PhoneNumber(phone_number) if phone_number else None
     except ValueError as e:
-        return _validation_error(e)
+        raise _validation_error(e)
+
     count = 100
     calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=count)
     if not calls:
-        return _standard_error(
-            message=f"Calls {phone_number} not found",
-            status_code=HTTPStatus.NOT_FOUND,
-        )
-    output = [CallGetModel.model_validate(call) for call in calls or []]
-    return func.HttpResponse(
-        body=TypeAdapter(list[CallGetModel]).dump_json(output),
-        mimetype="application/json",
-        status_code=HTTPStatus.OK,
-    )
-
-
-@app.route(
-    "call/{phone_number}",
-    methods=["GET"],
-    trigger_arg_name="req",
-)
-@tracer.start_as_current_span("call_phone_number_get")
-async def call_phone_number_get(req: func.HttpRequest) -> func.HttpResponse:
-    """
-    REST API to search for calls by phone number.
-
-    Parameters:
-    - phone_number: Phone number to search for
-
-    Returns a single call object `CallGetModel`, in JSON format.
-    """
-    try:
-        phone_number = PhoneNumber(req.route_params["phone_number"])
-    except ValueError as e:
-        return _validation_error(e)
-    call = await _db.call_asearch_one(phone_number=phone_number)
-    if not call:
-        return _standard_error(
+        raise _standard_error(
             message=f"Call {phone_number} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
-    return func.HttpResponse(
-        body=TypeAdapter(CallGetModel).dump_json(call),
-        mimetype="application/json",
-        status_code=HTTPStatus.OK,
-    )
+
+    output = [CallGetModel.model_validate(call) for call in calls or []]
+    return TypeAdapter(list[CallGetModel]).dump_python(output)
 
 
-@app.route(
-    "call/{call_id:guid}",
-    methods=["GET"],
-    trigger_arg_name="req",
-)
-@tracer.start_as_current_span("call_id_get")
-async def call_id_get(req: func.HttpRequest) -> func.HttpResponse:
-    """ "
-    REST API to get a single call by call ID.
+@api.get("/call/{call_id_or_phone_number}")
+@tracer.start_as_current_span("call_get")
+async def call_get(call_id_or_phone_number: str) -> CallGetModel:
+    """
+    REST API to search for calls by call ID or phone number.
 
     Parameters:
-    - call_id: Call ID to search for
+    - call_id_or_phone_number: Call ID or phone number to search for
 
     Returns a single call object `CallGetModel`, in JSON format.
     """
+    # First, try to get by call ID
     try:
-        call_id = UUID(req.route_params["call_id"])
+        call_id = UUID(call_id_or_phone_number)
+        call = await _db.call_aget(call_id)
+        if call:
+            return TypeAdapter(CallGetModel).dump_python(call)
+    except ValueError:
+        pass
+
+    # Second, try to get by phone number
+    try:
+        phone_number = PhoneNumber(call_id_or_phone_number)
     except ValueError as e:
-        return _validation_error(e)
-    call = await _db.call_aget(call_id)
+        raise _validation_error(e)
+    call = await _db.call_asearch_one(phone_number=phone_number)
     if not call:
-        return _standard_error(
-            message=f"Call {call_id} not found",
+        raise _standard_error(
+            message=f"Call {phone_number} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
-    return func.HttpResponse(
-        body=TypeAdapter(CallGetModel).dump_json(call),
-        mimetype="application/json",
-        status_code=HTTPStatus.OK,
-    )
+    return TypeAdapter(CallGetModel).dump_python(call)
 
 
-@app.route(
-    "call",
-    methods=["POST"],
-    trigger_arg_name="req",
+@api.post(
+    "/call",
+    status_code=HTTPStatus.CREATED,
 )
 @tracer.start_as_current_span("call_post")
-async def call_post(req: func.HttpRequest) -> func.HttpResponse:
+async def call_post(request: Request) -> CallGetModel:
     """
     REST API to initiate a call.
 
@@ -407,9 +374,11 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
     Returns a single call object `CallGetModel`, in JSON format.
     """
     try:
-        initiate = CallInitiateModel.model_validate_json(req.get_body())
+        body = await request.json()
+        initiate = CallInitiateModel.model_validate(body)
     except ValidationError as e:
-        return _validation_error(e)
+        raise _validation_error(e)
+
     url, call = await _communicationservices_event_url(initiate.phone_number, initiate)
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
@@ -418,28 +387,18 @@ async def call_post(req: func.HttpRequest) -> func.HttpResponse:
         callback_url=url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
         source_caller_id_number=_source_caller,
-        # deepcode ignore AttributeLoadOnNone: Phone number is validated with Pydantic
         target_participant=PhoneNumberIdentifier(initiate.phone_number),  # pyright: ignore
     )
     logger.info(
         "Created call with connection id: %s",
         call_connection_properties.call_connection_id,
     )
-    return func.HttpResponse(
-        body=TypeAdapter(CallGetModel).dump_json(call),
-        mimetype="application/json",
-        status_code=HTTPStatus.CREATED,
-    )
+    return TypeAdapter(CallGetModel).dump_python(call)
 
 
-@app.queue_trigger(
-    arg_name="call",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.call_queue_name,
-)
 @tracer.start_as_current_span("call_event")
 async def call_event(
-    call: func.QueueMessage,
+    call: AzureQueueStorageMessage,
 ) -> None:
     """
     Handle incoming call event from Azure Communication Services.
@@ -448,7 +407,7 @@ async def call_event(
 
     Queue message is a JSON object `EventGridEvent` with an event type of `AcsIncomingCallEventName`.
     """
-    event = EventGridEvent.from_json(call.get_body())
+    event = EventGridEvent.from_json(call.content)
     event_type = event.event_type
 
     logger.debug("Call event with data %s", event.data)
@@ -469,35 +428,18 @@ async def call_event(
     )
 
 
-@app.queue_trigger(
-    arg_name="sms",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.sms_queue_name,
-)
-@app.queue_output(
-    arg_name="trainings",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.trainings_queue_name,
-)
-@app.queue_output(
-    arg_name="post",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.post_queue_name,
-)
 @tracer.start_as_current_span("sms_event")
 async def sms_event(
-    post: func.Out[str],
-    sms: func.QueueMessage,
-    trainings: func.Out[str],
+    sms: AzureQueueStorageMessage,
 ) -> None:
     """
     Handle incoming SMS event from Azure Communication Services.
 
     The event will trigger the workflow to handle a new SMS message.
 
-    Returns None. Can trigger additional events to `trainings` and `post` queues.
+    Returns None. Can trigger additional events to `training` and `post` queues.
     """
-    event = EventGridEvent.from_json(sms.get_body())
+    event = EventGridEvent.from_json(sms.content)
     event_type = event.event_type
 
     logger.debug("SMS event with data %s", event.data)
@@ -515,55 +457,42 @@ async def sms_event(
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
     async def _post_callback(_call: CallStateModel) -> None:
-        _trigger_post_event(call=_call, post=post)
+        await _trigger_post_event(_call)
 
-    async def _trainings_callback(_call: CallStateModel) -> None:
-        _trigger_trainings_event(call=_call, trainings=trainings)
+    async def _training_callback(_call: CallStateModel) -> None:
+        await _trigger_training_event(_call)
 
     await on_sms_received(
         call=call,
         client=await _use_automation_client(),
         message=message,
         post_callback=_post_callback,
-        trainings_callback=_trainings_callback,
+        training_callback=_training_callback,
     )
 
 
-@app.route(
-    "communicationservices/event/{call_id:guid}/{secret:length(16)}",
-    methods=["POST"],
-    trigger_arg_name="req",
-)
-@app.queue_output(
-    arg_name="trainings",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.trainings_queue_name,
-)
-@app.queue_output(
-    arg_name="post",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.post_queue_name,
-)
+@api.post("/communicationservices/event/{call_id}/{secret}")
 @tracer.start_as_current_span("communicationservices_event_post")
 async def communicationservices_event_post(
-    post: func.Out[str],
-    req: func.HttpRequest,
-    trainings: func.Out[str],
-) -> func.HttpResponse:
+    call_id: UUID,
+    secret: Annotated[str, Field(min_length=16, max_length=16)],
+    request: Request,
+) -> None | ErrorModel:
     """
     Handle direct events from Azure Communication Services for a running call.
 
     No parameters are expected. The body is a list of JSON objects `CloudEvent`.
 
-    Returns a 204 No Content if the events are properly fomatted. A 401 Unauthorized if the JWT token is invalid. Otherwise, returns a 400 Bad Request.
+    Returns a 204 No Content if the events are properly formatted. A 401 Unauthorized if the JWT token is invalid. Otherwise, returns a 400 Bad Request.
     """
     # Validate JWT token
-    service_jwt: str | None = req.headers.get("Authorization")
+    service_jwt: str | None = request.headers.get("Authorization")
     if not service_jwt:
-        return _standard_error(
+        raise _standard_error(
             message="Authorization header missing",
             status_code=HTTPStatus.UNAUTHORIZED,
         )
+
     service_jwt = str(service_jwt).replace("Bearer ", "")
     try:
         jwt.decode(
@@ -580,23 +509,24 @@ async def communicationservices_event_post(
         )
     except jwt.PyJWTError:
         logger.warning("Invalid JWT token", exc_info=True)
-        return _standard_error(
+        raise _standard_error(
             message="Invalid JWT token",
             status_code=HTTPStatus.UNAUTHORIZED,
         )
 
     # Validate request
     try:
-        call_id = UUID(req.route_params["call_id"])
-        secret: str = req.route_params["secret"]
-    except ValueError as e:
-        return _validation_error(e)
-    try:
-        events = req.get_json()
+        events = await request.json()
     except ValueError:
-        return _validation_error(Exception("Invalid JSON format"))
+        raise _standard_error(
+            message="Invalid JSON format",
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
     if not events or not isinstance(events, list):
-        return _validation_error(Exception("Events must be a list"))
+        raise _standard_error(
+            message="Events must be a list",
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
 
     # Process events in parallel
     await asyncio.gather(
@@ -604,25 +534,21 @@ async def communicationservices_event_post(
             _communicationservices_event_worker(
                 call_id=call_id,
                 event_dict=event,
-                post=post,
                 secret=secret,
-                trainings=trainings,
             )
             for event in events
         ]
     )
 
     # Return default response
-    return func.HttpResponse(status_code=HTTPStatus.NO_CONTENT)
+    return
 
 
 # TODO: Refacto, too long (and remove PLR0912/PLR0915 ignore)
 async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
     call_id: UUID,
     event_dict: dict,
-    post: func.Out[str],
     secret: str,
-    trainings: func.Out[str],
 ) -> None:
     """
     Worker to handle a single event from Azure Communication Services.
@@ -637,7 +563,7 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
     - Recognize completed
     - Recognize failed
 
-    Returns None. Can trigger additional events to `trainings` and `post` queues.
+    Returns None. Can trigger additional events to `training` and `post` queues.
     """
     span_attribute(CallAttributes.CALL_ID, str(call_id))
     call = await _db.call_aget(call_id)
@@ -667,10 +593,10 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
     logger.debug(event.data)
 
     async def _post_callback(_call: CallStateModel) -> None:
-        _trigger_post_event(call=_call, post=post)
+        await _trigger_post_event(_call)
 
-    async def _trainings_callback(_call: CallStateModel) -> None:
-        _trigger_trainings_event(call=_call, trainings=trainings)
+    async def _training_callback(_call: CallStateModel) -> None:
+        await _trigger_training_event(_call)
 
     if event_type == "Microsoft.Communication.CallConnected":  # Call answered
         server_call_id = event.data["serverCallId"]
@@ -679,7 +605,7 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
             client=automation_client,
             post_callback=_post_callback,
             server_call_id=server_call_id,
-            trainings_callback=_trainings_callback,
+            training_callback=_training_callback,
         )
 
     elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
@@ -702,7 +628,7 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
                     client=automation_client,
                     post_callback=_post_callback,
                     text=speech_text,
-                    trainings_callback=_trainings_callback,
+                    training_callback=_training_callback,
                 )
 
         elif recognition_result == "choices":  # Handle IVR
@@ -712,7 +638,7 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
                 client=automation_client,
                 label=label_detected,
                 post_callback=_post_callback,
-                trainings_callback=_trainings_callback,
+                training_callback=_training_callback,
             )
 
     elif (
@@ -735,6 +661,8 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
+                post_callback=_post_callback,
+                training_callback=_training_callback,
             )
         else:  # Unknown error
             await on_recognize_unknown_error(
@@ -777,68 +705,52 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
     )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
-@app.queue_trigger(
-    arg_name="trainings",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.trainings_queue_name,
-)
-@tracer.start_as_current_span("trainings_event")
-async def trainings_event(
-    trainings: func.QueueMessage,
+@tracer.start_as_current_span("training_event")
+async def training_event(
+    training: AzureQueueStorageMessage,
 ) -> None:
     """
-    Handle trainings event from the queue.
+    Handle training event from the queue.
 
-    Queue message is a JSON object `CallStateModel`. The event will load asynchroniously the trainings for a call.
+    Queue message is a JSON object `CallStateModel`. The event will load asynchroniously the training for a call.
 
     Returns None.
     """
-    call = CallStateModel.model_validate_json(trainings.get_body())
-    logger.debug("Trainings event received for call %s", call)
+    call = CallStateModel.model_validate_json(training.content)
+    logger.debug("Training event received for call %s", call)
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     await call.trainings(cache_only=False)  # Get trainings by advance to populate cache
 
 
-@app.queue_trigger(
-    arg_name="post",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.post_queue_name,
-)
 @tracer.start_as_current_span("post_event")
 async def post_event(
-    post: func.QueueMessage,
+    post: AzureQueueStorageMessage,
 ) -> None:
     """
     Handle post-call intelligence event from the queue.
 
     Queue message is a JSON object `CallStateModel`. The event will load asynchroniously the `on_end_call` workflow.
     """
-    call = CallStateModel.model_validate_json(post.get_body())
+    call = CallStateModel.model_validate_json(post.content)
     logger.debug("Post event received for call %s", call)
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     await on_end_call(call)
 
 
-def _trigger_trainings_event(
-    call: CallStateModel,
-    trainings: func.Out[str],
-) -> None:
+async def _trigger_training_event(call: CallStateModel) -> None:
     """
-    Shortcut to add trainings to the queue.
+    Shortcut to add training to the queue.
     """
-    trainings.set(call.model_dump_json(exclude_none=True))
+    await _training_queue.send_message(call.model_dump_json(exclude_none=True))
 
 
-def _trigger_post_event(
-    call: CallStateModel,
-    post: func.Out[str],
-) -> None:
+async def _trigger_post_event(call: CallStateModel) -> None:
     """
     Shortcut to add post-call intelligence to the queue.
     """
-    post.set(call.model_dump_json(exclude_none=True))
+    await _post_queue.send_message(call.model_dump_json(exclude_none=True))
 
 
 async def _communicationservices_event_url(
@@ -869,27 +781,14 @@ async def _communicationservices_event_url(
 
 
 # TODO: Secure this endpoint with a secret, either in the Authorization header or in the URL
-@app.route(
-    "twilio/sms",
-    methods=["POST"],
-    trigger_arg_name="req",
-)
-@app.queue_output(
-    arg_name="trainings",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.trainings_queue_name,
-)
-@app.queue_output(
-    arg_name="post",
-    connection="Storage",
-    queue_name=CONFIG.communication_services.post_queue_name,
+@api.post(
+    "/twilio/sms",
+    status_code=HTTPStatus.OK,
 )
 @tracer.start_as_current_span("twilio_sms_post")
 async def twilio_sms_post(
-    post: func.Out[str],
-    req: func.HttpRequest,
-    trainings: func.Out[str],
-) -> func.HttpResponse:
+    Body: Annotated[str, Form()], From: Annotated[PhoneNumber, Form()]
+) -> Response:
     """
     Handle incoming SMS event from Twilio.
 
@@ -897,47 +796,59 @@ async def twilio_sms_post(
 
     Returns a 200 OK if the SMS is properly formatted. Otherwise, returns a 400 Bad Request.
     """
-    if not req.form:
-        return _validation_error(Exception("No form data"))
-    try:
-        phone_number = PhoneNumber(req.form["From"])
-        message: str = req.form["Body"]
-    except ValueError as e:
-        return _validation_error(e)
-
-    span_attribute(CallAttributes.CALL_PHONE_NUMBER, phone_number)
-    call = await _db.call_asearch_one(phone_number)
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, From)
+    call = await _db.call_asearch_one(From)
 
     if not call:
-        logger.warning("Call for phone number %s not found", phone_number)
-
+        logger.warning("Call for phone number %s not found", From)
     else:
         span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
         async def _post_callback(_call: CallStateModel) -> None:
-            _trigger_post_event(call=_call, post=post)
+            await _trigger_post_event(_call)
 
-        async def _trainings_callback(_call: CallStateModel) -> None:
-            _trigger_trainings_event(call=_call, trainings=trainings)
+        async def _training_callback(_call: CallStateModel) -> None:
+            await _trigger_training_event(_call)
 
         event_status = await on_sms_received(
             call=call,
             client=await _use_automation_client(),
-            message=message,
+            message=Body,
             post_callback=_post_callback,
-            trainings_callback=_trainings_callback,
+            training_callback=_training_callback,
         )
         if not event_status:
-            return _standard_error(
-                message="SMS event failed",
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            return JSONResponse(
+                content=_standard_error(
+                    message="SMS event failed",
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
             )
 
-    return func.HttpResponse(
-        body=str(MessagingResponse()),  # Twilio expects an empty response everytime
-        mimetype="application/xml",
+    return Response(
+        content=str(MessagingResponse()),  # Twilio expects an empty response every time
+        media_type="application/xml",
         status_code=HTTPStatus.OK,
     )
+
+
+@api.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):  # noqa: ARG001
+    """
+    Handle HTTP exceptions and return the error in a standard format.
+    """
+    return _standard_error(
+        message=exc.detail,
+        status_code=HTTPStatus(exc.status_code),
+    )
+
+
+@api.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):  # noqa: ARG001
+    """
+    Handle validation exceptions and return the error in a standard format.
+    """
+    return _validation_error(exc)
 
 
 def _str_to_contexts(value: str | None) -> set[CallContextEnum] | None:
@@ -963,22 +874,12 @@ def _str_to_contexts(value: str | None) -> set[CallContextEnum] | None:
     return res or None
 
 
-def _validation_error(
-    e: Exception,
-) -> func.HttpResponse:
+def _validation_error(e: ValidationError | Exception) -> HTTPException:
     """
     Generate a standard validation error response.
-
-    Response body is a JSON object with the following structure:
-
-    ```
-    {"error": {"message": "Validation error", "details": ["Error message"]}}
-    ```
-
-    Returns a 400 Bad Request with a JSON body.
     """
     messages = []
-    if isinstance(e, ValidationError):
+    if isinstance(e, ValidationError) or isinstance(e, ValidationException):
         messages = [
             str(x) for x in e.errors()
         ]  # Pydantic returns well formatted errors, use them
@@ -987,7 +888,7 @@ def _validation_error(
     return _standard_error(
         details=messages,
         message="Validation error",
-        status_code=HTTPStatus.BAD_REQUEST,
+        status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
     )
 
 
@@ -995,27 +896,18 @@ def _standard_error(
     message: str,
     details: list[str] | None = None,
     status_code: HTTPStatus = HTTPStatus.BAD_REQUEST,
-) -> func.HttpResponse:
+) -> HTTPException:
     """
     Generate a standard error response.
-
-    Response body is a JSON object with the following structure:
-
-    ```
-    {"error": {"message": "Error message", "details": ["Error details"]}}
-    ```
-
-    Returns a JOSN with a JSON body and the specified status code.
     """
-    res_json = {
-        "error": {
-            "message": message,
-            "details": details or [],
-        }
-    }
-    return func.HttpResponse(
-        body=json.dumps(res_json),
-        mimetype="application/json",
+    model = ErrorModel(
+        error=ErrorInnerModel(
+            details=details or [],
+            message=message,
+        )
+    )
+    return HTTPException(
+        detail=model.model_dump_json(),
         status_code=status_code,
     )
 

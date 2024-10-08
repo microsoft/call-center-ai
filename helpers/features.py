@@ -5,6 +5,7 @@ from azure.appconfiguration.aio import AzureAppConfigurationClient
 from helpers.config import CONFIG
 from helpers.config_models.cache import MemoryModel
 from helpers.http import azure_transport
+from helpers.identity import credential
 from persistence.icache import ICache
 from persistence.memory import MemoryCache
 
@@ -14,39 +15,39 @@ T = TypeVar("T", bool, int, str)
 
 
 async def answer_hard_timeout_sec() -> int:
-    return await _get(key="answer_hard_timeout_sec", type=int) or 180
+    return await _get(key="answer_hard_timeout_sec", type_res=int) or 180
 
 
 async def answer_soft_timeout_sec() -> int:
-    return await _get(key="answer_soft_timeout_sec", type=int) or 120
+    return await _get(key="answer_soft_timeout_sec", type_res=int) or 120
 
 
 async def callback_timeout_hour() -> int:
-    return await _get(key="callback_timeout_hour", type=int) or 24
+    return await _get(key="callback_timeout_hour", type_res=int) or 24
 
 
 async def phone_silence_timeout_sec() -> int:
-    return await _get(key="phone_silence_timeout_sec", type=int) or 10
+    return await _get(key="phone_silence_timeout_sec", type_res=int) or 10
 
 
 async def recording_enabled() -> bool:
-    return await _get(key="recording_enabled", type=bool) or False
+    return await _get(key="recording_enabled", type_res=bool) or False
 
 
 async def slow_llm_for_chat() -> bool:
-    return await _get(key="slow_llm_for_chat", type=bool) or True
+    return await _get(key="slow_llm_for_chat", type_res=bool) or True
 
 
 async def voice_recognition_retry_max() -> int:
-    return await _get(key="voice_recognition_retry_max", type=int) or 3
+    return await _get(key="voice_recognition_retry_max", type_res=int) or 3
 
 
-async def _get(key: str, type: type[T]) -> T | None:
+async def _get(key: str, type_res: type[T]) -> T | None:
     # Try cache
     cache_key = _cache_key(key)
     cached = await _cache.aget(cache_key)
     if cached:
-        return _parse(value=cached.decode(), type=type)
+        return _parse(value=cached.decode(), type_res=type_res)
     # Try live
     async with await _use_client() as client:
         setting = await client.get_configuration_setting(key)
@@ -60,7 +61,7 @@ async def _get(key: str, type: type[T]) -> T | None:
         value=setting.value,
     )
     # Return
-    return _parse(value=setting.value, type=type)
+    return _parse(value=setting.value, type_res=type_res)
 
 
 async def _use_client() -> AzureAppConfigurationClient:
@@ -69,11 +70,13 @@ async def _use_client() -> AzureAppConfigurationClient:
     """
     global _client  # noqa: PLW0603
     if not _client:
-        _client = AzureAppConfigurationClient.from_connection_string(
+        _client = AzureAppConfigurationClient(
             # Performance
             transport=await azure_transport(),
+            # Deployment
+            base_url=CONFIG.app_configuration.endpoint,
             # Authentication
-            connection_string=CONFIG.app_configuration.connection_string.get_secret_value(),
+            credential=await credential(),
         )
     return _client
 
@@ -82,11 +85,11 @@ def _cache_key(key: str) -> str:
     return f"{__name__}-{key}"
 
 
-def _parse(value: str, type: type[T]) -> T:
-    if type is bool:
+def _parse(value: str, type_res: type[T]) -> T:
+    if type_res is bool:
         return cast(T, value.lower() == "true")
-    if type is int:
+    if type_res is int:
         return cast(T, int(value))
-    if type is str:
+    if type_res is str:
         return cast(T, str(value))
-    raise ValueError(f"Unsupported type: {type}")
+    raise ValueError(f"Unsupported type: {type_res}")

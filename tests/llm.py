@@ -15,7 +15,7 @@ from deepeval.metrics import (
 from deepeval.models.gpt_model import GPTModel
 from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
-from pytest import assume
+from pytest_assume.plugin import assume
 
 from helpers.call_events import (
     on_call_connected,
@@ -267,13 +267,16 @@ async def test_llm(  # noqa: PLR0913
     async def _post_callback(_call: CallStateModel) -> None:
         await on_end_call(call=_call)
 
-    async def _trainings_callback(_call: CallStateModel) -> None:
+    async def _training_callback(_call: CallStateModel) -> None:
         await _call.trainings(cache_only=False)
 
     # Connect call
     await on_call_connected(
         call=call,
         client=automation_client,
+        post_callback=_post_callback,
+        server_call_id="dummy",
+        training_callback=_training_callback,
     )
 
     # First IVR
@@ -282,7 +285,7 @@ async def test_llm(  # noqa: PLR0913
         client=automation_client,
         label=call.lang.short_code,
         post_callback=_post_callback,
-        trainings_callback=_trainings_callback,
+        training_callback=_training_callback,
     )
 
     # Simulate conversation with speech recognition
@@ -293,7 +296,7 @@ async def test_llm(  # noqa: PLR0913
             client=automation_client,
             post_callback=_post_callback,
             text=speech,
-            trainings_callback=_trainings_callback,
+            training_callback=_training_callback,
         )
         # Receip
         await on_play_completed(

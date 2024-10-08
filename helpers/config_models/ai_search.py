@@ -1,12 +1,11 @@
 from functools import cache
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field
 
 from persistence.isearch import ISearch
 
 
 class AiSearchModel(BaseModel, frozen=True):
-    access_key: SecretStr
     endpoint: str
     expansion_n_messages: int = Field(default=10, ge=1)
     index: str

@@ -2,12 +2,11 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from html import escape
 from inspect import getmembers, isfunction
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypedDict
 
 from azure.communication.callautomation.aio import CallAutomationClient
 from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
-from typing_extensions import TypedDict
 
 from helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
 from helpers.config import CONFIG

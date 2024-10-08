@@ -1,9 +1,5 @@
-# Created by https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,azurefunctions,jupyternotebooks,visualstudiocode,python
-# Edit at https://www.toptal.com/developers/gitignore?templates=osx,linux,dotenv,eclipse,windows,visualstudio,azurefunctions,jupyternotebooks,visualstudiocode,python
-
-### AzureFunctions ###
-# Azure Functions localsettings file
-local.settings.json
+# Created by https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,python,eclipse,windows,visualstudio,jupyternotebooks,visualstudiocode
+# Edit at https://www.toptal.com/developers/gitignore?templates=osx,linux,dotenv,python,eclipse,windows,visualstudio,jupyternotebooks,visualstudiocode
 
 ### dotenv ###
 .env
@@ -731,7 +727,7 @@ FodyWeavers.xsd
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio
 
-# End of https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,eclipse,windows,visualstudio,azurefunctions,jupyternotebooks,visualstudiocode,python
+# End of https://www.toptal.com/developers/gitignore/api/osx,linux,dotenv,python,eclipse,windows,visualstudio,jupyternotebooks,visualstudiocode
 
 # See: https://github.com/clemlesne/gitops-version
 .version.cache
@@ -747,9 +743,6 @@ config*.yaml
 
 # Tests reports
 test-reports/
-
-# SBOM reports
-sbom-reports/
 
 # Azure Functions
 .python_packages/

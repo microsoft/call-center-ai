@@ -4,10 +4,13 @@ version_small ?= $(shell $(MAKE) --silent version)
 # Dev tunnels configuration
 tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]')
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
+# Container configuration
+container_name := ghcr.io/clemlesne/call-center-ai
+docker := docker
+image_version := main
 # App location
 cognitive_communication_location := westeurope
 default_location := swedencentral
-functionapp_location := swedencentral
 openai_location := swedencentral
 search_location := francecentral
 # Sanitize variables
@@ -19,7 +22,7 @@ prompt_content_filter ?= true
 # Bicep outputs
 app_url ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["appUrl"].value')
 blob_storage_public_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["blobStoragePublicName"].value')
-function_app_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["functionAppName"].value')
+container_app_name ?= $(shell az deployment sub show --name $(name_sanitized) | yq '.properties.outputs["containerAppName"].value')
 
 version:
 	@bash ./cicd/version/version.sh -g . -c
@@ -39,9 +42,6 @@ brew:
 
 	@echo "➡️ Installing Azure Dev tunnels..."
 	curl -sL https://aka.ms/DevTunnelCliInstall | bash
-
-	@echo "➡️ Installing Syft..."
-	brew install syft
 
 	@echo "➡️ Installing Twilio CLI..."
 	brew tap twilio/brew && brew install twilio
@@ -107,19 +107,25 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) func start
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) python3 -m gunicorn main:api \
+		--access-logfile - \
+		--bind 0.0.0.0:8080 \
+		--proxy-protocol \
+		--reload \
+		--reload-extra-file .env \
+		--reload-extra-file config.yaml \
+		--workers 2 \
+		--worker-class uvicorn.workers.UvicornWorker
+
+build:
+	$(docker) build \
+		--build-arg VERSION=$(version_full) \
+		--tag $(container_name):$(version_small) \
+		--tag $(container_name):latest \
+		.
 
 deploy:
 	$(MAKE) deploy-bicep
-
-	@echo "💤 Wait 10 secs for output to be available..."
-	sleep 10
-
-	@echo "🛠️ Deploying Function App..."
-	func azure functionapp publish $(function_app_name) \
-		--build local \
-		--build-native-deps \
-		--python
 
 	@echo "🚀 Call Center AI is running on $(app_url)"
 
@@ -134,12 +140,11 @@ deploy-bicep:
 		--location $(default_location) \
 		--parameters \
 			'cognitiveCommunicationLocation=$(cognitive_communication_location)' \
-			'functionappLocation=$(functionapp_location)' \
+			'imageVersion=$(image_version)' \
 			'instance=$(name)' \
 			'openaiLocation=$(openai_location)' \
 			'promptContentFilter=$(prompt_content_filter)' \
 			'searchLocation=$(search_location)' \
-			'version=$(version_full)' \
 		--template-file bicep/main.bicep \
 	 	--name $(name_sanitized)
 
@@ -163,8 +168,12 @@ destroy:
 	az deployment sub delete --name $(name_sanitized)
 
 logs:
-	func azure functionapp logstream $(function_app_name) \
-		--browser
+	az containerapp logs show \
+		--follow \
+		--format text \
+		--name call-center-ai \
+		--resource-group $(name) \
+		--tail 100
 
 twilio-register:
 	@echo "⚙️ Registering Twilio webhook..."
@@ -175,6 +184,7 @@ copy-resources:
 	@echo "📦 Copying resources to Azure storage account..."
 	az storage blob upload-batch \
 		--account-name $(name_sanitized) \
+		--auth-mode login \
 		--destination '$$web' \
 		--no-progress \
 		--output none \
@@ -189,13 +199,14 @@ watch-call:
 		sleep 3; \
 	done
 
-sbom:
-	@echo "🔍 Generating SBOM..."
-	syft scan \
-		--source-version $(version_full)  \
-		--output spdx-json=./sbom-reports/$(version_full).json \
-		.
-
 sync-local-config:
 	@echo "📥 Copying remote CONFIG_JSON to local config..."
-	az functionapp config appsettings list --name $(function_app_name) --resource-group $(name_sanitized) --query "[?name=='CONFIG_JSON'].value" --output tsv | yq --sort-keys --yaml-output > config.yaml
+	az containerapp revision list \
+		--name $(container_app_name) \
+		--output tsv \
+		--query "[0].properties.template.containers[0].env[?name=='CONFIG_JSON'].value" \
+		--resource-group $(name_sanitized) \
+			| yq \
+				--output-format yaml \
+				--prettyPrint \
+					> config.yaml

@@ -15,14 +15,15 @@ from azure.communication.callautomation.aio import (
     CallAutomationClient,
     CallConnectionClient,
 )
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from deepeval.models.gpt_model import GPTModel
 from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, ValidationError
 
-from function_app import _str_to_contexts
 from helpers.call_utils import ContextEnum as CallContextEnum
 from helpers.config import CONFIG
 from helpers.logging import logger
+from main import _str_to_contexts
 from models.call import CallInitiateModel, CallStateModel
 
 
@@ -138,16 +139,19 @@ class DeepEvalAzureOpenAI(GPTModel):
         _langchain_kwargs = {
             # Repeatability
             "model_kwargs": {
-                "seed": 42,
+                "seed": platform.seed,
             },
-            "temperature": 0,
+            "temperature": platform.temperature,
             # Deployment
-            "api_version": "2023-12-01-preview",
+            "api_version": platform.api_version,
             "azure_deployment": platform.deployment,
             "azure_endpoint": platform.endpoint,
             "model": platform.model,
-            # Authentication
-            "api_key": platform.api_key.get_secret_value(),
+            # Authentication, either RBAC or API
+            "azure_ad_token_provider": get_bearer_token_provider(
+                DefaultAzureCredential(),
+                "https://cognitiveservices.azure.com/.default",
+            ),
             # DeepEval
             **kwargs,
         }

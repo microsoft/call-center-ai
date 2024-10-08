@@ -42,7 +42,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
-    trainings_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
     """
@@ -54,15 +54,24 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
     """
     logger.info("Loading LLM chat")
 
-    should_play_sound = True
+    play_loading_sound = True
 
     async def _tts_callback(text: str, style: MessageStyleEnum) -> None:
         """
         Send back the TTS to the user.
         """
-        nonlocal should_play_sound
+        nonlocal play_loading_sound
 
-        should_play_sound = False
+        # Disable loading sound when LLM starts to speak
+        if play_loading_sound:
+            # First, clear remaining loading sound
+            await handle_clear_queue(
+                call=call,
+                client=client,
+            )
+            # Then, disable loading sound
+            play_loading_sound = False
+
         await asyncio.gather(
             handle_recognize_text(
                 call=call,
@@ -111,12 +120,6 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
         asyncio.sleep(await answer_hard_timeout_sec())
     )
 
-    await handle_media(
-        call=call,
-        client=client,
-        sound_url=CONFIG.prompts.sounds.loading(),
-    )  # Play loading sound a first time
-
     def _clear_tasks() -> None:
         chat_task.cancel()
         hard_timeout_task.cancel()
@@ -146,7 +149,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                 is_error, continue_chat, call = (
                     chat_task.result()
                 )  # Store updated chat model
-                await trainings_callback(call)  # Trigger trainings generation
+                await training_callback(call)  # Trigger trainings generation
                 await _db.call_aset(
                     call
                 )  # Save ASAP in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
@@ -161,13 +164,13 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                 _clear_tasks()
                 break
 
-            if should_play_sound:  # Catch timeout if async loading is not started
+            if play_loading_sound:  # Catch timeout if async loading is not started
                 if (
                     soft_timeout_task.done() and not soft_timeout_triggered
                 ):  # Speak when soft timeout is reached
                     logger.warning(
                         "Soft timeout of %ss reached",
-                        CONFIG.conversation.answer_soft_timeout_sec,
+                        await answer_soft_timeout_sec(),
                     )
                     soft_timeout_triggered = True
                     # Never store the error message in the call history, it has caused hallucinations in the LLM
@@ -206,7 +209,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                 call=call,
                 client=client,
                 post_callback=post_callback,
-                trainings_callback=trainings_callback,
+                training_callback=training_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
     else:
@@ -216,7 +219,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                 call=call,
                 client=client,
                 post_callback=post_callback,
-                trainings_callback=trainings_callback,
+                training_callback=training_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )  # Recursive chat (like for for retry or tools)
 

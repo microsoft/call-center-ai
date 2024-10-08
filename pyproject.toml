@@ -4,7 +4,7 @@ dynamic = ["version"]
 license = {file = "LICENSE"}
 name = "call-center-ai"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
   "aiohttp-retry~=2.8",  # Retry middleware for aiohttp, used with Twilio SDK
   "aiohttp[speedups]~=3.9",  # Async HTTP client for Azure and Twilio SDKs, plus async DNS resolver and async Brotli compression
@@ -15,12 +15,13 @@ dependencies = [
   "azure-communication-sms~=1.0",  # Azure Communication Services SMS
   "azure-cosmos~=4.7",  # Azure Cosmos DB
   "azure-eventgrid~=4.20",  # Azure Event Grid
-  "azure-functions~=1.20",  # Azure Functions
   "azure-identity~=1.17",  # Azure identity library
   "azure-monitor-opentelemetry~=1.6",  # Azure Monitor OpenTelemetry
   "azure-search-documents==11.6.0b4",  # Azure AI Search
   "azure-storage-queue~=12.10",  # Azure Storage Queue
   "django-htmlmin~=0.11",  # Minify HTML
+  "fastapi~=0.115",  # Web framework
+  "gunicorn~=23.0",  # Application server
   "jinja2~=3.1",  # Template engine, used for prompts and web views
   "json-repair~=0.25",  # Repair JSON files from LLM
   "mistune~=3.0",  # Markdown parser for web views
@@ -37,6 +38,7 @@ dependencies = [
   "pydantic[email]~=2.7",  # Data serialization and validation, plus email validation
   "pyjwt~=2.8",  # Secure inbound calls from Communication Services
   "python-dotenv~=1.0",  # Load environment variables from .env file
+  "python-multipart~=0.0",  # Form parsing
   "pytz~=2024.0",  # Time zone handling
   "pyyaml~=6.0",  # YAML parser
   "redis~=5.0",  # Redis client
@@ -44,6 +46,7 @@ dependencies = [
   "tiktoken~=0.7",  # Tokenization library for OpenAI models
   "twilio~=9.2",  # Twilio SDK, used for SMS
   "typing-extensions~=4.12",  # Typing extensions for Python 3.6+
+  "uvicorn[standard]~=0.31",  # Application middleware
 ]
 
 [project.optional-dependencies]
@@ -81,7 +84,7 @@ DEP002 = [
 ]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
@@ -90,4 +93,4 @@ combine-as-imports = true
 docstring-code-format = true
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.12"

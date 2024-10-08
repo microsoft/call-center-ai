@@ -1,7 +1,7 @@
 from enum import Enum
 from functools import cache
 
-from pydantic import BaseModel, SecretStr, ValidationInfo, field_validator
+from pydantic import BaseModel, ValidationInfo, field_validator
 
 from persistence.istore import IStore
 
@@ -12,7 +12,6 @@ class ModeEnum(str, Enum):
 
 
 class CosmosDbModel(BaseModel, frozen=True):
-    access_key: SecretStr
     container: str
     database: str
     endpoint: str
