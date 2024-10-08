@@ -673,6 +673,8 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
+                post_callback=_post_callback,
+                training_callback=_training_callback,
             )
         else:  # Unknown error
             await on_recognize_unknown_error(

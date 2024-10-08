@@ -174,6 +174,8 @@ async def on_recognize_timeout_error(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: set[CallContextEnum] | None,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     if (
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
@@ -186,7 +188,12 @@ async def on_recognize_timeout_error(
                 call.recognition_retry,
                 await voice_recognition_retry_max(),
             )
-            await _handle_ivr_language(call=call, client=client)
+            await _handle_ivr_language(
+                call=call,
+                client=client,
+                post_callback=post_callback,
+                training_callback=training_callback,
+            )
         else:  # IVR retries are exhausted, end call
             logger.info("Timeout, ending call")
             await _handle_goodbye(
