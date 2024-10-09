@@ -176,19 +176,19 @@ graph LR
   user(["User"])
 
   subgraph "Claim AI"
-    ada["Embedding\n(ADA)"]
-    app["App\n(Functions App)"]
-    communication_services["Call & SMS gateway\n(Communication Services)"]
-    db[("Conversations and claims\n(Cosmos DB / SQLite)")]
-    eventgrid["Broker\n(Event Grid)"]
-    gpt["LLM\n(GPT-4o)"]
-    queues[("Queues\n(Azure Storage)")]
-    redis[("Cache\n(Redis)")]
-    search[("RAG\n(AI Search)")]
-    sounds[("Sounds\n(Azure Storage)")]
-    sst["Speech-to-Text\n(Cognitive Services)"]
-    translation["Translation\n(Cognitive Services)"]
-    tts["Text-to-Speech\n(Cognitive Services)"]
+    ada["Embedding<br>(ADA)"]
+    app["App<br>(Container App)"]
+    communication_services["Call & SMS gateway<br>(Communication Services)"]
+    db[("Conversations and claims<br>(Cosmos DB / SQLite)")]
+    eventgrid["Broker<br>(Event Grid)"]
+    gpt["LLM<br>(GPT-4o)"]
+    queues[("Queues<br>(Azure Storage)")]
+    redis[("Cache<br>(Redis)")]
+    search[("RAG<br>(AI Search)")]
+    sounds[("Sounds<br>(Azure Storage)")]
+    sst["Speech-to-Text<br>(Cognitive Services)"]
+    translation["Translation<br>(Cognitive Services)"]
+    tts["Text-to-Speech<br>(Cognitive Services)"]
   end
 
   app -- Respond with text --> communication_services
