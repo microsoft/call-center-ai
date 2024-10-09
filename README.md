@@ -177,7 +177,7 @@ graph LR
 
   subgraph "Claim AI"
     ada["Embedding<br>(ADA)"]
-    app["App<br>(Functions App)"]
+    app["App<br>(Container App)"]
     communication_services["Call & SMS gateway<br>(Communication Services)"]
     db[("Conversations and claims<br>(Cosmos DB / SQLite)")]
     eventgrid["Broker<br>(Event Grid)"]
