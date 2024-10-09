@@ -65,9 +65,7 @@ dev = [
 
 [tool.setuptools]
 py-modules = [
-  "helpers",
-  "models",
-  "persistence",
+  "app",
 ]
 
 [tool.pip-tools]

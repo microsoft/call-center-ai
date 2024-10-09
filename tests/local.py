@@ -1,6 +1,6 @@
 import asyncio
 
-from helpers.call_events import (
+from app.helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
     on_end_call,
@@ -8,9 +8,9 @@ from helpers.call_events import (
     on_play_completed,
     on_speech_recognized,
 )
-from helpers.config import CONFIG
-from helpers.logging import logger
-from models.call import CallInitiateModel, CallStateModel
+from app.helpers.config import CONFIG
+from app.helpers.logging import logger
+from app.models.call import CallInitiateModel, CallStateModel
 from tests.conftest import CallAutomationClientMock
 
 

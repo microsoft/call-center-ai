@@ -17,7 +17,7 @@ from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
 from pytest_assume.plugin import assume
 
-from helpers.call_events import (
+from app.helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
     on_end_call,
@@ -25,10 +25,10 @@ from helpers.call_events import (
     on_play_completed,
     on_speech_recognized,
 )
-from helpers.logging import logger
-from models.call import CallStateModel
-from models.reminder import ReminderModel
-from models.training import TrainingModel
+from app.helpers.logging import logger
+from app.models.call import CallStateModel
+from app.models.reminder import ReminderModel
+from app.models.training import TrainingModel
 from tests.conftest import CallAutomationClientMock, with_conversations
 
 

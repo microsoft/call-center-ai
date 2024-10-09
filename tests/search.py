@@ -9,11 +9,11 @@ from deepeval.test_case import LLMTestCase
 from pydantic import TypeAdapter
 from pytest_assume.plugin import assume
 
-from helpers.config import CONFIG
-from helpers.logging import logger
-from models.call import CallStateModel
-from models.message import MessageModel, PersonaEnum as MessagePersonaEnum
-from models.training import TrainingModel
+from app.helpers.config import CONFIG
+from app.helpers.logging import logger
+from app.models.call import CallStateModel
+from app.models.message import MessageModel, PersonaEnum as MessagePersonaEnum
+from app.models.training import TrainingModel
 from tests.conftest import with_conversations
 
 

@@ -20,11 +20,11 @@ from deepeval.models.gpt_model import GPTModel
 from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, ValidationError
 
-from helpers.call_utils import ContextEnum as CallContextEnum
-from helpers.config import CONFIG
-from helpers.logging import logger
-from main import _str_to_contexts
-from models.call import CallInitiateModel, CallStateModel
+from app.helpers.call_utils import ContextEnum as CallContextEnum
+from app.helpers.config import CONFIG
+from app.helpers.logging import logger
+from app.main import _str_to_contexts
+from app.models.call import CallInitiateModel, CallStateModel
 
 
 class CallConnectionClientMock(CallConnectionClient):
