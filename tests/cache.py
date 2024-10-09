@@ -1,8 +1,8 @@
 import pytest
 from pytest_assume.plugin import assume
 
-from helpers.config import CONFIG
-from helpers.config_models.cache import ModeEnum as CacheModeEnum
+from app.helpers.config import CONFIG
+from app.helpers.config_models.cache import ModeEnum as CacheModeEnum
 
 
 @pytest.mark.parametrize(

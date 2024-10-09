@@ -65,9 +65,7 @@ dev = [
 
 [tool.setuptools]
 py-modules = [
-  "helpers",
-  "models",
-  "persistence",
+  "app",
 ]
 
 [tool.pip-tools]
@@ -84,7 +82,7 @@ DEP002 = [
 ]
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py312"
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

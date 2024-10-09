@@ -107,15 +107,15 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) python3 -m gunicorn main:api \
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) python3 -m gunicorn app.main:api \
 		--access-logfile - \
 		--bind 0.0.0.0:8080 \
 		--proxy-protocol \
 		--reload \
 		--reload-extra-file .env \
 		--reload-extra-file config.yaml \
-		--workers 2 \
-		--worker-class uvicorn.workers.UvicornWorker
+		--worker-class uvicorn.workers.UvicornWorker \
+		--workers 2
 
 build:
 	$(docker) build \
@@ -145,11 +145,11 @@ deploy-bicep:
 			'openaiLocation=$(openai_location)' \
 			'promptContentFilter=$(prompt_content_filter)' \
 			'searchLocation=$(search_location)' \
-		--template-file bicep/main.bicep \
+		--template-file cicd/bicep/main.bicep \
 	 	--name $(name_sanitized)
 
 deploy-post:
-	@$(MAKE) copy-resources \
+	@$(MAKE) copy-public \
 		name=$(blob_storage_public_name)
 
 	@$(MAKE) twilio-register \
@@ -180,8 +180,8 @@ twilio-register:
 	twilio phone-numbers:update $(twilio_phone_number) \
 		--sms-url $(endpoint)/twilio/sms
 
-copy-resources:
-	@echo "📦 Copying resources to Azure storage account..."
+copy-public:
+	@echo "📦 Copying public resources..."
 	az storage blob upload-batch \
 		--account-name $(name_sanitized) \
 		--auth-mode login \
@@ -189,7 +189,7 @@ copy-resources:
 		--no-progress \
 		--output none \
 		--overwrite \
-		--source resources
+		--source public
 
 watch-call:
 	@echo "👀 Watching status of $(phone_number)..."
