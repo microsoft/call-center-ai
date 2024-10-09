@@ -38,8 +38,6 @@ USER appuser
 COPY --from=build /venv /venv
 ENV PATH=/venv/bin:$PATH
 
-COPY --chown=appuser:appuser /app /app/
-
-WORKDIR /app
+COPY --chown=appuser:appuser /app /app
 
 CMD ["bash", "-c", "gunicorn app.main:api --bind 0.0.0.0:8080 --proxy-protocol --workers 4 --worker-class uvicorn.workers.UvicornWorker"]
