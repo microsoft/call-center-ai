@@ -493,7 +493,7 @@ make dev
 
 ## Advanced usage
 
-## Enable call recording
+### Enable call recording
 
 Call recording is disabled by default. To enable it:
 
