@@ -126,13 +126,27 @@ class AzureQueueStorage:
         arg: str,
         func: Callable[..., Awaitable],
     ):
+        """
+        Trigger a local function when a message is received.
+        """
+        logger.info(
+            'Azure Queue Storage "%s" is set to trigger function "%s"',
+            self._name,
+            func.__name__,
+        )
+        # Loop forever to receive messages
         while messages := self.receive_messages(
             max_messages=32,
             visibility_timeout=32 * 5,  # 5 secs per message
         ):
+            # Process messages
             async for message in messages:
+                # Call function with the selected argument name
                 kwargs = {}
                 kwargs[arg] = message
+                # First, call function
                 await func(**kwargs)
+                # Then, delete message
                 await self.delete_message(message)
-            await asyncio.sleep(1)  # Add a small delay to avoid tight loop
+            # Add a small delay to avoid tight loop
+            await asyncio.sleep(1)
