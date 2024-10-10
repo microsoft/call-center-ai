@@ -62,20 +62,17 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
         """
         nonlocal play_loading_sound
 
-        # Disable loading sound when LLM starts to speak
+        # For first TTS, interrupt loading sound and disable loading it
+        interrupt_queue = False
         if play_loading_sound:
-            # First, clear remaining loading sound
-            await handle_clear_queue(
-                call=call,
-                client=client,
-            )
-            # Then, disable loading sound
+            interrupt_queue = True
             play_loading_sound = False
 
         await asyncio.gather(
             handle_recognize_text(
                 call=call,
                 client=client,
+                interrupt_queue=interrupt_queue,
                 style=style,
                 text=text,
             ),  # First, recognize the next voice

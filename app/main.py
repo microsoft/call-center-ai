@@ -828,8 +828,9 @@ async def twilio_sms_post(
 
 @api.exception_handler(StarletteHTTPException)
 async def http_exception_handler(
-    request: Request, exc: StarletteHTTPException
-) -> JSONResponse:  # noqa: ARG001
+    request: Request,  # noqa: ARG001
+    exc: StarletteHTTPException,
+) -> JSONResponse:
     """
     Handle HTTP exceptions and return the error in a standard format.
     """
@@ -841,8 +842,9 @@ async def http_exception_handler(
 
 @api.exception_handler(RequestValidationError)
 async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:  # noqa: ARG001
+    request: Request,  # noqa: ARG001
+    exc: RequestValidationError,
+) -> JSONResponse:
     """
     Handle validation exceptions and return the error in a standard format.
     """
