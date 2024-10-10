@@ -740,6 +740,19 @@ prompts:
       {reminders}
 ```
 
+### Optimize response delay
+
+The delay mainly come from two things:
+
+- The fact that Azure Communication Services is sequential in the way it forwards the audio (it technically foarwards only the text, not the audio, and once the entire audio is transformed, after waited for a specified blank time)
+- The LLM, more specifically the delay between API call and first sentence infered, can be long (as the sentences are sent one by one once they are made avalable), even longer if it hallucinate and returns empty answers (it happens regularly, and the applicatoipn retries the call)
+
+From now, the only impactful thing you can do is the LLM part. This can be acheieve by a PTU on Azure or using a less smart model like `gpt-4o-mini` (selected by default on the latest versions). With a PTU on Azure OpenAI, you can divide by 2 the latency in some case.
+
+The application is natively connected to Azure Application Insights, so you can monitor the response time and see where the time is spent. This is a great start to identify the bottlenecks.
+
+Feel free to raise an issue or propose a PR if you have any idea to optimize the response delay.
+
 ## Q&A
 
 ### Why no LLM framework is used?
