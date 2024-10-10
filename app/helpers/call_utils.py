@@ -84,10 +84,11 @@ def tts_sentence_split(
 
 
 # TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
-async def _handle_recognize_media(
+async def _handle_recognize_media(  # noqa: PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
     context: ContextEnum | None,
+    interrupt: bool,
     style: MessageStyleEnum,
     text: str | None,
 ) -> None:
@@ -103,6 +104,7 @@ async def _handle_recognize_media(
             await call_client.start_recognizing_media(
                 end_silence_timeout=await phone_silence_timeout_sec(),
                 input_type=RecognizeInputType.SPEECH,
+                interrupt_call_media_operation=interrupt,
                 interrupt_prompt=True,
                 operation_context=_context_builder({context}),
                 play_prompt=(
@@ -126,12 +128,13 @@ async def _handle_recognize_media(
             raise e
 
 
-async def _handle_play_text(
+async def _handle_play_text(  # noqa: PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
+    context: ContextEnum | None,
+    interrupt_queue: bool,
+    style: MessageStyleEnum,
     text: str,
-    context: ContextEnum | None = None,
-    style: MessageStyleEnum = MessageStyleEnum.NONE,
 ) -> None:
     """
     Play a text to a call participant.
@@ -143,6 +146,7 @@ async def _handle_play_text(
         assert call.voice_id, "Voice ID is required for playing text"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
+                interrupt_call_media_operation=interrupt_queue,
                 operation_context=_context_builder({context}),
                 play_source=_audio_from_text(
                     call=call,
@@ -191,6 +195,7 @@ async def handle_recognize_text(  # noqa: PLR0913
     client: CallAutomationClient,
     text: str | None,
     context: ContextEnum | None = None,
+    interrupt_queue: bool = False,
     no_response_error: bool = False,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
@@ -200,38 +205,50 @@ async def handle_recognize_text(  # noqa: PLR0913
 
     If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
     """
-    if not text:  # Only recognize
+    # Only recognize
+    if not text:
         await _handle_recognize_media(
             call=call,
             client=client,
             context=context,
+            interrupt=interrupt_queue,
             style=style,
             text=None,
         )
         return
 
+    # Split text in chunks
     chunks = await _chunk_before_tts(
         call=call,
         store=store,
         style=style,
         text=text,
     )
+
+    # Play each chunk
     for i, chunk in enumerate(chunks):
-        if i == len(chunks) - 1:  # Last chunk
+        # For first chunk, interrupt media if needed
+        chunck_interrupt_queue = interrupt_queue if i == 0 else False
+
+        # For last chunk, recognize media to let user to interrupt bot
+        if i == len(chunks) - 1:
             if no_response_error:
                 await _handle_recognize_media(
                     call=call,
                     client=client,
                     context=context,
+                    interrupt=chunck_interrupt_queue,
                     style=style,
                     text=chunk,
                 )
                 return
 
+        # For other chunks, play text
         await _handle_play_text(
             call=call,
             client=client,
             context=context,
+            interrupt_queue=chunck_interrupt_queue,
             style=style,
             text=chunk,
         )
@@ -242,6 +259,7 @@ async def handle_play_text(  # noqa: PLR0913
     client: CallAutomationClient,
     text: str,
     context: ContextEnum | None = None,
+    interrupt_queue: bool = False,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
 ) -> None:
@@ -250,17 +268,25 @@ async def handle_play_text(  # noqa: PLR0913
 
     If `store` is `True`, the text will be stored in the call messages.
     """
+    # Split text in chunks
     chunks = await _chunk_before_tts(
         call=call,
         store=store,
         style=style,
         text=text,
     )
-    for chunk in chunks:
+
+    # Play each chunk
+    for i, chunk in enumerate(chunks):
+        # For first chunk, interrupt media if needed
+        chunck_interrupt_queue = interrupt_queue if i == 0 else False
+
+        # Play text
         await _handle_play_text(
             call=call,
             client=client,
             context=context,
+            interrupt_queue=chunck_interrupt_queue,
             style=style,
             text=chunk,
         )
