@@ -192,9 +192,9 @@ azure-monitor-opentelemetry-exporter==1.0.0b27 \
     --hash=sha256:92f222e11415c6606588be0166b02ba4970159c6bf016160a2023b3713db9f31 \
     --hash=sha256:ee5eb0bb37c29da800cc479084f42181a98d7ad192a27a9b2fdd9cb9957320ad
     # via azure-monitor-opentelemetry
-azure-search-documents==11.6.0b4 \
-    --hash=sha256:9590392464f882762ce6bad03613c822d4423f09f311c275b833de25398c00c1 \
-    --hash=sha256:b09fc3fa2813e83e7177874b352c84462fb86934d9f4299775361e1dfccc3f8f
+azure-search-documents==11.6.0b6 \
+    --hash=sha256:323dce21b584becc72fe8bc22db015fad1db7b62305a27f63609cfa76bfbd340 \
+    --hash=sha256:8e64777f2b98d08ae7f8e64a0312e99a2e904e8b8709aea42dc5f5017c1856fb
     # via call-center-ai (pyproject.toml)
 azure-storage-queue==12.10.0 \
     --hash=sha256:767ba3d5cccdb4f70974e5ce61d164c7ab74732cfb2b441dd8737669a2116da8 \

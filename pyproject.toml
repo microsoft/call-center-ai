@@ -17,7 +17,7 @@ dependencies = [
   "azure-eventgrid~=4.20",  # Azure Event Grid
   "azure-identity~=1.17",  # Azure identity library
   "azure-monitor-opentelemetry~=1.6",  # Azure Monitor OpenTelemetry
-  "azure-search-documents==11.6.0b4",  # Azure AI Search
+  "azure-search-documents==11.6.0b6",  # Azure AI Search
   "azure-storage-queue~=12.10",  # Azure Storage Queue
   "django-htmlmin~=0.11",  # Minify HTML
   "fastapi~=0.115",  # Web framework
