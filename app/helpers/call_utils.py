@@ -128,11 +128,10 @@ async def _handle_recognize_media(  # noqa: PLR0913
             raise e
 
 
-async def _handle_play_text(  # noqa: PLR0913
+async def _handle_play_text(
     call: CallStateModel,
     client: CallAutomationClient,
     context: ContextEnum | None,
-    interrupt_queue: bool,
     style: MessageStyleEnum,
     text: str,
 ) -> None:
@@ -146,7 +145,6 @@ async def _handle_play_text(  # noqa: PLR0913
         assert call.voice_id, "Voice ID is required for playing text"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
-                interrupt_call_media_operation=interrupt_queue,
                 operation_context=_context_builder({context}),
                 play_source=_audio_from_text(
                     call=call,
@@ -248,7 +246,6 @@ async def handle_recognize_text(  # noqa: PLR0913
             call=call,
             client=client,
             context=context,
-            interrupt_queue=chunck_interrupt_queue,
             style=style,
             text=chunk,
         )
@@ -259,7 +256,6 @@ async def handle_play_text(  # noqa: PLR0913
     client: CallAutomationClient,
     text: str,
     context: ContextEnum | None = None,
-    interrupt_queue: bool = False,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
 ) -> None:
@@ -277,16 +273,11 @@ async def handle_play_text(  # noqa: PLR0913
     )
 
     # Play each chunk
-    for i, chunk in enumerate(chunks):
-        # For first chunk, interrupt media if needed
-        chunck_interrupt_queue = interrupt_queue if i == 0 else False
-
-        # Play text
+    for chunk in chunks:
         await _handle_play_text(
             call=call,
             client=client,
             context=context,
-            interrupt_queue=chunck_interrupt_queue,
             style=style,
             text=chunk,
         )
