@@ -1,19 +1,20 @@
 param cognitiveCommunicationLocation string
 param embeddingDeploymentType string = 'Standard' // Pay-as-you-go in a single region
-param embeddingModel string = 'text-embedding-ada-002'
-param embeddingQuota int = 100
-param embeddingVersion string = '2'
+param embeddingDimensions int = 3072
+param embeddingModel string = 'text-embedding-3-large'
+param embeddingQuota int = 50
+param embeddingVersion string = '1'
 param imageVersion string = 'main'
 param instance string
 param llmFastContext int = 128000
 param llmFastDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
 param llmFastModel string = 'gpt-4o-mini'
-param llmFastQuota int = 600
+param llmFastQuota int = 50
 param llmFastVersion string = '2024-07-18'
 param llmSlowContext int = 128000
 param llmSlowDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
 param llmSlowModel string = 'gpt-4o'
-param llmSlowQuota int = 300
+param llmSlowQuota int = 50
 param llmSlowVersion string = '2024-08-06'
 param location string = deployment().location
 param openaiLocation string
@@ -47,6 +48,7 @@ module app 'app.bicep' = {
   params: {
     cognitiveCommunicationLocation: cognitiveCommunicationLocation
     embeddingDeploymentType: embeddingDeploymentType
+    embeddingDimensions: embeddingDimensions
     embeddingModel: embeddingModel
     embeddingQuota: embeddingQuota
     embeddingVersion: embeddingVersion

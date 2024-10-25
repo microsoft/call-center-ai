@@ -13,6 +13,7 @@ class TrainingModel(BaseModel, frozen=True):
     content: str
     id: UUID
     score: float
+    title: str
 
     def __hash__(self) -> int:
         return self.id.__hash__()
