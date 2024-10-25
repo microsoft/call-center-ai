@@ -1,5 +1,6 @@
 param cognitiveCommunicationLocation string
 param embeddingDeploymentType string
+param embeddingDimensions int
 param embeddingModel string
 param embeddingQuota int
 param embeddingVersion string
@@ -91,6 +92,10 @@ var config = {
     }
   }
   ai_search: {
+    embedding_deployment: embedding.name
+    embedding_dimensions: embeddingDimensions
+    embedding_endpoint: cognitiveOpenai.properties.endpoint
+    embedding_model: embeddingModel
     endpoint: 'https://${search.name}.search.windows.net'
     index: 'trainings'
   }
@@ -494,6 +499,16 @@ resource assignmentsContainerAppOpenaiContributor 'Microsoft.Authorization/roleA
   }
 }
 
+resource assignmentSearchOpenaiContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, cognitiveOpenai.name, 'assignmentSearchOpenaiContributor')
+  scope: cognitiveOpenai
+  properties: {
+    principalId: search.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleOpenaiContributor.id
+  }
+}
+
 resource cognitiveOpenai 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   name: '${prefix}-${openaiLocation}-openai'
   location: openaiLocation
@@ -784,6 +799,11 @@ resource search 'Microsoft.Search/searchServices@2024-06-01-preview' = {
   }
 }
 
+// Search Service Contributor
+resource roleSearchContributor 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '7ca78c08-252a-4471-8644-bb5ff32d4ba0'
+}
+
 // Search Index Data Reader
 resource roleSearchDataReader 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: '1407120a-92aa-4202-b7e9-c0e197c71c8f'
@@ -796,6 +816,16 @@ resource assignmentSearchDataReader 'Microsoft.Authorization/roleAssignments@202
     principalId: containerApp.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: roleSearchDataReader.id
+  }
+}
+
+resource assignmentSearchContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, search.name, 'assignmentSearchContributor')
+  scope: search
+  properties: {
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleSearchContributor.id
   }
 }
 

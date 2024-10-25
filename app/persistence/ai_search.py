@@ -1,10 +1,29 @@
 from azure.core.exceptions import (
     HttpResponseError,
+    ResourceExistsError,
     ResourceNotFoundError,
     ServiceRequestError,
     ServiceResponseError,
 )
 from azure.search.documents.aio import SearchClient
+from azure.search.documents.indexes.aio import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    AzureOpenAIParameters,
+    AzureOpenAIVectorizer,
+    HnswAlgorithmConfiguration,
+    LexicalAnalyzerName,
+    SearchableField,
+    SearchField,
+    SearchFieldDataType,
+    SearchIndex,
+    SemanticConfiguration,
+    SemanticField,
+    SemanticPrioritizedFields,
+    SemanticSearch,
+    SimpleField,
+    VectorSearch,
+    VectorSearchProfile,
+)
 from azure.search.documents.models import (
     HybridCountAndFacetMode,
     HybridSearch,
@@ -156,14 +175,122 @@ class AiSearchSearch(ISearch):
         return trainings or None
 
     async def _use_client(self) -> SearchClient:
-        if not self._client:
-            self._client = SearchClient(
-                # Deployment
-                endpoint=self._config.endpoint,
-                index_name=self._config.index,
-                # Performance
-                transport=await azure_transport(),
-                # Authentication
-                credential=await credential(),
-            )
+        """
+        Get the search client.
+
+        If the index does not exist, it will be created.
+        """
+        if self._client:
+            return self._client
+
+        # Index configuration
+        fields = [
+            # Required field for indexing key
+            SimpleField(
+                name="id",
+                key=True,
+                type=SearchFieldDataType.String,
+            ),
+            # Custom fields
+            SearchableField(
+                analyzer_name=LexicalAnalyzerName.STANDARD_LUCENE,
+                name="content",
+                type=SearchFieldDataType.String,
+            ),
+            SearchableField(
+                analyzer_name=LexicalAnalyzerName.STANDARD_LUCENE,
+                name="title",
+                type=SearchFieldDataType.String,
+            ),
+            SearchField(
+                name="vectors",
+                searchable=True,
+                type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                vector_search_dimensions=self._config.embedding_dimensions,
+                vector_search_profile_name="profile-default",
+            ),
+        ]
+        vector_search = VectorSearch(
+            profiles=[
+                VectorSearchProfile(
+                    algorithm_configuration_name="algorithm-default",
+                    name="profile-default",
+                    vectorizer="vectorizer-default",
+                ),
+            ],
+            algorithms=[
+                HnswAlgorithmConfiguration(
+                    name="algorithm-default",
+                ),
+            ],
+            vectorizers=[
+                AzureOpenAIVectorizer(
+                    name="vectorizer-default",
+                    # Without credentials specified, the database will use its system managed identity
+                    azure_open_ai_parameters=AzureOpenAIParameters(
+                        deployment_id=self._config.embedding_deployment,
+                        model_name=self._config.embedding_model,
+                        resource_uri=self._config.embedding_endpoint,
+                    ),
+                )
+            ],
+        )
+        semantic_search = SemanticSearch(
+            default_configuration_name=self._config.semantic_configuration,
+            configurations=[
+                SemanticConfiguration(
+                    name=self._config.semantic_configuration,
+                    prioritized_fields=SemanticPrioritizedFields(
+                        title_field=SemanticField(
+                            field_name="title",
+                        ),
+                        content_fields=[
+                            SemanticField(
+                                field_name="content",
+                            ),
+                        ],
+                    ),
+                ),
+            ],
+        )
+
+        # Create index if it does not exist
+        async with SearchIndexClient(
+            # Deployment
+            endpoint=self._config.endpoint,
+            index_name=self._config.index,
+            # Index configuration
+            fields=fields,
+            semantic_search=semantic_search,
+            vector_search=vector_search,
+            # Performance
+            transport=await azure_transport(),
+            # Authentication
+            credential=await credential(),
+        ) as client:
+            try:
+                await client.create_index(
+                    SearchIndex(
+                        fields=fields,
+                        name=self._config.index,
+                        vector_search=vector_search,
+                    )
+                )
+                logger.info('Created Search "%s"', self._config.index)
+            except ResourceExistsError:
+                pass
+            except HttpResponseError as e:
+                if not e.error or not e.error.code == "ResourceNameAlreadyInUse":
+                    raise e
+
+        # Return client
+        self._client = SearchClient(
+            # Deployment
+            endpoint=self._config.endpoint,
+            index_name=self._config.index,
+            # Performance
+            transport=await azure_transport(),
+            # Authentication
+            credential=await credential(),
+        )
         return self._client

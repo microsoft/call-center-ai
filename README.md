@@ -357,12 +357,7 @@ make deploy name=my-rg-name
 
 - Wait for the deployment to finish
 
-#### 4. [Create a AI Search resource](https://learn.microsoft.com/en-us/azure/search/search-create-service-portal)
-
-- An index named `trainings`
-- A semantic search configuration on the index named `default`
-
-#### 5. Get the logs
+#### 4. Get the logs
 
 ```zsh
 make logs name=my-rg-name
@@ -430,6 +425,10 @@ llm:
       streaming: true
 
 ai_search:
+  embedding_deployment: text-embedding-3-large-1
+  embedding_dimensions: 3072
+  embedding_endpoint: https://xxx.openai.azure.com
+  embedding_model: text-embedding-3-large
   endpoint: https://xxx.search.windows.net
   index: trainings
 
