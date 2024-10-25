@@ -1,8 +1,8 @@
 param cognitiveCommunicationLocation string
 param embeddingDeploymentType string = 'Standard' // Pay-as-you-go in a single region
-param embeddingModel string = 'text-embedding-ada-002'
+param embeddingModel string = 'text-embedding-3-large'
 param embeddingQuota int = 100
-param embeddingVersion string = '2'
+param embeddingVersion string = '1'
 param imageVersion string = 'main'
 param instance string
 param llmFastContext int = 128000
