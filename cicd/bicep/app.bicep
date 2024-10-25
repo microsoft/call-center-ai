@@ -536,35 +536,35 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-06
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'hate'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Prompt'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'sexual'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Prompt'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'selfharm'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Prompt'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'violence'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Prompt'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'profanity'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Prompt'
       }
       // Completion
@@ -572,35 +572,35 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-06
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'hate'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Completion'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'sexual'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Completion'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'selfharm'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Completion'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'violence'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Completion'
       }
       {
         blocking: !promptContentFilter
         enabled: !promptContentFilter
         name: 'profanity'
-        severityThreshold: 'Low'
+        severityThreshold: 'High'
         source: 'Completion'
       }
     ]
