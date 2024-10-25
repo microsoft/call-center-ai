@@ -1,4 +1,5 @@
 import json
+import random
 from datetime import datetime
 from functools import cached_property
 from html import escape
@@ -492,24 +493,56 @@ class LlmModel(BaseModel):
 
 class TtsModel(BaseModel):
     tts_lang: str = "en-US"
-    calltransfer_failure_tpl: str = "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible."
-    connect_agent_tpl: str = "I'm sorry, I wasn't able to respond your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly."
-    end_call_to_connect_agent_tpl: str = (
-        "Of course, stay on the line. I will transfer you to an agent."
-    )
-    error_tpl: str = (
-        "I'm sorry, I have encountered an error. Could you repeat your request?"
-    )
-    goodbye_tpl: str = "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!"
-    hello_tpl: str = """
-        Hello, I'm {bot_name}, the virtual assistant {bot_company}! Here's how I work: while I'm processing your information, wou will hear a music. Feel free to speak to me in a natural way - I'm designed to understand your requests. During the conversation, you can also send me text messages.
-"""
-    timeout_silence_tpl: str = "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you."
-    welcome_back_tpl: str = "Hello, I'm {bot_name}, from {bot_company}!"
-    timeout_loading_tpl: str = (
-        "It's taking me longer than expected to reply. Thank you for your patience…"
-    )
-    ivr_language_tpl: str = "To continue in {label}, press {index}."
+    calltransfer_failure_tpl: list[str] = [
+        "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible.",
+        "I'm unable to connect you with an agent right now, but someone will get back to you shortly.",
+        "Sorry, no agents are available. We'll call you back soon.",
+    ]
+    connect_agent_tpl: list[str] = [
+        "I'm sorry, I wasn't able to respond to your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly.",
+        "I apologize for not being able to assist you. Let me connect you to an agent who can help. Please hold on.",
+        "Sorry for the inconvenience. I'll transfer you to an agent now. Please hold.",
+    ]
+    end_call_to_connect_agent_tpl: list[str] = [
+        "Of course, stay on the line. I will transfer you to an agent.",
+        "Sure, please hold on. I'll connect you to an agent.",
+        "Hold on, I'll transfer you now.",
+    ]
+    error_tpl: list[str] = [
+        "I'm sorry, I didn't understand. Can you rephrase?",
+        "I didn't catch that. Could you say it differently?",
+        "Please repeat that.",
+    ]
+    goodbye_tpl: list[str] = [
+        "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!",
+        "It was a pleasure assisting you today. Remember, {bot_company} is always here to help. Have a fantastic day!",
+        "Thanks for reaching out! {bot_company} appreciates you. Have a great day!",
+    ]
+    hello_tpl: list[str] = [
+        "Hello, I'm {bot_name}, the virtual assistant from {bot_company}! Here's how I work: while I'm processing your information, you will hear music. Feel free to speak to me in a natural way - I'm designed to understand your requests. During the conversation, you can also send me text messages.",
+        "Hi there! I'm {bot_name} from {bot_company}. While I process your info, you'll hear some music. Just talk to me naturally, and you can also send text messages.",
+        "Hello! I'm {bot_name} from {bot_company}. Speak naturally, and you can also text me.",
+    ]
+    timeout_silence_tpl: list[str] = [
+        "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you.",
+        "It seems quiet on your end. How can I assist you?",
+        "I didn't catch that. How can I help?",
+    ]
+    welcome_back_tpl: list[str] = [
+        "Hello, I'm {bot_name}, from {bot_company}!",
+        "Hi there, {bot_name} from {bot_company} here!",
+        "Hey, it's {bot_name} from {bot_company}!",
+    ]
+    timeout_loading_tpl: list[str] = [
+        "It's taking me longer than expected to reply. Thank you for your patience…",
+        "I'm working on your request. Thanks for waiting!",
+        "Please hold on, I'm almost done.",
+    ]
+    ivr_language_tpl: list[str] = [
+        "To continue in {label}, press {index}.",
+        "Press {index} for {label}.",
+        "For {label}, press {index}.",
+    ]
 
     async def calltransfer_failure(self, call: CallStateModel) -> str:
         return await self._translate(self.calltransfer_failure_tpl, call)
@@ -566,15 +599,20 @@ class TtsModel(BaseModel):
                 )
                 + " "
             )
-        return await self._translate(res.strip(), call)
+        return await self._translate([res], call)
 
-    def _return(self, prompt_tpl: str, **kwargs) -> str:
+    def _return(self, prompt_tpls: list[str], **kwargs) -> str:
         """
         Remove possible indentation in a string.
         """
+        # Select a random prompt template
+        prompt_tpl = random.choice(prompt_tpls)
+        # Format it
         return dedent(prompt_tpl.format(**kwargs)).strip()
 
-    async def _translate(self, prompt_tpl: str, call: CallStateModel, **kwargs) -> str:
+    async def _translate(
+        self, prompt_tpls: list[str], call: CallStateModel, **kwargs
+    ) -> str:
         """
         Format the prompt and translate it to the TTS language.
 
@@ -584,7 +622,7 @@ class TtsModel(BaseModel):
             translate_text,
         )
 
-        initial = self._return(prompt_tpl, **kwargs)
+        initial = self._return(prompt_tpls, **kwargs)
         translation = None
         try:
             translation = await translate_text(
