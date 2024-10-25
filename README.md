@@ -681,24 +681,25 @@ sms:
 
 ### Customize the prompts
 
-Note that prompt examples contains `{xxx}` placeholders. These placeholders are replaced by the bot with the corresponding data. For example, `{bot_name}` is internally replaced by the bot name.
-
-Be sure to write all the TTS prompts in English. This language is used as a pivot language for the conversation translation.
+Note that prompt examples contains `{xxx}` placeholders. These placeholders are replaced by the bot with the corresponding data. For example, `{bot_name}` is internally replaced by the bot name. Be sure to write all the TTS prompts in English. This language is used as a pivot language for the conversation translation. All texts are referenced as lists, so user can have a different experience each time they call, thus making the conversation more engaging.
 
 ```yaml
 # config.yaml
 prompts:
   tts:
-    hello_tpl: |
-      Hello, I'm {bot_name}, from {bot_company}! I'm an IT support specialist.
+    hello_tpl:
+      - : |
+        Hello, I'm {bot_name}, from {bot_company}! I'm an IT support specialist.
 
-      Here's how I work: when I'm working, you'll hear a little music; then, at the beep, it's your turn to speak. You can speak to me naturally, I'll understand.
+        Here's how I work: when I'm working, you'll hear a little music; then, at the beep, it's your turn to speak. You can speak to me naturally, I'll understand.
 
-      Examples:
-      - "I've got a problem with my computer, it won't turn on".
-      - "The external screen is flashing, I don't know why".
+        What's your problem?
+      - : |
+        Hi, I'm {bot_name} from {bot_company}. I'm here to help.
 
-      What's your problem?
+        You'll hear music, then a beep. Speak naturally, I'll understand.
+
+        What's the issue?
   llm:
     default_system_tpl: |
       Assistant is called {bot_name} and is in a call center for the company {bot_company} as an expert with 20 years of experience in IT service.
