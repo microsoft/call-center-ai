@@ -430,7 +430,6 @@ llm:
       streaming: true
 
 ai_search:
-  access_key: xxx
   endpoint: https://xxx.search.windows.net
   index: trainings
 
