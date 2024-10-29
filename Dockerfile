@@ -1,22 +1,27 @@
 # Base container
-FROM docker.io/library/python:3.12-slim-bookworm@sha256:541d45d3d675fb8197f534525a671e2f8d66c882b89491f9dda271f4f94dcd06 AS base
+FROM docker.io/library/python:3.12-alpine3.20@sha256:38e179a0f0436c97ecc76bcd378d7293ab3ee79e4b8c440fdc7113670cb6e204 AS base
+
+RUN --mount=target=/var/cache/apk,type=cache,sharing=locked --mount=target=/root/.cache/pip,type=cache,sharing=locked \
+  apk update \
+  && apk add \
+    gcc
 
 # Build container
 FROM base AS build
 
-RUN rm -f /etc/apt/apt.conf.d/docker-clean \
-  && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
-RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked --mount=target=/root/.cache/pip,type=cache,sharing=locked \
-  apt-get update -q \
-  && apt-get install -y -q --no-install-recommends \
-  gcc \
-  python3-dev \
+RUN --mount=target=/var/cache/apk,type=cache,sharing=locked --mount=target=/root/.cache/pip,type=cache,sharing=locked \
+  apk update \
+  && apk add \
+    cargo \
+    python3-dev \
+    rust \
+  && python3 -m ensurepip \
   && python3 -m pip install --upgrade \
-  pip \
-  setuptools \
-  wheel
+    pip \
+    setuptools \
+    wheel
 
-RUN python -m venv /venv
+RUN python3 -m venv /venv
 ENV PATH=/venv/bin:$PATH
 
 COPY requirements.txt .
@@ -29,8 +34,10 @@ FROM base
 ARG VERSION
 ENV VERSION=${VERSION}
 
-RUN useradd -m appuser \
-  && mkdir /app \
+RUN adduser \
+    --disabled-password \
+    --home /app \
+    appuser \
   && chown -R appuser:appuser /app
 
 USER appuser
@@ -40,4 +47,4 @@ ENV PATH=/venv/bin:$PATH
 
 COPY --chown=appuser:appuser /app /app
 
-CMD ["bash", "-c", "gunicorn app.main:api --bind 0.0.0.0:8080 --proxy-protocol --workers 4 --worker-class uvicorn.workers.UvicornWorker"]
+CMD ["sh", "-c", "gunicorn app.main:api --bind 0.0.0.0:8080 --proxy-protocol --workers 4 --worker-class uvicorn.workers.UvicornWorker"]
