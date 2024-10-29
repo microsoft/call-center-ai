@@ -40,6 +40,9 @@ brew:
 	@echo "➡️ Installing pyenv..."
 	brew install pyenv
 
+	@echo "➡️ Installing Rust..."
+	brew install rust
+
 	@echo "➡️ Installing Azure Dev tunnels..."
 	curl -sL https://aka.ms/DevTunnelCliInstall | bash
 
