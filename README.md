@@ -283,11 +283,11 @@ In macOS, with [Homebrew](https://brew.sh), simply type `make brew`.
 
 For other systems, make sure you have the following installed:
 
-- Bash compatible shell, like `bash` or `zsh`
-- [yq](https://github.com/mikefarah/yq?tab=readme-ov-file#install)
-- Make, `apt install make` (Ubuntu), `yum install make` (CentOS), `brew install make` (macOS)
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - [Twilio CLI](https://www.twilio.com/docs/twilio-cli/getting-started/install) (optional)
+- [yq](https://github.com/mikefarah/yq?tab=readme-ov-file#install)
+- Bash compatible shell, like `bash` or `zsh`
+- Make, `apt install make` (Ubuntu), `yum install make` (CentOS), `brew install make` (macOS)
 
 Then, Azure resources are needed:
 
@@ -364,7 +364,17 @@ make logs name=my-rg-name
 
 ### Local (on your machine)
 
-#### 1. Create the full config file
+#### 1. Prerequisites
+
+In macOS, with [Homebrew](https://brew.sh), simply type `make brew`, if not already done.
+
+For other systems, make sure you have the following installed:
+
+- [pyenv](https://github.com/pyenv/pyenv) (optional, with a [virtualenv](https://github.com/pyenv/pyenv-virtualenv) named `callcenterai312`)
+- [Python 3.12](https://docs.python.org/3.12)
+- [Rust](https://rust-lang.org)
+
+#### 2. Create the full config file
 
 > [!TIP]
 > To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
@@ -378,7 +388,7 @@ make logs name=my-rg-name
 > [!TIP]
 > If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from the Azure Function App to your local machine.
 
-Local config file is named `config.yaml`:
+Configure the local config file, named `config.yaml`:
 
 ```yaml
 # config.yaml
@@ -436,7 +446,7 @@ ai_translation:
   endpoint: https://xxx.cognitiveservices.azure.com
 ```
 
-#### 2. Run the deployment automation
+#### 3. Run the deployment automation
 
 ```zsh
 make deploy-bicep deploy-post name=my-rg-name
@@ -445,14 +455,14 @@ make deploy-bicep deploy-post name=my-rg-name
 - This will deploy the Azure resources without the API server, allowing you to test the bot locally
 - Wait for the deployment to finish
 
-#### 3. Initialize local function config
+#### 4. Initialize local function config
 
 Copy `local.example.settings.json` to `local.settings.json`, then fill the required fields:
 
 - `APPLICATIONINSIGHTS_CONNECTION_STRING`, as the connection string of the Application Insights resource
 - `AzureWebJobsStorage`, as the connection string of the Azure Storage account
 
-#### 4. Connect to Azure Dev tunnels
+#### 5. Connect to Azure Dev tunnels
 
 > [!IMPORTANT]
 > Tunnel requires to be run in a separate terminal, because it needs to be running all the time
@@ -465,7 +475,7 @@ devtunnel login
 make tunnel
 ```
 
-#### 5. Iterate quickly with the code
+#### 6. Iterate quickly with the code
 
 > [!NOTE]
 > To override a specific configuration value, you can use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:
