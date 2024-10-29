@@ -37,9 +37,6 @@ brew:
 	@echo "➡️ Installing Azure CLI..."
 	brew install azure-cli
 
-	@echo "➡️ Installing Azure Functions Core Tools..."
-	brew tap azure/functions && brew install azure-functions-core-tools@4
-
 	@echo "➡️ Installing Azure Dev tunnels..."
 	curl -sL https://aka.ms/DevTunnelCliInstall | bash
 

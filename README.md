@@ -287,7 +287,6 @@ For other systems, make sure you have the following installed:
 - [yq](https://github.com/mikefarah/yq?tab=readme-ov-file#install)
 - Make, `apt install make` (Ubuntu), `yum install make` (CentOS), `brew install make` (macOS)
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
-- [Azure Functions Core Tools](https://github.com/Azure/azure-functions-core-tools?tab=readme-ov-file#installing)
 - [Twilio CLI](https://www.twilio.com/docs/twilio-cli/getting-started/install) (optional)
 
 Then, Azure resources are needed:
