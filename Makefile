@@ -37,6 +37,9 @@ brew:
 	@echo "➡️ Installing Azure CLI..."
 	brew install azure-cli
 
+	@echo "➡️ Installing pyenv..."
+	brew install pyenv
+
 	@echo "➡️ Installing Azure Dev tunnels..."
 	curl -sL https://aka.ms/DevTunnelCliInstall | bash
 
