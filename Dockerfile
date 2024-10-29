@@ -1,5 +1,5 @@
 # Base container
-FROM docker.io/library/python:3.12-alpine3.20@sha256:38e179a0f0436c97ecc76bcd378d7293ab3ee79e4b8c440fdc7113670cb6e204 AS base
+FROM docker.io/library/python:3.13-alpine3.20@sha256:c38ead8bcf521573dad837d7ecfdebbc87792202e89953ba8b2b83a9c5a520b6 AS base
 
 RUN --mount=target=/var/cache/apk,type=cache,sharing=locked --mount=target=/root/.cache/pip,type=cache,sharing=locked \
   apk update \
