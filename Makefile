@@ -127,6 +127,15 @@ build:
 		--tag $(container_name):latest \
 		.
 
+run:
+	$(docker) run \
+		--env PUBLIC_DOMAIN=$(tunnel_url) \
+		--env VERSION=$(version_full) \
+		--env-file .env \
+		--mount type=bind,source=$(shell pwd)/config.yaml,target=/app/config.yaml \
+		--publish 8080:8080 \
+		$(container_name):latest
+
 deploy:
 	$(MAKE) deploy-bicep
 
