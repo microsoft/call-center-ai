@@ -1097,9 +1097,9 @@ opentelemetry-semantic-conventions==0.46b0 \
     #   opentelemetry-instrumentation-urllib3
     #   opentelemetry-instrumentation-wsgi
     #   opentelemetry-sdk
-opentelemetry-semantic-conventions-ai==0.3.1 \
-    --hash=sha256:02c6418719b423f4add17b7d65408b21977e4d3abcd736fffb961245403e7dc6 \
-    --hash=sha256:14af6daefa46e15d12e5ca192a4f9ca4400698bc267326da53f3cde6d4978031
+opentelemetry-semantic-conventions-ai==0.4.2 \
+    --hash=sha256:0a5432aacd441eb7dbdf62e0de3f3d90ed4f69595b687a6dd2ccc4c5b94c5861 \
+    --hash=sha256:90b969c7d838e03e30a9150ffe46543d8e58e9d7370c7221fd30d4ce4d7a1b96
     # via opentelemetry-instrumentation-openai
 opentelemetry-util-http==0.46b0 \
     --hash=sha256:03b6e222642f9c7eae58d9132343e045b50aca9761fcb53709bd2b663571fdf6 \
