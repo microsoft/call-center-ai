@@ -726,9 +726,12 @@ async def post_event(
     """
     Handle post-call intelligence event from the queue.
 
-    Queue message is a JSON object `CallStateModel`. The event will load asynchroniously the `on_end_call` workflow.
+    Queue message is the UUID of a call. The event will load asynchroniously the `on_end_call` workflow.
     """
-    call = CallStateModel.model_validate_json(post.content)
+    call = await _db.call_aget(UUID(post.content))
+    if not call:
+        logger.warning("Call %s not found", post.content)
+        return
     logger.debug("Post event received for call %s", call)
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
@@ -746,7 +749,7 @@ async def _trigger_post_event(call: CallStateModel) -> None:
     """
     Shortcut to add post-call intelligence to the queue.
     """
-    await _post_queue.send_message(call.model_dump_json(exclude_none=True))
+    await _post_queue.send_message(str(call.call_id))
 
 
 async def _communicationservices_event_url(
