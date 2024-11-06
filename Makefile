@@ -69,12 +69,14 @@ upgrade:
 	@echo "➡️ Compiling app requirements..."
 	pip-compile \
 		--output-file requirements.txt \
+		--upgrade \
 		pyproject.toml
 
 	@echo "➡️ Compiling dev requirements..."
 	pip-compile \
 		--extra dev \
 		--output-file requirements-dev.txt \
+		--upgrade \
 		pyproject.toml
 
 	@echo "➡️ Upgrading Bicep CLI..."
