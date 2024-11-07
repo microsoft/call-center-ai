@@ -8,7 +8,6 @@ class QueueModel(BaseModel, frozen=True):
     call_name: str
     post_name: str
     sms_name: str
-    training_name: str
 
     @cache
     def call(self):
@@ -35,13 +34,4 @@ class QueueModel(BaseModel, frozen=True):
         return AzureQueueStorage(
             account_url=self.account_url,
             name=self.sms_name,
-        )
-
-    @cache
-    def training(self):
-        from app.persistence.azure_queue_storage import AzureQueueStorage
-
-        return AzureQueueStorage(
-            account_url=self.account_url,
-            name=self.training_name,
         )

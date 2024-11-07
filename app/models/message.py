@@ -12,7 +12,6 @@ from openai.types.chat import (
     ChatCompletionToolMessageParam,
     ChatCompletionUserMessageParam,
 )
-from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
 
 from app.helpers.monitoring import tracer
@@ -50,10 +49,10 @@ class PersonaEnum(str, Enum):
 
 
 class ToolModel(BaseModel):
-    content: str = ""
-    function_arguments: str = ""
-    function_name: str = ""
-    tool_id: str = ""
+    content: str | None = None
+    function_arguments: str
+    function_name: str
+    tool_id: str
 
     def to_openai(self) -> ChatCompletionMessageToolCallParam:
         return ChatCompletionMessageToolCallParam(
@@ -71,17 +70,7 @@ class ToolModel(BaseModel):
             },
         )
 
-    def __add__(self, other: ChoiceDeltaToolCall) -> "ToolModel":
-        if other.id:
-            self.tool_id = other.id
-        if other.function:
-            if other.function.name:
-                self.function_name = other.function.name
-            if other.function.arguments:
-                self.function_arguments += other.function.arguments
-        return self
-
-    async def execute_function(self, plugins: object) -> None:
+    async def execute_function(self, plugin: object) -> None:
         from app.helpers.logging import logger
 
         json_str = self.function_arguments
@@ -96,7 +85,7 @@ class ToolModel(BaseModel):
 
         # Try to fix JSON args to catch LLM hallucinations
         # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
-        args: dict[str, Any] = repair_json(
+        args: dict[str, Any] | Any = repair_json(
             json_str=json_str,
             return_objects=True,
         )  # pyright: ignore
@@ -119,7 +108,7 @@ class ToolModel(BaseModel):
             },
         ) as span:
             try:
-                res = await getattr(plugins, name)(**args)
+                res = await getattr(plugin, name)(**args)
                 res_log = f"{res[:20]}...{res[-20:]}"
                 logger.info("Executing function %s (%s): %s", name, args, res_log)
             except TypeError as e:
@@ -146,10 +135,10 @@ class ToolModel(BaseModel):
     @staticmethod
     def _available_function_names() -> list[str]:
         from app.helpers.llm_tools import (
-            LlmPlugins,
+            DefaultPlugin,
         )
 
-        return [name for name, _ in getmembers(LlmPlugins, isfunction)]
+        return [name for name, _ in getmembers(DefaultPlugin, isfunction)]
 
 
 class MessageModel(BaseModel):
@@ -216,6 +205,7 @@ class MessageModel(BaseModel):
                 tool_call_id=tool_call.tool_id,
             )
             for tool_call in self.tool_calls
+            if tool_call.content
         )
         return res
 

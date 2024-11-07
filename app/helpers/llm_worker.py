@@ -1,37 +1,36 @@
 import json
 from collections.abc import AsyncGenerator, Callable
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from os import environ
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import tiktoken
 from json_repair import repair_json
 from openai import (
     APIConnectionError,
     APIResponseValidationError,
-    AsyncAzureOpenAI,
-    AsyncOpenAI,
-    AsyncStream,
     BadRequestError,
     InternalServerError,
     RateLimitError,
 )
 from openai.types.chat import (
-    ChatCompletion,
     ChatCompletionAssistantMessageParam,
-    ChatCompletionChunk,
     ChatCompletionSystemMessageParam,
     ChatCompletionToolMessageParam,
-    ChatCompletionToolParam,
     ChatCompletionUserMessageParam,
-)
-from openai.types.chat.chat_completion_chunk import (
-    ChoiceDelta,
-    ChoiceDeltaToolCall,
-    ChoiceDeltaToolCallFunction,
 )
 from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from pydantic import ValidationError
+from rtclient import (
+    AssistantMessageItem,
+    InputAudioTranscription,
+    InputTextContentPart,
+    NoTurnDetection,
+    OutputTextContentPart,
+    RTClient,
+    UserMessageItem,
+)
 from tenacity import (
     AsyncRetrying,
     retry,
@@ -42,14 +41,13 @@ from tenacity import (
 )
 
 from app.helpers.config import CONFIG
-from app.helpers.config_models.llm import (
-    AbstractPlatformModel as LlmAbstractPlatformModel,
-)
-from app.helpers.features import slow_llm_for_chat
+from app.helpers.llm_utils import RtclientFunctionDefinition
 from app.helpers.logging import logger
 from app.helpers.monitoring import tracer
 from app.helpers.resources import resources_dir
-from app.models.message import MessageModel
+from app.models.message import (
+    MessageModel,
+)
 
 environ["TRACELOOP_TRACE_CONTENT"] = str(
     True
@@ -60,9 +58,9 @@ OpenAIInstrumentor().instrument()  # Instrument OpenAI
 environ["TIKTOKEN_CACHE_DIR"] = resources_dir("tiktoken")
 
 logger.info(
-    "Using LLM models %s (slow) and %s (fast)",
-    CONFIG.llm.selected(False).model,
-    CONFIG.llm.selected(True).model,
+    "Using LLM models %s (realtime) and %s (sequential)",
+    CONFIG.llm.realtime.selected().model,
+    CONFIG.llm.sequential.selected().model,
 )
 
 T = TypeVar("T")
@@ -84,161 +82,71 @@ _retried_exceptions = [
 ]
 
 
-@tracer.start_as_current_span("llm_completion_stream")
-async def completion_stream(
+@tracer.start_as_current_span("llm_completion_realtime")
+@asynccontextmanager
+async def completion_realtime(
     max_tokens: int,
     messages: list[MessageModel],
     system: list[ChatCompletionSystemMessageParam],
-    tools: list[ChatCompletionToolParam] | None = None,
-) -> AsyncGenerator[ChoiceDelta, None]:
-    """
-    Returns a stream of completions.
+    tools: list[RtclientFunctionDefinition],
+) -> AsyncGenerator[RTClient, None]:
+    # Create client
+    async with CONFIG.llm.realtime.selected().instance() as (client, platform):
+        # Build history
+        history = _limit_messages(
+            context_window=platform.context,
+            max_messages=20,  # Quick response
+            max_tokens=max_tokens,
+            messages=messages,
+            model=platform.model,
+            system=system,
+            tools=tools,
+        )  # Limit to 20 messages for quick response and avoid hallucinations
 
-    Completion is first made with the fast LLM, then the slow LLM if the previous fails. Catch errors for a maximum of 3 times (internal + `RateLimitError`). If it fails again, raise the error.
-    """
-    retryed = AsyncRetrying(
-        reraise=True,
-        retry=retry_any(
-            *[retry_if_exception_type(exception) for exception in _retried_exceptions]
-        ),
-        stop=stop_after_attempt(3),  # Usage is short-lived, so stop after 3 attempts
-        wait=wait_random_exponential(multiplier=0.8, max=8),
-    )
-
-    # Try first with primary LLM
-    try:
-        async for attempt in retryed:
-            with attempt:
-                async for chunck in _completion_stream_worker(
-                    is_fast=not await slow_llm_for_chat(),  # Let configuration decide
-                    max_tokens=max_tokens,
-                    messages=messages,
-                    system=system,
-                    tools=tools,
-                ):
-                    yield chunck
-                return
-    except Exception as e:
-        if not any(isinstance(e, exception) for exception in _retried_exceptions):
-            raise e
-        logger.warning(
-            "%s error, trying with the other LLM backend",
-            e.__class__.__name__,
+        # Transform system prompts to a single text block
+        system_text = "\n".join(
+            [
+                str(message["content"])
+                for message in history
+                if message["role"] == "system"
+            ]
         )
 
-    # Then try more times with backup LLM
-    async for attempt in retryed:
-        with attempt:
-            async for chunck in _completion_stream_worker(
-                is_fast=await slow_llm_for_chat(),  # Let configuration decide
-                max_tokens=max_tokens,
-                messages=messages,
-                system=system,
-                tools=tools,
-            ):
-                yield chunck
+        # Configure LLM
+        await client.configure(
+            # Deployment
+            model=platform.model,
+            # Behavior
+            instructions=system_text,
+            temperature=platform.temperature,
+            tool_choice="auto",
+            tools=tools,
+            # Input/Output
+            input_audio_format="pcm16",
+            input_audio_transcription=InputAudioTranscription(model="whisper-1"),
+            modalities={"text"},
+            turn_detection=NoTurnDetection(),  # Disable native turn detection, it is managed manually
+            # Performance
+            max_response_output_tokens=160,  # Lowest possible value for 90% of the cases, if not sufficient, retry will be triggered, 100 tokens ~= 75 words, 20 words ~= 1 sentence, 6 sentences ~= 160 tokens
+        )
 
-
-# TODO: Refacto, too long (and remove PLR0912 ignore)
-async def _completion_stream_worker(  # noqa: PLR0912
-    is_fast: bool,
-    max_tokens: int,
-    messages: list[MessageModel],
-    system: list[ChatCompletionSystemMessageParam],
-    tools: list[ChatCompletionToolParam] | None = None,
-) -> AsyncGenerator[ChoiceDelta, None]:
-    """
-    Returns a stream of completions.
-    """
-    client, platform = await _use_llm(is_fast)
-    extra = {}
-    if tools:
-        extra["tools"] = tools  # Add tools if any
-
-    prompt = _limit_messages(
-        context_window=platform.context,
-        max_messages=20,  # Quick response
-        max_tokens=max_tokens,
-        messages=messages,
-        model=platform.model,
-        system=system,
-        tools=tools,
-    )  # Limit to 20 messages for quick response and avoid hallucinations
-    chat_kwargs = {
-        "max_tokens": max_tokens,
-        "messages": prompt,
-        "model": platform.model,
-        "seed": platform.seed,
-        "temperature": platform.temperature,
-        **extra,
-    }  # Shared kwargs for both streaming and non-streaming
-    maximum_tokens_reached = False
-
-    try:
-        if platform.streaming:  # Streaming
-            stream: AsyncStream[
-                ChatCompletionChunk
-            ] = await client.chat.completions.create(
-                **chat_kwargs,
-                stream=True,
-            )
-            async for chunck in stream:
-                choices = chunck.choices
-                if (
-                    not choices
-                ):  # Skip empty choices, happens sometimes with GPT-4 Turbo
-                    continue
-                choice = choices[0]
-                delta = choice.delta
-                if (
-                    choice.finish_reason == "content_filter"
-                ):  # Azure OpenAI content filter
-                    raise SafetyCheckError(f"Issue detected in text: {delta.content}")
-                if choice.finish_reason == "length":
-                    logger.warning(
-                        "Maximum tokens reached %s, should be fixed", max_tokens
-                    )
-                    maximum_tokens_reached = True
-                if delta:
-                    yield delta
-
-        else:  # Non-streaming, emulate streaming with a single completion
-            completion: ChatCompletion = await client.chat.completions.create(
-                **chat_kwargs
-            )
-            choice = completion.choices[0]
-            if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
-                raise SafetyCheckError(
-                    f"Issue detected in generation: {choice.message.content}"
+        # Push conversation history
+        for message in history:
+            if message["role"] == "user":
+                text = str(message["content"])
+                logger.debug("Sending user history: %s...", text[:20])
+                await client.send_item(
+                    UserMessageItem(content=[InputTextContentPart(text=text)])
                 )
-            if choice.finish_reason == "length":
-                logger.warning("Maximum tokens reached %s, should be fixed", max_tokens)
-                maximum_tokens_reached = True
-            message = choice.message
-            delta = ChoiceDelta(
-                content=message.content,
-                role=message.role,
-                tool_calls=[
-                    ChoiceDeltaToolCall(
-                        id=tool.id,
-                        index=0,
-                        type=tool.type,
-                        function=ChoiceDeltaToolCallFunction(
-                            arguments=tool.function.arguments,
-                            name=tool.function.name,
-                        ),
-                    )
-                    for tool in message.tool_calls or []
-                ],
-            )
-            yield delta
-    except BadRequestError as e:
-        if e.code == "content_filter":
-            raise SafetyCheckError("Issue detected in prompt") from e
-        raise e
+            elif message["role"] == "assistant" and "content" in message:
+                text = str(message["content"])
+                logger.debug("Sending assistant history: %s...", text[:20])
+                await client.send_item(
+                    AssistantMessageItem(content=[OutputTextContentPart(text=text)])
+                )
 
-    if maximum_tokens_reached:
-        raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
+        # Return
+        yield client
 
 
 @retry(
@@ -247,8 +155,8 @@ async def _completion_stream_worker(  # noqa: PLR0912
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.8, max=8),
 )
-@tracer.start_as_current_span("llm_completion_sync")
-async def completion_sync(
+@tracer.start_as_current_span("llm_completion_sequential")
+async def completion_sequential(
     res_type: type[T],
     system: list[ChatCompletionSystemMessageParam],
     validation_callback: Callable[[str | None], tuple[bool, str | None, T | None]],
@@ -272,8 +180,7 @@ async def completion_sync(
         ]
 
     # Generate
-    res_content: str | None = await _completion_sync_worker(
-        is_fast=False,
+    res_content: str | None = await _completion_sequential_worker(
         json_output=validate_json,
         system=messages,
     )
@@ -292,7 +199,7 @@ async def completion_sync(
             "LLM validation error, retrying (%s retries left)",
             _retries_remaining,
         )
-        return await completion_sync(
+        return await completion_sequential(
             res_type=res_type,
             system=system,
             validate_json=validate_json,
@@ -306,8 +213,7 @@ async def completion_sync(
     return res_object
 
 
-async def _completion_sync_worker(
-    is_fast: bool,
+async def _completion_sequential_worker(
     system: list[ChatCompletionSystemMessageParam],
     json_output: bool = False,
     max_tokens: int | None = None,
@@ -315,7 +221,7 @@ async def _completion_sync_worker(
     """
     Returns a completion.
     """
-    client, platform = await _use_llm(is_fast)
+    client, platform = await CONFIG.llm.sequential.selected().instance()
     extra = {}
     if json_output:
         extra["response_format"] = {"type": "json_object"}
@@ -373,7 +279,7 @@ def _limit_messages(  # noqa: PLR0913
     model: str,
     system: list[ChatCompletionSystemMessageParam],
     max_messages: int = 1000,
-    tools: list[ChatCompletionToolParam] | None = None,
+    tools: list[Any] = [],
 ) -> list[
     ChatCompletionAssistantMessageParam
     | ChatCompletionSystemMessageParam
@@ -437,14 +343,3 @@ def _count_tokens(content: str, model: str) -> int:
         encoding_name = tiktoken.encoding_name_for_model("gpt-3.5")
         logger.debug("Unknown model %s, using %s encoding", model, encoding_name)
     return len(tiktoken.get_encoding(encoding_name).encode(content))
-
-
-async def _use_llm(
-    is_fast: bool,
-) -> tuple[AsyncAzureOpenAI | AsyncOpenAI, LlmAbstractPlatformModel]:
-    """
-    Returns an LLM client and platform model.
-
-    The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
-    """
-    return await CONFIG.llm.selected(is_fast).instance()

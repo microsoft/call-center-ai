@@ -1,16 +1,14 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from html import escape
-from inspect import getmembers, isfunction
 from typing import Annotated, Literal, TypedDict
 
 from azure.communication.callautomation.aio import CallAutomationClient
-from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
 
 from app.helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
 from app.helpers.config import CONFIG
-from app.helpers.llm_utils import function_schema
+from app.helpers.llm_utils import AbstractPlugin
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
 from app.models.message import (
@@ -31,24 +29,20 @@ class UpdateClaimDict(TypedDict):
     value: str
 
 
-class LlmPlugins:
-    call: CallStateModel
+class DefaultPlugin(AbstractPlugin):
     client: CallAutomationClient
     post_callback: Callable[[CallStateModel], Awaitable[None]]
     style: MessageStyleEnum = MessageStyleEnum.NONE
-    tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]]
 
     def __init__(
         self,
         call: CallStateModel,
         client: CallAutomationClient,
         post_callback: Callable[[CallStateModel], Awaitable[None]],
-        tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     ):
-        self.call = call
+        super().__init__(call)
         self.client = client
         self.post_callback = post_callback
-        self.tts_callback = tts_callback
 
     async def end_call(self) -> str:
         """
@@ -76,20 +70,6 @@ class LlmPlugins:
 
     async def new_claim(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - "I'am creating it right now."
-            - "We'll start a case."
-            """,
-        ],
     ) -> str:
         """
         Use this if the customer wants to create a new claim.
@@ -106,7 +86,6 @@ class LlmPlugins:
         - Customer wants explicitely to create a new claim
         - Talking about a totally different subject
         """
-        await self.tts_callback(customer_response, self.style)
         # Launch post-call intelligence for the current call
         await self.post_callback(self.call)
         # Store the last message and use it at first message of the new claim
@@ -128,21 +107,6 @@ class LlmPlugins:
 
     async def new_or_updated_reminder(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - "A todo for next week is planned."
-            - "I'm creating a reminder for the company to manage this for you."
-            - "The rendez-vous is scheduled for tomorrow."
-            """,
-        ],
         description: Annotated[
             str,
             "Description of the reminder, in English. Should be detailed enough to be understood by anyone. Example: 'Call back customer to get more details about the accident', 'Send analysis report to the customer'.",
@@ -177,8 +141,6 @@ class LlmPlugins:
         - Call back for a follow-up
         - Wait for customer to send a document
         """
-        await self.tts_callback(customer_response, self.style)
-
         # Check if reminder already exists, if so update it
         for reminder in self.call.reminders:
             if reminder.title == title:
@@ -205,21 +167,6 @@ class LlmPlugins:
 
     async def updated_claim(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - "I am updating the claim with your new address."
-            - "The phone number is now stored in the case."
-            - "Your birthdate is written down."
-            """,
-        ],
         updates: Annotated[
             list[UpdateClaimDict],
             """
@@ -264,7 +211,6 @@ class LlmPlugins:
         - Store details about the conversation
         - Update the claim with a new phone number
         """
-        await self.tts_callback(customer_response, self.style)
         # Update all claim fields
         res = "# Updated fields"
         for field in updates:
@@ -310,22 +256,6 @@ class LlmPlugins:
 
     async def search_document(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - "I am looking for the article about the new law on cyber security."
-            - "I am looking in our database for your car insurance contract."
-            - "I am searching for the procedure to declare a stolen luxury watch."
-            - "I'm looking for this document in our database."
-            """,
-        ],
         queries: Annotated[
             list[str],
             "The text queries to perform the search, in English. Example: ['How much does it cost to repair a broken window?', 'What are the requirements to ask for a cyber attack insurance?']",
@@ -346,7 +276,6 @@ class LlmPlugins:
         - Know the procedure to declare a stolen luxury watch
         - Understand the requirements to ask for a cyber attack insurance
         """
-        await self.tts_callback(customer_response, self.style)
         # Execute in parallel
         tasks = await asyncio.gather(
             *[
@@ -371,21 +300,6 @@ class LlmPlugins:
 
     async def notify_emergencies(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - 'I am calling the firefighters to help you with the fire.'
-            - 'I am contacting the police for the accident with your neighbor.'
-            - 'I am notifying the emergency services right now.'
-            """,
-        ],
         reason: Annotated[
             str,
             "The reason to notify the emergency services. Should be detailed enough to be understood by anyone. Example: 'A person is having a heart attack', 'A child is being attacked by a dog'.",
@@ -418,7 +332,6 @@ class LlmPlugins:
         - A neighbor is having a heart attack
         - Someons is stuck in a car accident
         """
-        await self.tts_callback(customer_response, self.style)
         # TODO: Implement notification to emergency services for production usage
         logger.info(
             "Notifying %s, location %s, contact %s, reason %s",
@@ -431,22 +344,6 @@ class LlmPlugins:
 
     async def send_sms(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - "I am sending a SMS to your phone number."
-            - "I am texting you the information right now."
-            - "I'am sending it."
-            - "SMS with the details is sent."
-            """,
-        ],
         message: Annotated[
             str,
             "The message to send to the customer.",
@@ -460,7 +357,6 @@ class LlmPlugins:
         - Confirm a detail like a reference number, if there is a misunderstanding
         - Send a confirmation, if the customer wants to have a written proof
         """
-        await self.tts_callback(customer_response, self.style)
         success = await _sms.asend(
             content=message,
             phone_number=self.call.initiate.phone_number,
@@ -478,21 +374,6 @@ class LlmPlugins:
 
     async def speech_speed(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the same language as the customer. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - "I am slowing down the speech."
-            - "Is it better now that I am speaking slower?"
-            - "My voice is now faster."
-            """,
-        ],
         speed: Annotated[
             float,
             "The new speed of the voice. Should be between 0.75 and 1.25, where 1.0 is the normal speed.",
@@ -514,28 +395,11 @@ class LlmPlugins:
         # Update voice
         initial_speed = self.call.initiate.prosody_rate
         self.call.initiate.prosody_rate = speed
-        # Customer confirmation (with new speed)
-        await self.tts_callback(customer_response, self.style)
         # LLM confirmation
         return f"Voice speed set to {speed} (was {initial_speed})"
 
     async def speech_lang(
         self,
-        customer_response: Annotated[
-            str,
-            """
-            Phrase used to confirm the update, in the new selected language. This phrase will be spoken to the user.
-
-            # Rules
-            - Action should be rephrased in the present tense
-            - Must be in a single sentence
-
-            # Examples
-            - For de-DE, "Ich spreche jetzt auf Deutsch."
-            - For en-ES, "Espero que me entiendas mejor en español."
-            - For fr-FR, "Cela devrait être mieux en français."
-            """,
-        ],
         lang: Annotated[
             str,
             """
@@ -577,17 +441,5 @@ class LlmPlugins:
         # Update lang
         initial_lang = self.call.lang.short_code
         self.call.lang = lang
-        # Customer confirmation (with new language)
-        await self.tts_callback(customer_response, self.style)
         # LLM confirmation
         return f"Voice language set to {lang} (was {initial_lang})"
-
-    @staticmethod
-    async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
-        return await asyncio.gather(
-            *[
-                function_schema(arg_type, call=call)
-                for name, arg_type in getmembers(LlmPlugins, isfunction)
-                if not name.startswith("_") and name != "to_openai"
-            ]
-        )

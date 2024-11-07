@@ -2,7 +2,6 @@ import json
 import random
 from datetime import datetime
 from functools import cached_property
-from html import escape
 from logging import Logger
 from textwrap import dedent
 
@@ -15,26 +14,6 @@ from app.models.message import MessageModel
 from app.models.next import NextModel
 from app.models.reminder import ReminderModel
 from app.models.synthesis import SynthesisModel
-from app.models.training import TrainingModel
-
-
-class SoundModel(BaseModel):
-    loading_tpl: str = "{public_url}/loading.wav"
-    ready_tpl: str = "{public_url}/ready.wav"
-
-    def loading(self) -> str:
-        from app.helpers.config import CONFIG
-
-        return self.loading_tpl.format(
-            public_url=CONFIG.resources.public_url,
-        )
-
-    def ready(self) -> str:
-        from app.helpers.config import CONFIG
-
-        return self.ready_tpl.format(
-            public_url=CONFIG.resources.public_url,
-        )
 
 
 class LlmModel(BaseModel):
@@ -118,7 +97,7 @@ class LlmModel(BaseModel):
         ## Example 1
         Conversation objective: Help the customer with their accident. Customer will be calling from a car, with the SOS button.
         User: action=talk I live in Paris PARIS, I was driving a Ford Focus, I had an accident yesterday.
-        Tools: update indicent location, update vehicule reference, update incident date
+        Tools: update indicent location, update vehicule reference, update incident date, get trainings for the car model
         Assistant: style=sad I understand, your car has been in an accident. style=none Let me think... I have updated your file. Now, could I have the license plate number of your car? Also were there any injuries?
 
         ## Example 2
@@ -126,7 +105,7 @@ class LlmModel(BaseModel):
         Assistant: Hello, I'm Marc, the virtual assistant. I'm here to help you. Don't hesitate to ask me anything.
         Assistant: I'm specialized in insurance contracts. We can discuss that together. How can I help you today?
         User: action=talk The roof has had holes since yesterday's big storm. They're about the size of golf balls. I'm worried about water damage.
-        Tools: update incident description, create a reminder for assistant to plan an appointment with a roofer
+        Tools: update incident description, get trainings for contract details and claim history, create a reminder for assistant to plan an appointment with a roofer
         Assistant: style=sad I know what you mean... I see, your roof has holes since the big storm yesterday. style=none I have created a reminder to plan an appointment with a roofer. style=cheerful I hope you are safe and sound! Take care of yourself... style=none Can you confirm me the address of the house plus the date of the storm?
 
         ## Example 3
@@ -139,13 +118,13 @@ class LlmModel(BaseModel):
         Assistant: Hello, I'm John, the virtual assistant. I'm here to help you. Don't hesitate to ask me anything.
         Assistant: I'm specialized in home care services. How can I help you today?
         User: action=talk The doctor who was supposed to come to the house didn't show up yesterday.
-        Tools: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came
+        Tools: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came, get trainings for the scheduling policy of the doctor
         Assistant: style=sad Let me see, the doctor did not come to your home yesterday... I'll do my best to help you. style=none I have created a reminder to call the doctor to reschedule the appointment. Now, it should be better for you. And, I'll tale care tomorrow to see if the doctor came. style=cheerful Is it the first time the doctor didn't come?
 
         ## Example 5
         Conversation objective: Assistant is a call center agent for a car insurance company. Help through the claim process.
         User: action=call I had an accident this morning, I was shopping. My car is at home, at 134 Rue de Rivoli.
-        Tools: update incident location, update incident description
+        Tools: update incident location, update incident description, get trainings for the claim process
         Assistant: style=sad I understand, you had an accident this morning while shopping. style=none I have updated your file with the location you are at Rue de Rivoli. Can you tell me more about the accident?
         User: action=hungup
         User: action=call
@@ -155,7 +134,7 @@ class LlmModel(BaseModel):
         Conversation objective: Fill the claim with the customer. Claim is about a car accident.
         User: action=talk I had an accident this morning, I was shopping. Let me send the exact location by SMS.
         User: action=sms At the corner of Rue de la Paix and Rue de Rivoli.
-        Tools: update incident location
+        Tools: update incident location,n
         Assistant: style=sad I get it, you had an accident this morning while shopping. style=none I have updated your file with the location you sent me by SMS. style=cheerful Is it correct?
 
         ## Example 7
@@ -167,7 +146,7 @@ class LlmModel(BaseModel):
         ## Example 8
         Conversation objective: Gather feedbacks after an in-person meeting between a sales representative and the customer.
         User: action=talk Can you talk a bit slower?
-        Tools: update voice speed
+        Tools: update voice speed, get trainings for the escalation process
         Assistant: style=none I will talk slower. If you need me to repeat something, just ask me. Now, can you tall me a bit more about the meeting? How did it go?
 
         ## Example 9
@@ -335,7 +314,7 @@ class LlmModel(BaseModel):
         )
 
     def chat_system(
-        self, call: CallStateModel, trainings: list[TrainingModel]
+        self, call: CallStateModel
     ) -> list[ChatCompletionSystemMessageParam]:
         from app.models.message import (
             ActionEnum as MessageActionEnum,
@@ -354,7 +333,6 @@ class LlmModel(BaseModel):
                 .decode(),
                 styles=", ".join([style.value for style in MessageStyleEnum]),
                 task=call.initiate.task,
-                trainings=trainings,
             ),
             call=call,
         )
@@ -441,31 +419,14 @@ class LlmModel(BaseModel):
     def _format(
         self,
         prompt_tpl: str,
-        trainings: list[TrainingModel] | None = None,
         **kwargs: str,
     ) -> str:
         # Remove possible indentation then render the template
         formatted_prompt = dedent(prompt_tpl.format(**kwargs)).strip()
-
-        # Format trainings, if any
-        if trainings:
-            # Format documents for Content Safety scan compatibility
-            # See: https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/content-filter?tabs=warning%2Cpython-new#embedding-documents-in-your-prompt
-            trainings_str = "\n".join(
-                [
-                    f"<documents>{escape(training.model_dump_json(exclude=TrainingModel.excluded_fields_for_llm()))}</documents>"
-                    for training in trainings
-                ]
-            )
-            formatted_prompt += "\n\n# Internal documentation you can use"
-            formatted_prompt += f"\n{trainings_str}"
-
         # Remove newlines to avoid hallucinations issues with GPT-4 Turbo
         formatted_prompt = " ".join(
             [line.strip() for line in formatted_prompt.splitlines()]
         )
-
-        self.logger.debug("Formatted prompt: %s", formatted_prompt)
         return formatted_prompt
 
     def _messages(
@@ -481,7 +442,6 @@ class LlmModel(BaseModel):
                 role="system",
             ),
         ]
-        self.logger.debug("Messages: %s", messages)
         return messages
 
     @cached_property
@@ -507,11 +467,6 @@ class TtsModel(BaseModel):
         "Of course, stay on the line. I will transfer you to an agent.",
         "Sure, please hold on. I'll connect you to an agent.",
         "Hold on, I'll transfer you now.",
-    ]
-    error_tpl: list[str] = [
-        "I'm sorry, I didn't understand. Can you rephrase?",
-        "I didn't catch that. Could you say it differently?",
-        "Please repeat that.",
     ]
     goodbye_tpl: list[str] = [
         "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!",
@@ -552,9 +507,6 @@ class TtsModel(BaseModel):
 
     async def end_call_to_connect_agent(self, call: CallStateModel) -> str:
         return await self._translate(self.end_call_to_connect_agent_tpl, call)
-
-    async def error(self, call: CallStateModel) -> str:
-        return await self._translate(self.error_tpl, call)
 
     async def goodbye(self, call: CallStateModel) -> str:
         return await self._translate(
@@ -642,5 +594,4 @@ class TtsModel(BaseModel):
 
 class PromptsModel(BaseModel):
     llm: LlmModel = LlmModel()  # Object is fully defined by default
-    sounds: SoundModel = SoundModel()  # Object is fully defined by default
     tts: TtsModel = TtsModel()  # Object is fully defined by default

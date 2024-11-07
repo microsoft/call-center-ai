@@ -10,6 +10,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,id=apt-lists-${TARGETPLATFORM},
     apt-get update -q \
     && apt-get install -y -q --no-install-recommends \
         gcc \
+        git \
         python3-dev \
     && python3 -m pip \
         --disable-pip-version-check \

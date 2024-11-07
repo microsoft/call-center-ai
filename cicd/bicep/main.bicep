@@ -6,16 +6,16 @@ param embeddingQuota int = 50
 param embeddingVersion string = '1'
 param imageVersion string = 'main'
 param instance string
-param llmFastContext int = 128000
-param llmFastDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
-param llmFastModel string = 'gpt-4o-mini'
-param llmFastQuota int = 50
-param llmFastVersion string = '2024-07-18'
-param llmSlowContext int = 128000
-param llmSlowDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
-param llmSlowModel string = 'gpt-4o'
-param llmSlowQuota int = 50
-param llmSlowVersion string = '2024-08-06'
+param llmRealtimeContext int = 128000
+param llmRealtimeDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
+param llmRealtimeModel string = 'gpt-4o-realtime-preview'
+param llmRealtimeQuota int = 1
+param llmRealtimeVersion string = '2024-10-01'
+param llmSequentialContext int = 128000
+param llmSequentialDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
+param llmSequentialModel string = 'gpt-4o'
+param llmSequentialQuota int = 300
+param llmSequentialVersion string = '2024-08-06'
 param location string = deployment().location
 param openaiLocation string
 param promptContentFilter bool = true // Should be set to false but requires a custom approval from Microsoft
@@ -53,16 +53,16 @@ module app 'app.bicep' = {
     embeddingQuota: embeddingQuota
     embeddingVersion: embeddingVersion
     imageVersion: imageVersion
-    llmFastContext: llmFastContext
-    llmFastDeploymentType: llmFastDeploymentType
-    llmFastModel: llmFastModel
-    llmFastQuota: llmFastQuota
-    llmFastVersion: llmFastVersion
-    llmSlowContext: llmSlowContext
-    llmSlowDeploymentType: llmSlowDeploymentType
-    llmSlowModel: llmSlowModel
-    llmSlowQuota: llmSlowQuota
-    llmSlowVersion: llmSlowVersion
+    llmRealtimeContext: llmRealtimeContext
+    llmRealtimeDeploymentType: llmRealtimeDeploymentType
+    llmRealtimeModel: llmRealtimeModel
+    llmRealtimeQuota: llmRealtimeQuota
+    llmRealtimeVersion: llmRealtimeVersion
+    llmSequentialContext: llmSequentialContext
+    llmSequentialDeploymentType: llmSequentialDeploymentType
+    llmSequentialModel: llmSequentialModel
+    llmSequentialQuota: llmSequentialQuota
+    llmSequentialVersion: llmSequentialVersion
     location: location
     openaiLocation: openaiLocation
     promptContentFilter: promptContentFilter

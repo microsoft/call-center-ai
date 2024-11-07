@@ -3,25 +3,31 @@ Inspired by: Microsoft AutoGen (CC-BY-4.0)
 See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd94c9a0e/autogen/function_utils.py
 """
 
+import asyncio
 import inspect
 from collections.abc import Callable
+from inspect import getmembers, isfunction
 from textwrap import dedent
-from typing import Annotated, Any, ForwardRef, TypeVar
+from typing import Annotated, Any, ForwardRef, Literal, TypeVar
 
 from jinja2 import Environment
-from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import eval_type_lenient
 from pydantic.json_schema import JsonSchemaValue
 
 from app.helpers.logging import logger
+from app.models.call import CallStateModel
 
 T = TypeVar("T")
 _jinja = Environment(
     autoescape=True,
     enable_async=True,
 )
+
+
+class RtclientFunctionDefinition(FunctionDefinition, total=False):
+    type: Literal["function"]
 
 
 class Parameters(BaseModel):
@@ -34,9 +40,28 @@ class Parameters(BaseModel):
     type: str = "object"
 
 
-async def function_schema(
+class AbstractPlugin:
+    call: CallStateModel
+
+    def __init__(
+        self,
+        call: CallStateModel,
+    ):
+        self.call = call
+
+    async def to_rtclient(self) -> list[RtclientFunctionDefinition]:
+        return await asyncio.gather(
+            *[
+                _function_schema(arg_type, call=self.call)
+                for name, arg_type in getmembers(self.__class__, isfunction)
+                if not name.startswith("_") and name != "to_rtclient"
+            ]
+        )
+
+
+async def _function_schema(
     f: Callable[..., Any], **kwargs: Any
-) -> ChatCompletionToolParam:
+) -> RtclientFunctionDefinition:
     """
     Take a function and return a JSON schema for it as defined by the OpenAI API.
 
@@ -82,16 +107,12 @@ async def function_schema(
         )
     ).model_dump()
 
-    function = ChatCompletionToolParam(
+    return RtclientFunctionDefinition(
+        description=description,
+        name=name,
+        parameters=parameters,
         type="function",
-        function=FunctionDefinition(
-            description=description,
-            name=name,
-            parameters=parameters,
-        ),
     )
-
-    return function
 
 
 def _typed_annotation(annotation: Any, global_namespace: dict[str, Any]) -> Any:

@@ -1,16 +1,23 @@
 import asyncio
 import json
+from base64 import b64decode
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import quote_plus, urljoin
 from uuid import UUID
 
 import jwt
 import mistune
-from azure.communication.callautomation import PhoneNumberIdentifier
+from azure.communication.callautomation import (
+    MediaStreamingAudioChannelType,
+    MediaStreamingContentType,
+    MediaStreamingOptions,
+    MediaStreamingTransportType,
+    PhoneNumberIdentifier,
+)
 from azure.communication.callautomation.aio import CallAutomationClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.messaging import CloudEvent
@@ -21,16 +28,19 @@ from fastapi import (
     HTTPException,
     Request,
     Response,
+    WebSocket,
 )
 from fastapi.exceptions import RequestValidationError, ValidationException
 from fastapi.responses import HTMLResponse, JSONResponse
 from htmlmin.minify import html_minify
 from jinja2 import Environment, FileSystemLoader
 from pydantic import Field, TypeAdapter, ValidationError
+from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
 
 from app.helpers.call_events import (
+    on_audio_connected,
     on_call_connected,
     on_call_disconnected,
     on_end_call,
@@ -38,10 +48,8 @@ from app.helpers.call_events import (
     on_new_call,
     on_play_completed,
     on_play_error,
-    on_recognize_timeout_error,
-    on_recognize_unknown_error,
+    on_recognize_error,
     on_sms_received,
-    on_speech_recognized,
     on_transfer_completed,
     on_transfer_error,
 )
@@ -95,15 +103,19 @@ _post_queue = CONFIG.queue.post()
 _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()
 _sms_queue = CONFIG.queue.sms()
-_training_queue = CONFIG.queue.training()
 
 # Communication Services callback
 assert CONFIG.public_domain, "public_domain config is not set"
+_COMMUNICATIONSERVICES_WSS_TPL = urljoin(
+    str(CONFIG.public_domain).replace("https://", "wss://"),
+    "/communicationservices/wss/{call_id}/{callback_secret}",
+)
+logger.info("Using WebSocket URL %s", _COMMUNICATIONSERVICES_WSS_TPL)
 _COMMUNICATIONSERVICES_CALLABACK_TPL = urljoin(
     str(CONFIG.public_domain),
-    "/communicationservices/event/{call_id}/{callback_secret}",
+    "/communicationservices/callback/{call_id}/{callback_secret}",
 )
-logger.info("Using call event URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
+logger.info("Using callback URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
 
 
 @asynccontextmanager
@@ -126,17 +138,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             func=sms_event,
         )
     )
-    training_task = asyncio.create_task(
-        _training_queue.trigger(
-            arg="training",
-            func=training_event,
-        )
-    )
     yield
     call_task.cancel()
     post_task.cancel()
     sms_task.cancel()
-    training_task.cancel()
 
 
 # FastAPI
@@ -367,13 +372,23 @@ async def call_post(request: Request) -> CallGetModel:
     except ValidationError as e:
         raise RequestValidationError([str(e)]) from e
 
-    url, call = await _communicationservices_event_url(initiate.phone_number, initiate)
+    callback_url, wss_url, call = await _communicationservices_urls(
+        initiate.phone_number, initiate
+    )
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     automation_client = await _use_automation_client()
+    streaming_options = MediaStreamingOptions(
+        audio_channel_type=MediaStreamingAudioChannelType.UNMIXED,
+        content_type=MediaStreamingContentType.AUDIO,
+        start_media_streaming=False,
+        transport_type=MediaStreamingTransportType.WEBSOCKET,
+        transport_url=wss_url,
+    )
     call_connection_properties = await automation_client.create_call(
-        callback_url=url,
+        callback_url=callback_url,
         cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
+        media_streaming=streaming_options,
         source_caller_id_number=_source_caller,
         target_participant=PhoneNumberIdentifier(initiate.phone_number),  # pyright: ignore
     )
@@ -398,21 +413,22 @@ async def call_event(
     event = EventGridEvent.from_json(call.content)
     event_type = event.event_type
 
-    logger.debug("Call event with data %s", event.data)
     if not event_type == SystemEventNames.AcsIncomingCallEventName:
         logger.warning("Event %s not supported", event_type)
+        logger.debug("Event data %s", event.data)
         return
 
     call_context: str = event.data["incomingCallContext"]
     phone_number = PhoneNumber(event.data["from"]["phoneNumber"]["value"])
-    url, _call = await _communicationservices_event_url(phone_number)
+    callback_url, wss_url, _call = await _communicationservices_urls(phone_number)
     span_attribute(CallAttributes.CALL_ID, str(_call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, _call.initiate.phone_number)
     await on_new_call(
-        callback_url=url,
+        callback_url=callback_url,
         client=await _use_automation_client(),
         incoming_context=call_context,
         phone_number=phone_number,
+        wss_url=wss_url,
     )
 
 
@@ -444,37 +460,17 @@ async def sms_event(
         return
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
-    async def _post_callback(_call: CallStateModel) -> None:
-        await _trigger_post_event(_call)
-
-    async def _training_callback(_call: CallStateModel) -> None:
-        await _trigger_training_event(_call)
-
     await on_sms_received(
         call=call,
-        client=await _use_automation_client(),
         message=message,
-        post_callback=_post_callback,
-        training_callback=_training_callback,
     )
 
 
-@api.post("/communicationservices/event/{call_id}/{secret}")
-@tracer.start_as_current_span("communicationservices_event_post")
-async def communicationservices_event_post(
-    call_id: UUID,
-    secret: Annotated[str, Field(min_length=16, max_length=16)],
-    request: Request,
-) -> None | ErrorModel:
-    """
-    Handle direct events from Azure Communication Services for a running call.
-
-    No parameters are expected. The body is a list of JSON objects `CloudEvent`.
-
-    Returns a 204 No Content if the events are properly formatted. A 401 Unauthorized if the JWT token is invalid. Otherwise, returns a 400 Bad Request.
-    """
+async def _communicationservices_validate_jwt(
+    headers: Headers,
+) -> None:
     # Validate JWT token
-    service_jwt: str | None = request.headers.get("Authorization")
+    service_jwt: str | None = headers.get("Authorization")
     if not service_jwt:
         raise HTTPException(
             detail="Authorization header missing",
@@ -501,6 +497,107 @@ async def communicationservices_event_post(
             status_code=HTTPStatus.UNAUTHORIZED,
         ) from e
 
+
+async def _communicationservices_validate_call_id(
+    call_id: UUID,
+    secret: str,
+) -> CallStateModel:
+    span_attribute(CallAttributes.CALL_ID, str(call_id))
+
+    call = await _db.call_aget(call_id)
+    if not call:
+        raise HTTPException(
+            detail=f"Call {call_id} not found",
+            status_code=HTTPStatus.NOT_FOUND,
+        )
+    if call.callback_secret != secret:
+        raise HTTPException(
+            detail="Secret does not match",
+            status_code=HTTPStatus.UNAUTHORIZED,
+        )
+
+    span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+    return call
+
+
+@api.websocket("/communicationservices/wss/{call_id}/{secret}")
+@tracer.start_as_current_span("communicationservices_event_post")
+async def communicationservices_wss_post(
+    call_id: UUID,
+    secret: Annotated[str, Field(min_length=16, max_length=16)],
+    websocket: WebSocket,
+) -> None:
+    # Validate connection
+    # TODO: Uncomment when JWT validation is fixed
+    # await _communicationservices_validate_jwt(websocket.headers)
+    call = await _communicationservices_validate_call_id(call_id, secret)
+
+    # Accept connection
+    await websocket.accept()
+    logger.info("WebSocket connection established for call %s", call.call_id)
+
+    # Client SDK
+    automation_client = await _use_automation_client()
+
+    # Queue audio data
+    audio_queue: asyncio.Queue[bytes] = asyncio.Queue()
+
+    async def _consume_audio() -> None:
+        logger.debug("Audio data consumer started")
+        async for event in websocket.iter_json():
+            # DEBUG: Uncomment to see all events, but be careful, it will be verbose ^_^
+            # logger.debug("Audio event received %s", event)
+
+            # TODO: Handle configuration event (audio format, sample rate, etc.)
+            # Skip non-audio events
+            if "kind" not in event or event["kind"] != "AudioData":
+                continue
+
+            # Filter out silent audio
+            audio_data: dict[str, Any] = event.get("audioData", {})
+            audio_base64: str | None = audio_data.get("data", None)
+            audio_silent: bool | None = audio_data.get("silent", True)
+            if audio_silent or not audio_base64:
+                continue
+
+            # Queue audio
+            await audio_queue.put(b64decode(audio_base64))
+
+    await asyncio.gather(
+        # Consume audio from the WebSocket
+        _consume_audio(),
+        # Process audio
+        # TODO: Dynamically set the audio format
+        on_audio_connected(
+            audio_bits_per_sample=16,
+            audio_channels=1,
+            audio_sample_rate=16000,
+            audio_stream=audio_queue,
+            call=call,
+            client=automation_client,
+            post_callback=_trigger_post_event,
+        ),
+    )
+
+
+@api.post("/communicationservices/callback/{call_id}/{secret}")
+@tracer.start_as_current_span("communicationservices_callback_post")
+async def communicationservices_callback_post(
+    call_id: UUID,
+    request: Request,
+    secret: Annotated[str, Field(min_length=16, max_length=16)],
+) -> None:
+    """
+    Handle direct events from Azure Communication Services for a running call.
+
+    No parameters are expected. The body is a list of JSON objects `CloudEvent`.
+
+    Returns a 204 No Content if the events are properly formatted. A 401 Unauthorized if the JWT token is invalid. Otherwise, returns a 400 Bad Request.
+    """
+
+    # Validate connection
+    await _communicationservices_validate_jwt(request.headers)
+
     # Validate request
     events = await request.json()
     if not events or not isinstance(events, list):
@@ -520,7 +617,7 @@ async def communicationservices_event_post(
 
 
 # TODO: Refacto, too long (and remove PLR0912/PLR0915 ignore)
-async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
+async def _communicationservices_event_worker(
     call_id: UUID,
     event_dict: dict,
     secret: str,
@@ -540,16 +637,10 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
 
     Returns None. Can trigger additional events to `training` and `post` queues.
     """
-    span_attribute(CallAttributes.CALL_ID, str(call_id))
-    call = await _db.call_aget(call_id)
-    if not call:
-        logger.warning("Call %s not found", call_id)
-        return
-    if call.callback_secret != secret:
-        logger.warning("Secret for call %s does not match", call_id)
-        return
 
-    span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+    # Validate connection
+    call = await _communicationservices_validate_call_id(call_id, secret)
+
     # Event parsing
     event = CloudEvent.from_dict(event_dict)
     assert isinstance(event.data, dict)
@@ -564,138 +655,82 @@ async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
     # Client SDK
     automation_client = await _use_automation_client()
 
-    logger.debug("Call event received %s for call %s", event_type, call)
-    logger.debug(event.data)
+    # Log
+    logger.debug("Call event received %s for call %s", event_type, call.call_id)
 
-    async def _post_callback(_call: CallStateModel) -> None:
-        await _trigger_post_event(_call)
-
-    async def _training_callback(_call: CallStateModel) -> None:
-        await _trigger_training_event(_call)
-
-    if event_type == "Microsoft.Communication.CallConnected":  # Call answered
-        server_call_id = event.data["serverCallId"]
-        await on_call_connected(
-            call=call,
-            client=automation_client,
-            post_callback=_post_callback,
-            server_call_id=server_call_id,
-            training_callback=_training_callback,
-        )
-
-    elif event_type == "Microsoft.Communication.CallDisconnected":  # Call hung up
-        await on_call_disconnected(
-            call=call,
-            client=automation_client,
-            post_callback=_post_callback,
-        )
-
-    elif (
-        event_type == "Microsoft.Communication.RecognizeCompleted"
-    ):  # Speech recognized
-        recognition_result: str = event.data["recognitionType"]
-
-        if recognition_result == "speech":  # Handle voice
-            speech_text: str | None = event.data["speechResult"]["speech"]
-            if speech_text:
-                await on_speech_recognized(
-                    call=call,
-                    client=automation_client,
-                    post_callback=_post_callback,
-                    text=speech_text,
-                    training_callback=_training_callback,
-                )
-
-        elif recognition_result == "choices":  # Handle IVR
-            label_detected: str = event.data["choiceResult"]["label"]
-            await on_ivr_recognized(
+    match event_type:
+        case "Microsoft.Communication.CallConnected":  # Call answered
+            server_call_id = event.data["serverCallId"]
+            await on_call_connected(
                 call=call,
                 client=automation_client,
-                label=label_detected,
-                post_callback=_post_callback,
-                training_callback=_training_callback,
+                server_call_id=server_call_id,
             )
 
-    elif (
-        event_type == "Microsoft.Communication.RecognizeFailed"
-    ):  # Speech recognition failed
-        result_information = event.data["resultInformation"]
-        error_code: int = result_information["subCode"]
-        error_message: str = result_information["message"]
-        logger.debug(
-            "Speech recognition failed with error code %s: %s",
-            error_code,
-            error_message,
-        )
-        # Error codes:
-        # 8510 = Action failed, initial silence timeout reached
-        # 8532 = Action failed, inter-digit silence timeout reached
-        # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/recognize-action.md#event-codes
-        if error_code in (8510, 8532):  # Timeout retry
-            await on_recognize_timeout_error(
+        case "Microsoft.Communication.CallDisconnected":  # Call hung up
+            await on_call_disconnected(
+                call=call,
+                client=automation_client,
+                post_callback=_trigger_post_event,
+            )
+
+        case "Microsoft.Communication.RecognizeCompleted":  # Speech/IVR recognized
+            recognition_result: str = event.data["recognitionType"]
+            if recognition_result == "choices":  # Handle IVR
+                label_detected: str = event.data["choiceResult"]["label"]
+                await on_ivr_recognized(
+                    call=call,
+                    client=automation_client,
+                    label=label_detected,
+                )
+
+        case "Microsoft.Communication.RecognizeFailed":  # Speech/IVR failed
+            result_information = event.data["resultInformation"]
+            error_code: int = result_information["subCode"]
+            error_message: str = result_information["message"]
+            logger.debug(
+                "Speech recognition failed with error code %s: %s",
+                error_code,
+                error_message,
+            )
+            await on_recognize_error(
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
-                post_callback=_post_callback,
-                training_callback=_training_callback,
             )
-        else:  # Unknown error
-            await on_recognize_unknown_error(
+
+        case "Microsoft.Communication.PlayCompleted":  # Media played
+            await on_play_completed(
                 call=call,
                 client=automation_client,
-                error_code=error_code,
+                contexts=operation_contexts,
+                post_callback=_trigger_post_event,
             )
 
-    elif event_type == "Microsoft.Communication.PlayCompleted":  # Media played
-        await on_play_completed(
-            call=call,
-            client=automation_client,
-            contexts=operation_contexts,
-            post_callback=_post_callback,
-        )
+        case "Microsoft.Communication.PlayFailed":  # Media play failed
+            result_information = event.data["resultInformation"]
+            error_code: int = result_information["subCode"]
+            await on_play_error(error_code)
 
-    elif event_type == "Microsoft.Communication.PlayFailed":  # Media play failed
-        result_information = event.data["resultInformation"]
-        error_code: int = result_information["subCode"]
-        await on_play_error(error_code)
+        case "Microsoft.Communication.CallTransferAccepted":  # Call transfer accepted
+            await on_transfer_completed()
 
-    elif (
-        event_type == "Microsoft.Communication.CallTransferAccepted"
-    ):  # Call transfer accepted
-        await on_transfer_completed()
+        case "Microsoft.Communication.CallTransferFailed":  # Call transfer failed
+            result_information = event.data["resultInformation"]
+            sub_code: int = result_information["subCode"]
+            await on_transfer_error(
+                call=call,
+                client=automation_client,
+                error_code=sub_code,
+            )
 
-    elif (
-        event_type == "Microsoft.Communication.CallTransferFailed"
-    ):  # Call transfer failed
-        result_information = event.data["resultInformation"]
-        sub_code: int = result_information["subCode"]
-        await on_transfer_error(
-            call=call,
-            client=automation_client,
-            error_code=sub_code,
-        )
+        case _:
+            logger.warning("Event %s not supported", event_type)
+            logger.debug("Event data %s", event.data)
 
     await _db.call_aset(
         call
     )  # TODO: Do not persist on every event, this is simpler but not efficient
-
-
-@tracer.start_as_current_span("training_event")
-async def training_event(
-    training: AzureQueueStorageMessage,
-) -> None:
-    """
-    Handle training event from the queue.
-
-    Queue message is a JSON object `CallStateModel`. The event will load asynchroniously the training for a call.
-
-    Returns None.
-    """
-    call = CallStateModel.model_validate_json(training.content)
-    logger.debug("Training event received for call %s", call)
-    span_attribute(CallAttributes.CALL_ID, str(call.call_id))
-    span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
-    await call.trainings(cache_only=False)  # Get trainings by advance to populate cache
 
 
 @tracer.start_as_current_span("post_event")
@@ -711,17 +746,10 @@ async def post_event(
     if not call:
         logger.warning("Call %s not found", post.content)
         return
-    logger.debug("Post event received for call %s", call)
+    logger.debug("Post event received for call %s", call.call_id)
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
     await on_end_call(call)
-
-
-async def _trigger_training_event(call: CallStateModel) -> None:
-    """
-    Shortcut to add training to the queue.
-    """
-    await _training_queue.send_message(call.model_dump_json(exclude_none=True))
 
 
 async def _trigger_post_event(call: CallStateModel) -> None:
@@ -731,13 +759,15 @@ async def _trigger_post_event(call: CallStateModel) -> None:
     await _post_queue.send_message(str(call.call_id))
 
 
-async def _communicationservices_event_url(
+async def _communicationservices_urls(
     phone_number: PhoneNumber, initiate: CallInitiateModel | None = None
-) -> tuple[str, CallStateModel]:
+) -> tuple[str, str, CallStateModel]:
     """
     Generate the callback URL for a call.
 
     If the caller has already called, use the same call ID, to keep the conversation history. Otherwise, create a new call ID.
+
+    Returnes a tuple of the callback URL, the WebSocket URL, and the call object.
     """
     call = await _db.call_asearch_one(phone_number)
     if not call or (
@@ -751,11 +781,15 @@ async def _communicationservices_event_url(
             )
         )
         await _db.call_aset(call)  # Create for the first time
-    url = _COMMUNICATIONSERVICES_CALLABACK_TPL.format(
+    wss_url = _COMMUNICATIONSERVICES_WSS_TPL.format(
         callback_secret=call.callback_secret,
         call_id=str(call.call_id),
     )
-    return url, call
+    callaback_url = _COMMUNICATIONSERVICES_CALLABACK_TPL.format(
+        callback_secret=call.callback_secret,
+        call_id=str(call.call_id),
+    )
+    return callaback_url, wss_url, call
 
 
 # TODO: Secure this endpoint with a secret, either in the Authorization header or in the URL
@@ -782,18 +816,9 @@ async def twilio_sms_post(
     else:
         span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
-        async def _post_callback(_call: CallStateModel) -> None:
-            await _trigger_post_event(_call)
-
-        async def _training_callback(_call: CallStateModel) -> None:
-            await _trigger_training_event(_call)
-
         event_status = await on_sms_received(
             call=call,
-            client=await _use_automation_client(),
             message=Body,
-            post_callback=_post_callback,
-            training_callback=_training_callback,
         )
         if not event_status:
             raise HTTPException(
