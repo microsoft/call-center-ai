@@ -536,9 +536,6 @@ async def communicationservices_event_post(
         ]
     )
 
-    # Return default response
-    return
-
 
 # TODO: Refacto, too long (and remove PLR0912/PLR0915 ignore)
 async def _communicationservices_event_worker(  # noqa: PLR0912, PLR0915
