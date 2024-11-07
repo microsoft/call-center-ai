@@ -65,11 +65,11 @@ class RedisCache(ICache):
             assert await self._client.get(test_name) is None
             return ReadinessEnum.OK
         except AssertionError:
-            logger.error("Readiness test failed", exc_info=True)
+            logger.exception("Readiness test failed")
         except RedisError:
-            logger.error("Error requesting Redis", exc_info=True)
+            logger.exception("Error requesting Redis")
         except Exception:
-            logger.error("Unknown error while checking Redis readiness", exc_info=True)
+            logger.exception("Unknown error while checking Redis readiness")
         return ReadinessEnum.FAIL
 
     async def aget(self, key: str) -> bytes | None:
@@ -85,7 +85,7 @@ class RedisCache(ICache):
         try:
             res = await self._client.get(sha_key)
         except RedisError:
-            logger.error("Error getting value", exc_info=True)
+            logger.exception("Error getting value")
         return res
 
     async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
@@ -104,7 +104,7 @@ class RedisCache(ICache):
                 value=value if value else "",
             )
         except RedisError:
-            logger.error("Error setting value", exc_info=True)
+            logger.exception("Error setting value")
             return False
         return True
 
@@ -118,7 +118,7 @@ class RedisCache(ICache):
         try:
             await self._client.delete(sha_key)
         except RedisError:
-            logger.error("Error deleting value", exc_info=True)
+            logger.exception("Error deleting value")
             return False
         return True
 

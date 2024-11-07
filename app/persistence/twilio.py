@@ -31,9 +31,9 @@ class TwilioSms(ISms):
             assert balance.balance and float(balance.balance) > 0
             return ReadinessEnum.OK
         except AssertionError:
-            logger.error("Readiness test failed", exc_info=True)
+            logger.exception("Readiness test failed")
         except Exception:
-            logger.error("Unknown error while checking Twilio readiness", exc_info=True)
+            logger.exception("Unknown error while checking Twilio readiness")
         return ReadinessEnum.FAIL
 
     async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
