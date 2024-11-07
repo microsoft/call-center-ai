@@ -230,14 +230,7 @@ async def report_get(phone_number: str | None = None) -> HTMLResponse:
 
     Returns a list of calls with a web interface.
     """
-    try:
-        phone_number = PhoneNumber(phone_number) if phone_number else None
-    except ValueError as e:
-        return HTMLResponse(
-            content=f"Invalid phone number: {e}",
-            status_code=HTTPStatus.BAD_REQUEST,
-        )
-
+    phone_number = PhoneNumber(phone_number) if phone_number else None
     count = 100
     calls, total = (
         await _db.call_asearch_all(count=count, phone_number=phone_number) or []
@@ -311,11 +304,7 @@ async def call_list_get(
 
     Returns a list of calls objects `CallGetModel`, for a phone number, in JSON format.
     """
-    try:
-        phone_number = PhoneNumber(phone_number) if phone_number else None
-    except ValueError as e:
-        raise RequestValidationError([f"Invalid phone number: {e}"]) from e
-
+    phone_number = PhoneNumber(phone_number) if phone_number else None
     count = 100
     calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=count)
     if not calls:
@@ -349,10 +338,7 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
         pass
 
     # Second, try to get by phone number
-    try:
-        phone_number = PhoneNumber(call_id_or_phone_number)
-    except ValueError as e:
-        raise RequestValidationError([str(e)]) from e
+    phone_number = PhoneNumber(call_id_or_phone_number)
     call = await _db.call_asearch_one(phone_number=phone_number)
     if not call:
         raise HTTPException(
@@ -509,18 +495,14 @@ async def communicationservices_event_post(
                 service_jwt
             ).key,
         )
-    except jwt.PyJWTError:
-        logger.warning("Invalid JWT token", exc_info=True)
+    except jwt.PyJWTError as e:
         raise HTTPException(
             detail="Invalid JWT token",
             status_code=HTTPStatus.UNAUTHORIZED,
-        )
+        ) from e
 
     # Validate request
-    try:
-        events = await request.json()
-    except ValueError as e:
-        raise RequestValidationError([f"Invalid JSON format: {e}"]) from e
+    events = await request.json()
     if not events or not isinstance(events, list):
         raise RequestValidationError(["Events must be a list"])
 
@@ -841,6 +823,7 @@ async def http_exception_handler(
 
 
 @api.exception_handler(RequestValidationError)
+@api.exception_handler(ValueError)
 async def validation_exception_handler(
     request: Request,  # noqa: ARG001
     exc: RequestValidationError,
