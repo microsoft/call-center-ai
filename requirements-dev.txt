@@ -12,10 +12,6 @@ aiohttp[speedups]==3.11.6
     # via
     #   aiohttp-retry
     #   call-center-ai (pyproject.toml)
-    #   datasets
-    #   fsspec
-    #   langchain
-    #   langchain-community
     #   rtclient
     #   twilio
 aiohttp-retry==2.9.1
@@ -28,6 +24,8 @@ aiosignal==1.3.1
     # via aiohttp
 aiosqlite==0.20.0
     # via call-center-ai (pyproject.toml)
+aniso8601==9.0.1
+    # via flask-restx
 annotated-types==0.7.0
     # via pydantic
 anyio==4.6.2.post1
@@ -36,12 +34,17 @@ anyio==4.6.2.post1
     #   openai
     #   starlette
     #   watchfiles
-appdirs==1.4.4
-    # via ragas
+argcomplete==3.5.1
+    # via promptflow-devkit
 asgiref==3.8.1
     # via opentelemetry-instrumentation-asgi
 attrs==24.2.0
-    # via aiohttp
+    # via
+    #   aiohttp
+    #   jsonschema
+    #   referencing
+azure-ai-evaluation==1.0.1
+    # via call-center-ai (pyproject.toml)
 azure-ai-translation-text==1.0.1
     # via call-center-ai (pyproject.toml)
 azure-appconfiguration==1.7.1
@@ -54,6 +57,7 @@ azure-communication-sms==1.1.0
     # via call-center-ai (pyproject.toml)
 azure-core==1.32.0
     # via
+    #   azure-ai-evaluation
     #   azure-ai-translation-text
     #   azure-appconfiguration
     #   azure-communication-callautomation
@@ -75,18 +79,23 @@ azure-eventgrid==4.21.0
     # via call-center-ai (pyproject.toml)
 azure-identity==1.19.0
     # via
+    #   azure-ai-evaluation
     #   call-center-ai (pyproject.toml)
     #   rtclient
 azure-monitor-opentelemetry==1.6.4
     # via call-center-ai (pyproject.toml)
 azure-monitor-opentelemetry-exporter==1.0.0b32
-    # via azure-monitor-opentelemetry
+    # via
+    #   azure-monitor-opentelemetry
+    #   promptflow-devkit
 azure-search-documents==11.6.0b7
     # via call-center-ai (pyproject.toml)
 azure-storage-queue==12.12.0
     # via call-center-ai (pyproject.toml)
 beautifulsoup4==4.12.3
     # via django-htmlmin
+blinker==1.9.0
+    # via flask
 brotli==1.1.0
     # via aiohttp
 build==1.2.2.post1
@@ -97,7 +106,6 @@ certifi==2024.8.30
     #   httpx
     #   msrest
     #   requests
-    #   sentry-sdk
 cffi==1.17.1
     # via
     #   cryptography
@@ -107,59 +115,67 @@ charset-normalizer==3.4.0
 click==8.1.7
     # via
     #   deptry
+    #   flask
+    #   nltk
     #   pip-tools
-    #   typer
     #   uvicorn
+colorama==0.4.6
+    # via promptflow-devkit
 cryptography==43.0.3
     # via
     #   azure-identity
     #   azure-storage-queue
     #   msal
+    #   promptflow-devkit
     #   pyjwt
-dataclasses-json==0.6.7
-    # via langchain-community
-datasets==3.1.0
-    # via ragas
-deepeval==0.21.36
-    # via call-center-ai (pyproject.toml)
 deprecated==1.2.15
     # via
     #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-semantic-conventions
 deptry==0.21.1
     # via call-center-ai (pyproject.toml)
-dill==0.3.8
-    # via
-    #   datasets
-    #   multiprocess
 distro==1.9.0
     # via openai
 django-htmlmin==0.11.0
     # via call-center-ai (pyproject.toml)
 dnspython==2.7.0
     # via email-validator
-docx2txt==0.8
-    # via deepeval
+docstring-parser==0.16
+    # via promptflow-core
 email-validator==2.2.0
     # via pydantic
 execnet==2.1.1
     # via pytest-xdist
 fastapi==0.115.5
-    # via call-center-ai (pyproject.toml)
-filelock==3.16.1
     # via
-    #   datasets
-    #   huggingface-hub
+    #   call-center-ai (pyproject.toml)
+    #   promptflow-core
+filelock==3.16.1
+    # via promptflow-devkit
+filetype==1.2.0
+    # via promptflow-core
 fixedint==0.1.6
     # via azure-monitor-opentelemetry-exporter
+flask==3.1.0
+    # via
+    #   flask-cors
+    #   flask-restx
+    #   promptflow-core
+flask-cors==4.0.2
+    # via promptflow-devkit
+flask-restx==1.3.0
+    # via promptflow-devkit
 frozenlist==1.5.0
     # via
     #   aiohttp
     #   aiosignal
-fsspec[http]==2024.9.0
-    # via
-    #   datasets
-    #   huggingface-hub
+gitdb==4.0.11
+    # via gitpython
+gitpython==3.1.43
+    # via promptflow-devkit
+googleapis-common-protos==1.66.0
+    # via opentelemetry-exporter-otlp-proto-http
 gunicorn==23.0.0
     # via call-center-ai (pyproject.toml)
 h11==0.14.0
@@ -174,12 +190,8 @@ httptools==0.6.4
     # via uvicorn
 httpx==0.27.2
     # via
-    #   langsmith
     #   openai
-httpx-sse==0.4.0
-    # via langchain-community
-huggingface-hub==0.26.2
-    # via datasets
+    #   promptflow-devkit
 idna==3.10
     # via
     #   anyio
@@ -188,9 +200,9 @@ idna==3.10
     #   requests
     #   yarl
 importlib-metadata==8.5.0
-    # via
-    #   deepeval
-    #   opentelemetry-api
+    # via opentelemetry-api
+importlib-resources==6.4.5
+    # via flask-restx
 iniconfig==2.0.0
     # via pytest
 isodate==0.7.2
@@ -201,52 +213,38 @@ isodate==0.7.2
     #   azure-search-documents
     #   azure-storage-queue
     #   msrest
+itsdangerous==2.2.0
+    # via flask
+jaraco-classes==3.4.0
+    # via keyring
 jinja2==3.1.4
-    # via call-center-ai (pyproject.toml)
+    # via
+    #   call-center-ai (pyproject.toml)
+    #   flask
 jiter==0.7.1
     # via openai
+joblib==1.4.2
+    # via nltk
 json-repair==0.30.2
     # via call-center-ai (pyproject.toml)
-jsonpatch==1.33
-    # via langchain-core
-jsonpointer==3.0.0
-    # via jsonpatch
-langchain==0.3.7
+jsonschema==4.23.0
     # via
-    #   deepeval
-    #   langchain-community
-    #   ragas
-langchain-community==0.3.7
-    # via ragas
-langchain-core==0.3.19
-    # via
-    #   deepeval
-    #   langchain
-    #   langchain-community
-    #   langchain-openai
-    #   langchain-text-splitters
-    #   ragas
-langchain-openai==0.2.9
-    # via
-    #   deepeval
-    #   ragas
-langchain-text-splitters==0.3.2
-    # via langchain
-langsmith==0.1.143
-    # via
-    #   langchain
-    #   langchain-community
-    #   langchain-core
-markdown-it-py==3.0.0
-    # via rich
+    #   flask-restx
+    #   promptflow-core
+jsonschema-specifications==2024.10.1
+    # via jsonschema
+keyring==24.3.1
+    # via promptflow-devkit
 markupsafe==3.0.2
-    # via jinja2
+    # via
+    #   jinja2
+    #   werkzeug
 marshmallow==3.23.1
-    # via dataclasses-json
-mdurl==0.1.2
-    # via markdown-it-py
+    # via promptflow-devkit
 mistune==3.0.2
     # via call-center-ai (pyproject.toml)
+more-itertools==10.5.0
+    # via jaraco-classes
 msal==1.31.1
     # via
     #   azure-identity
@@ -262,32 +260,23 @@ multidict==6.1.0
     # via
     #   aiohttp
     #   yarl
-multiprocess==0.70.16
-    # via datasets
-mypy-extensions==1.0.0
-    # via typing-inspect
-nest-asyncio==1.6.0
-    # via ragas
+nltk==3.9.1
+    # via azure-ai-evaluation
 nodeenv==1.9.1
     # via pyright
-numpy==1.26.4
-    # via
-    #   datasets
-    #   langchain
-    #   langchain-community
-    #   pandas
-    #   ragas
+numpy==2.1.3
+    # via pandas
 oauthlib==3.2.2
     # via requests-oauthlib
 openai==1.55.0
     # via
     #   call-center-ai (pyproject.toml)
-    #   langchain-openai
-    #   ragas
+    #   promptflow-tracing
 opentelemetry-api==1.28.2
     # via
     #   azure-core-tracing-opentelemetry
     #   azure-monitor-opentelemetry-exporter
+    #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-aiohttp-client
     #   opentelemetry-instrumentation-asgi
@@ -306,6 +295,10 @@ opentelemetry-api==1.28.2
     #   opentelemetry-instrumentation-wsgi
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
+opentelemetry-exporter-otlp-proto-common==1.28.2
+    # via opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-http==1.28.2
+    # via promptflow-devkit
 opentelemetry-instrumentation==0.49b2
     # via
     #   opentelemetry-instrumentation-aiohttp-client
@@ -357,13 +350,19 @@ opentelemetry-instrumentation-wsgi==0.49b2
     # via
     #   opentelemetry-instrumentation-django
     #   opentelemetry-instrumentation-flask
+opentelemetry-proto==1.28.2
+    # via
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-http
 opentelemetry-resource-detector-azure==0.1.5
     # via azure-monitor-opentelemetry
 opentelemetry-sdk==1.28.2
     # via
     #   azure-monitor-opentelemetry
     #   azure-monitor-opentelemetry-exporter
+    #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-resource-detector-azure
+    #   promptflow-tracing
 opentelemetry-semantic-conventions==0.49b2
     # via
     #   call-center-ai (pyproject.toml)
@@ -396,45 +395,49 @@ opentelemetry-util-http==0.49b2
     #   opentelemetry-instrumentation-urllib
     #   opentelemetry-instrumentation-urllib3
     #   opentelemetry-instrumentation-wsgi
-orjson==3.10.11
-    # via langsmith
 packaging==24.2
     # via
     #   build
-    #   datasets
     #   deptry
     #   gunicorn
-    #   huggingface-hub
-    #   langchain-core
     #   marshmallow
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-flask
     #   pytest
     #   requirements-parser
 pandas==2.2.3
-    # via datasets
+    # via promptflow-devkit
 phonenumbers==8.13.50
     # via call-center-ai (pyproject.toml)
+pillow==10.4.0
+    # via promptflow-devkit
 pip-tools==7.4.1
     # via call-center-ai (pyproject.toml)
 pluggy==1.5.0
     # via pytest
 portalocker==2.10.1
+    # via msal-extensions
+promptflow-core==1.16.1
     # via
-    #   deepeval
-    #   msal-extensions
+    #   azure-ai-evaluation
+    #   promptflow-devkit
+promptflow-devkit==1.16.1
+    # via azure-ai-evaluation
+promptflow-tracing==1.16.1
+    # via promptflow-core
 propcache==0.2.0
     # via
     #   aiohttp
     #   yarl
-protobuf==4.25.1
-    # via deepeval
+protobuf==5.28.3
+    # via
+    #   googleapis-common-protos
+    #   opentelemetry-proto
 psutil==5.9.8
     # via
     #   azure-monitor-opentelemetry-exporter
+    #   promptflow-core
     #   pytest-xdist
-pyarrow==18.0.0
-    # via datasets
 pycares==4.4.0
     # via aiodns
 pycparser==2.22
@@ -442,30 +445,24 @@ pycparser==2.22
 pydantic[email]==2.10.0
     # via
     #   call-center-ai (pyproject.toml)
-    #   deepeval
     #   fastapi
-    #   langchain
-    #   langchain-core
-    #   langsmith
     #   openai
     #   pydantic-extra-types
     #   pydantic-settings
-    #   ragas
     #   rtclient
 pydantic-core==2.27.0
     # via pydantic
 pydantic-extra-types==2.10.0
     # via call-center-ai (pyproject.toml)
 pydantic-settings==2.6.1
-    # via
-    #   call-center-ai (pyproject.toml)
-    #   langchain-community
+    # via call-center-ai (pyproject.toml)
+pydash==7.0.7
+    # via promptflow-devkit
 pydub==0.25.1
     # via call-center-ai (pyproject.toml)
-pygments==2.18.0
-    # via rich
 pyjwt[crypto]==2.10.0
     # via
+    #   azure-ai-evaluation
     #   call-center-ai (pyproject.toml)
     #   msal
     #   twilio
@@ -475,12 +472,9 @@ pyproject-hooks==1.2.0
     #   pip-tools
 pyright==1.1.389
     # via call-center-ai (pyproject.toml)
-pysbd==0.3.4
-    # via ragas
 pytest==8.3.3
     # via
     #   call-center-ai (pyproject.toml)
-    #   deepeval
     #   pytest-assume
     #   pytest-asyncio
     #   pytest-repeat
@@ -490,18 +484,18 @@ pytest-assume==2.4.3
 pytest-asyncio==0.24.0
     # via call-center-ai (pyproject.toml)
 pytest-repeat==0.9.3
-    # via
-    #   call-center-ai (pyproject.toml)
-    #   deepeval
+    # via call-center-ai (pyproject.toml)
 pytest-xdist[psutil]==3.6.1
-    # via
-    #   call-center-ai (pyproject.toml)
-    #   deepeval
+    # via call-center-ai (pyproject.toml)
 python-dateutil==2.9.0.post0
-    # via pandas
+    # via
+    #   pandas
+    #   promptflow-core
+    #   strictyaml
 python-dotenv==1.0.1
     # via
     #   call-center-ai (pyproject.toml)
+    #   promptflow-devkit
     #   pydantic-settings
     #   uvicorn
 python-multipart==0.0.17
@@ -509,61 +503,55 @@ python-multipart==0.0.17
 pytz==2024.2
     # via
     #   call-center-ai (pyproject.toml)
+    #   flask-restx
     #   pandas
 pyyaml==6.0.2
     # via
     #   call-center-ai (pyproject.toml)
-    #   datasets
-    #   huggingface-hub
-    #   langchain
-    #   langchain-community
-    #   langchain-core
     #   uvicorn
-ragas==0.2.6
-    # via deepeval
 redis==5.2.0
     # via call-center-ai (pyproject.toml)
+referencing==0.35.1
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 regex==2024.11.6
-    # via tiktoken
+    # via
+    #   nltk
+    #   tiktoken
 requests==2.32.3
     # via
     #   azure-core
-    #   datasets
-    #   deepeval
-    #   huggingface-hub
-    #   langchain
-    #   langchain-community
-    #   langsmith
     #   msal
     #   msrest
+    #   opentelemetry-exporter-otlp-proto-http
     #   requests-oauthlib
-    #   requests-toolbelt
     #   tiktoken
     #   twilio
 requests-oauthlib==2.0.0
     # via msrest
-requests-toolbelt==1.0.0
-    # via langsmith
 requirements-parser==0.11.0
     # via deptry
-rich==13.9.4
+rpds-py==0.21.0
     # via
-    #   deepeval
-    #   typer
+    #   jsonschema
+    #   referencing
 rtclient @ git+https://github.com/Azure-Samples/aoai-realtime-audio-sdk#subdirectory=python
     # via call-center-ai (pyproject.toml)
+ruamel-yaml==0.18.6
+    # via promptflow-core
+ruamel-yaml-clib==0.2.12
+    # via ruamel-yaml
 ruff==0.7.4
     # via call-center-ai (pyproject.toml)
-sentry-sdk==2.18.0
-    # via deepeval
-shellingham==1.5.4
-    # via typer
 six==1.16.0
     # via
     #   azure-core
     #   html5lib
     #   pytest-assume
     #   python-dateutil
+smmap==5.0.1
+    # via gitdb
 sniffio==1.3.1
     # via
     #   anyio
@@ -571,39 +559,29 @@ sniffio==1.3.1
     #   openai
 soupsieve==2.6
     # via beautifulsoup4
-sqlalchemy==2.0.35
-    # via
-    #   langchain
-    #   langchain-community
+sqlalchemy==2.0.36
+    # via promptflow-devkit
 starlette==0.41.3
     # via fastapi
+strictyaml==1.7.3
+    # via promptflow-devkit
 structlog==24.4.0
     # via call-center-ai (pyproject.toml)
 tabulate==0.9.0
-    # via deepeval
-tenacity==8.2.3
-    # via
-    #   call-center-ai (pyproject.toml)
-    #   deepeval
-    #   langchain
-    #   langchain-community
-    #   langchain-core
+    # via promptflow-devkit
+tenacity==8.5.0
+    # via call-center-ai (pyproject.toml)
 tiktoken==0.8.0
     # via
     #   call-center-ai (pyproject.toml)
-    #   langchain-openai
     #   opentelemetry-instrumentation-openai
-    #   ragas
+    #   promptflow-tracing
 tqdm==4.67.0
     # via
-    #   datasets
-    #   deepeval
-    #   huggingface-hub
+    #   nltk
     #   openai
 twilio==9.3.6
     # via call-center-ai (pyproject.toml)
-typer==0.13.1
-    # via deepeval
 types-setuptools==75.5.0.20241122
     # via requirements-parser
 typing-extensions==4.12.2
@@ -619,35 +597,34 @@ typing-extensions==4.12.2
     #   azure-storage-queue
     #   call-center-ai (pyproject.toml)
     #   fastapi
-    #   huggingface-hub
-    #   langchain-core
     #   openai
     #   opentelemetry-sdk
     #   pydantic
     #   pydantic-core
     #   pydantic-extra-types
+    #   pydash
     #   pyright
     #   sqlalchemy
-    #   typer
-    #   typing-inspect
-typing-inspect==0.9.0
-    # via dataclasses-json
 tzdata==2024.2
     # via pandas
 urllib3==2.2.3
-    # via
-    #   requests
-    #   sentry-sdk
+    # via requests
 uvicorn[standard]==0.32.1
     # via call-center-ai (pyproject.toml)
 uvloop==0.21.0
     # via uvicorn
+waitress==2.1.2
+    # via promptflow-devkit
 watchfiles==0.24.0
     # via uvicorn
 webencodings==0.5.1
     # via html5lib
 websockets==14.1
     # via uvicorn
+werkzeug==3.1.3
+    # via
+    #   flask
+    #   flask-restx
 wheel==0.45.0
     # via pip-tools
 wrapt==1.16.0
@@ -659,8 +636,6 @@ wrapt==1.16.0
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-instrumentation-redis
     #   opentelemetry-instrumentation-urllib3
-xxhash==3.5.0
-    # via datasets
 yarl==1.17.2
     # via aiohttp
 zipp==3.21.0

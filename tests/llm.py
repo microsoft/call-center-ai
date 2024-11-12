@@ -1,19 +1,7 @@
-import asyncio
 import json
-import re
-from datetime import datetime
 
 import pytest
-from deepeval import assert_test
-from deepeval.metrics import (
-    AnswerRelevancyMetric,
-    BaseMetric,
-    BiasMetric,
-    ContextualRelevancyMetric,
-    ToxicityMetric,
-)
-from deepeval.models.gpt_model import GPTModel
-from deepeval.test_case import LLMTestCase
+from azure.ai.evaluation import AzureOpenAIModelConfiguration, QAEvaluator
 from pydantic import TypeAdapter
 from pytest_assume.plugin import assume
 
@@ -23,7 +11,6 @@ from app.helpers.call_events import (
     on_end_call,
     on_ivr_recognized,
     on_play_completed,
-    on_speech_recognized,
 )
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
@@ -32,207 +19,12 @@ from app.models.training import TrainingModel
 from tests.conftest import CallAutomationClientMock, with_conversations
 
 
-class ClaimRelevancyMetric(BaseMetric):
-    call: CallStateModel
-    model: GPTModel
-
-    def __init__(
-        self,
-        call: CallStateModel,
-        model: GPTModel,
-        threshold: float = 0.5,
-    ):
-        super().__init__()
-        self.call = call
-        self.model = model
-        self.threshold = threshold
-
-    def measure(
-        self,
-        *args,
-        **kwargs,
-    ):
-        raise NotImplementedError("Use a_measure instead")
-
-    async def a_measure(
-        self,
-        test_case: LLMTestCase,
-        *args,  # noqa: ARG002
-        **kwargs,  # noqa: ARG002
-    ) -> float:
-        assert test_case.input
-        # Extract claim data
-        extracts = await self._extract_claim_theory(test_case.input)
-        logger.info("Extracted claim data: %s", extracts)
-        # Measure each claim in parallel
-        scores = await asyncio.gather(
-            *[
-                self._score_data(
-                    key=key,
-                    throry=value,
-                    real=str(self.call.claim.get(key, None)),
-                )
-                for key, value in extracts.items()
-            ]
-        )
-        logger.info("Claim scores: %s", scores)
-        # Score is the average
-        self.score = sum(scores) / len(scores) if len(extracts) > 0 else 1
-        # Test against the threshold
-        self.success = self.score >= self.threshold
-        return self.score
-
-    async def _score_data(self, key: str, throry: str, real: str | None) -> float:
-        res, _ = await self.model.a_generate(
-            f"""
-            Assistant is a data analyst expert with 20 years of experience.
-
-            # Context
-            Connversation come from a call center.
-
-            # Objective
-            Score the relevancy of a theoritical data against the real one.
-
-            # Rules
-            - A high score means the real data is correct
-            - A low score means the real data is not relevant and lacks details against the theoritical data
-            - Respond only with the score, nothing else
-            - The score should be between 0 and 1
-
-            # Data
-            Name: {key}
-            Throry: {throry or "N/A"}
-            Real: {real or "N/A"}
-
-            # Response format
-            score, float between 0.0 and 1.0
-
-            ## Example 1
-            Name: age
-            Throry: 25 years old, born in 1996
-            Real: 25
-            Assistant: 1
-
-            ## Example 2
-            Name: street_address
-            Throry: 123 Main St, New York, NY 10001
-            Real: United States
-            Assistant: 0.2
-
-            ## Example 3
-            Name: phone
-            Throry: 123-456-7890
-            Real: +11234567890
-            Assistant: 1.0
-
-            ## Example 4
-            Name: email
-            Throry: john.doe@gmail.com
-            Real: marie.rac@yahoo.fr
-            Assistant: 0.0
-
-            ## Example 5
-            Name: incident_location
-            Throry: Near the Eiffel Tower, Paris, France
-            Real: Eiffel Tower
-            Assistant: 0.6
-
-            ## Example 6
-            Name: incident_date
-            Throry: 2021-01-01
-            Real: N/A
-            Assistant: 0.0
-        """
-        )
-        try:
-            score = float(res)
-        except ValueError as e:
-            group = re.search(r"\d+\.\d+", res)
-            if group:
-                return float(group.group())
-            raise ValueError(f"LLM response is not a number: {res}") from e
-        return score
-
-    async def _extract_claim_theory(self, conversation: str) -> dict[str, str]:
-        res, _ = await self.model.a_generate(
-            f"""
-            Assistant is a data analyst expert with 20 years of experience.
-
-            # Context
-            Conversation is coming from a call centre. Today is {datetime.now(self.call.tz()).strftime("%a %d %b %Y, %H:%M (%Z)")}.
-
-            # Objective
-            Extract fields from a conversation. The respond will be a JSON object with the key-value pairs.
-
-            # Rules
-            - All data should be extracted
-            - Be concise
-            - Limit fields to the ones listed
-            - Only add info which are explicitly mentioned
-            - Respond only with the JSON object, nothing else
-
-            # Fields
-            {", ".join([f"{field.name} ({field.type.value})" for field in self.call.initiate.claim])}
-
-            # Conversation
-            {conversation}
-
-            # Response format in JSON
-            [
-                {{
-                    "key": "[key]",
-                    "value": "[value]"
-                }}
-            ]
-
-            ## Example 1
-            Conversation: I am 25 years old and I was born in 1996.
-            Fields: age (text), birth_date (datetime), car_model (text)
-            Assistant: [{{"key": "age", "value": "25 years old"}}, {{"key": "birth_date", "value": "1996-05-07"}}]
-
-            ## Example 2
-            Conversation: I live at 123 Main St, New York, NY 10001. My car is a Ford F-150 2021.
-            Fields: street_address (text), car_model (text), phone (phone_number)
-            Assistant: [{{"key": "street_address", "value": "123 Main St, New York, NY 10001"}}, {{"key": "car_model", "value": "Ford F-150 2021"}}]
-
-            ## Example 3
-            Conversation: zsssk zsssk
-            Fields: incident_location (text), incident_date (datetime)
-            Assistant: []
-
-            ## Example 4
-            Conversation: My name is John Doe.
-            Fields: car_model (text)
-            Assistant: []
-        """
-        )
-        res = res.strip().strip("```json\n").strip("\n```").strip()
-        extracts: list[dict[str, str]] = json.loads(res)
-        return {
-            extract["key"]: extract["value"]
-            for extract in extracts
-            if "value" in extract
-            and "key" in extract
-            and any(
-                claim_field.name == extract["key"]
-                for claim_field in self.call.initiate.claim
-            )
-        }
-
-    def is_successful(self) -> bool:
-        return self.success or False
-
-    @property
-    def __name__(self):  # pyright: ignore
-        return "Claim Relevancy"
-
-
 @with_conversations
 @pytest.mark.asyncio(scope="session")
 async def test_llm(  # noqa: PLR0913
     call: CallStateModel,
     claim_tests_excl: list[str],
-    deepeval_model: GPTModel,
+    eval_config: AzureOpenAIModelConfiguration,
     expected_output: str,
     speeches: list[str],
     lang: str,
@@ -316,45 +108,44 @@ async def test_llm(  # noqa: PLR0913
     logger.info("claim: %s", call.claim)
     logger.info("full_speech: %s", full_speech)
 
-    # Configure LLM tests
-    test_case = LLMTestCase(
-        actual_output=actual_output,
-        expected_output=expected_output,
-        input=full_speech,
-        retrieval_context=[
-            json.dumps(call.claim),
-            TypeAdapter(list[ReminderModel]).dump_json(call.reminders).decode(),
-            TypeAdapter(list[TrainingModel]).dump_json(await call.trainings()).decode(),
-        ],
-    )
-
     assume(call.next, "No next action found")
     assume(call.synthesis, "No synthesis found")
 
-    # Define LLM metrics
-    llm_metrics: list[BaseMetric] = [
-        BiasMetric(threshold=1, model=deepeval_model),  # Gender, age, ethnicity
-        ClaimRelevancyMetric(
-            call=call,
-            model=deepeval_model,
-            threshold=0.5,
-        ),  # Claim data
-        ToxicityMetric(threshold=1, model=deepeval_model),  # Hate speech, insults
-    ]  # Include those by default
+    qa_eval = QAEvaluator(
+        model_config=eval_config,
+    )
+
+    qa_res = qa_eval(
+        ground_truth=expected_output,
+        query=full_speech,
+        response=actual_output,
+        context="\n".join(
+            [
+                json.dumps(call.claim),
+                TypeAdapter(list[ReminderModel]).dump_json(call.reminders).decode(),
+                TypeAdapter(list[TrainingModel])
+                .dump_json(await call.trainings())
+                .decode(),
+            ]
+        ),
+    )
+
+    kpis = {"groundedness", "relevance", "coherence", "fluency", "similarity"}
 
     if not any(
         field == "answer_relevancy" for field in claim_tests_excl
     ):  # Test respond relevancy from questions
-        llm_metrics.append(AnswerRelevancyMetric(threshold=0.5, model=deepeval_model))
+        kpis.remove("relevance")
     if not any(
         field == "contextual_relevancy" for field in claim_tests_excl
     ):  # Test respond relevancy from context
-        llm_metrics.append(
-            ContextualRelevancyMetric(threshold=0.25, model=deepeval_model)
-        )
+        kpis.remove("coherence")
 
-    # Execute LLM tests
-    assert_test(test_case, llm_metrics)
+    for kpi in ("groundedness", "relevance", "coherence", "fluency", "similarity"):
+        assume(
+            qa_res["kpi"] >= 1.5,
+            f"KPI {kpi} is below threshold: {qa_res['kpi']}",
+        )
 
 
 def _remove_newlines(text: str) -> str:

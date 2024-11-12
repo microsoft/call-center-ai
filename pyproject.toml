@@ -55,7 +55,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "deepeval~=0.21",  # LLM model evaluation
+  "azure-ai-evaluation~=1.0a0",  # LLM model evaluation
   "deptry~=0.20",  # Dependency tree testing
   "pip-tools~=7.4",  # Compile requirements.txt from pyproject.toml
   "pyright~=1.1",  # Static type checker
