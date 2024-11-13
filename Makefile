@@ -123,9 +123,10 @@ dev:
 		--workers 2
 
 build:
-	$(docker) build \
+	DOCKER_BUILDKIT=1 $(docker) build \
 		--build-arg VERSION=$(version_full) \
 		--file cicd/Dockerfile \
+		--platform linux/amd64,linux/arm64 \
 		--tag $(container_name):$(version_small) \
 		--tag $(container_name):latest \
 		.
