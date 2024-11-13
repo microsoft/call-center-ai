@@ -94,7 +94,8 @@ jobs:
       - sast-semgrep
     runs-on: ubuntu-22.04
     permissions:
-      # Allow to write to GitHub Packages
+      attestations: write
+      id-token: write
       packages: write
     steps:
       - name: Checkout
@@ -116,7 +117,7 @@ jobs:
         with:
           version: v${{ env.BUILDX_VERSION }}
 
-      - name: Login to registry - GitHub
+      - name: Login to registry
         uses: docker/login-action@v3.1.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
@@ -141,6 +142,7 @@ jobs:
             org.opencontainers.image.vendor=${{ github.actor }}
 
       - name: Build/push container
+        id: build
         uses: docker/build-push-action@v5.3.0
         with:
           build-args: |
@@ -151,10 +153,16 @@ jobs:
           file: cicd/Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ env.CONTAINER_PLATFORMS }}
-          provenance: true
           push: true
           sbom: true
           tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Generate attestations
+        uses: actions/attest-build-provenance@v1.4.4
+        with:
+          push-to-registry: true
+          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-name: ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
 
   create-release:
     name: Create release
