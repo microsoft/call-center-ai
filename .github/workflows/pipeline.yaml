@@ -148,6 +148,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha
           context: .
+          file: cicd/Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ env.CONTAINER_PLATFORMS }}
           provenance: true

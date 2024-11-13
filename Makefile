@@ -125,6 +125,7 @@ dev:
 build:
 	$(docker) build \
 		--build-arg VERSION=$(version_full) \
+		--file cicd/Dockerfile \
 		--tag $(container_name):$(version_small) \
 		--tag $(container_name):latest \
 		.
