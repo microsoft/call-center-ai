@@ -152,6 +152,7 @@ jobs:
           context: .
           file: cicd/Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=registry,oci-mediatypes=true,compression=estargz,compression-level=9,force-compression=true
           platforms: ${{ env.CONTAINER_PLATFORMS }}
           push: true
           sbom: true
