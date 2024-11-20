@@ -884,7 +884,7 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
   for item in items({
     answer_hard_timeout_sec: 180
     answer_soft_timeout_sec: 30
-    callback_timeout_hour: 72
+    callback_timeout_hour: 3
     phone_silence_timeout_sec: 1
     recording_enabled: false
     slow_llm_for_chat: true
