@@ -202,7 +202,7 @@ watch-call:
 	@echo "👀 Watching status of $(phone_number)..."
 	while true; do \
 		clear; \
-		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .phone_number, "claim": .claim, "reminders": .reminders}'; \
+		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .initiate.phone_number, "claim": .claim, "reminders": .reminders}'; \
 		sleep 3; \
 	done
 
