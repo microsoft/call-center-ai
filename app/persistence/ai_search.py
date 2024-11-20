@@ -8,8 +8,8 @@ from azure.core.exceptions import (
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.indexes.aio import SearchIndexClient
 from azure.search.documents.indexes.models import (
-    AzureOpenAIParameters,
     AzureOpenAIVectorizer,
+    AzureOpenAIVectorizerParameters,
     HnswAlgorithmConfiguration,
     LexicalAnalyzerName,
     SearchableField,
@@ -225,9 +225,9 @@ class AiSearchSearch(ISearch):
             ],
             vectorizers=[
                 AzureOpenAIVectorizer(
-                    name="vectorizer-default",
+                    vectorizer_name="vectorizer-default",
                     # Without credentials specified, the database will use its system managed identity
-                    azure_open_ai_parameters=AzureOpenAIParameters(
+                    parameters=AzureOpenAIVectorizerParameters(
                         deployment_id=self._config.embedding_deployment,
                         model_name=self._config.embedding_model,
                         resource_uri=self._config.embedding_endpoint,
