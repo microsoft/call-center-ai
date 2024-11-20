@@ -140,9 +140,9 @@ async def _handle_play_text(
 
     If `context` is provided, it will be used to track the operation.
     """
-    logger.info("Playing text: %s", text)
+    logger.info("Playing TTS: %s", text)
     try:
-        assert call.voice_id, "Voice ID is required for playing text"
+        assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
                 operation_context=_context_builder({context}),
@@ -173,7 +173,7 @@ async def handle_media(
     If `context` is provided, it will be used to track the operation.
     """
     try:
-        assert call.voice_id, "Voice ID is required for recognizing media"
+        assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
                 operation_context=_context_builder({context}),
@@ -404,7 +404,7 @@ async def handle_recognize_ivr(
     """
     logger.info("Recognizing IVR: %s", text)
     try:
-        assert call.voice_id, "Voice ID is required for recognizing media"
+        assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.start_recognizing_media(
                 choices=choices,
@@ -429,7 +429,7 @@ async def handle_hangup(
 ) -> None:
     logger.info("Hanging up: %s", call.initiate.phone_number)
     try:
-        assert call.voice_id, "Voice ID is required for recognizing media"
+        assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.hang_up(is_for_everyone=True)
     except ResourceNotFoundError:
@@ -449,7 +449,7 @@ async def handle_transfer(
 ) -> None:
     logger.info("Transferring call: %s", target)
     try:
-        assert call.voice_id, "Voice ID is required for recognizing media"
+        assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.transfer_call_to_participant(
                 operation_context=_context_builder({context}),

@@ -51,10 +51,11 @@ class CallGetModel(BaseModel):
         inverted_messages.reverse()
         # Search for the first action we want
         for message in inverted_messages:
-            if message.action == MessageActionEnum.CALL:
-                return True
-            if message.action == MessageActionEnum.HANGUP:
-                return False
+            match message.action:
+                case MessageActionEnum.CALL:
+                    return True
+                case MessageActionEnum.HANGUP:
+                    return False
         # Otherwise, we assume the call is completed
         return False
 

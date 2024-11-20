@@ -129,7 +129,6 @@ class CosmosDbStore(IStore):
         # Update live
         data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
-        logger.debug("Saving call %s: %s", call.call_id, data)
         res = False
         try:
             async with self._use_client() as db:
