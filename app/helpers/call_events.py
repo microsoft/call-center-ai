@@ -4,6 +4,10 @@ from collections.abc import Awaitable, Callable
 from azure.communication.callautomation import (
     AzureBlobContainerRecordingStorage,
     DtmfTone,
+    MediaStreamingAudioChannelType,
+    MediaStreamingContentType,
+    MediaStreamingOptions,
+    MediaStreamingTransportType,
     RecognitionChoice,
     RecordingChannel,
     RecordingContent,
@@ -16,15 +20,14 @@ from pydantic import ValidationError
 from app.helpers.call_llm import load_llm_chat
 from app.helpers.call_utils import (
     ContextEnum as CallContextEnum,
-    handle_clear_queue,
     handle_hangup,
     handle_play_text,
     handle_recognize_ivr,
-    handle_recognize_text,
     handle_transfer,
+    start_audio_streaming,
 )
 from app.helpers.config import CONFIG
-from app.helpers.features import recording_enabled, voice_recognition_retry_max
+from app.helpers.features import recognition_retry_max, recording_enabled
 from app.helpers.llm_worker import completion_sync
 from app.helpers.logging import logger
 from app.helpers.monitoring import CallAttributes, span_attribute, tracer
@@ -50,14 +53,24 @@ async def on_new_call(
     client: CallAutomationClient,
     incoming_context: str,
     phone_number: str,
+    wss_url: str,
 ) -> bool:
     logger.debug("Incoming call handler caller ID: %s", phone_number)
+
+    streaming_options = MediaStreamingOptions(
+        audio_channel_type=MediaStreamingAudioChannelType.UNMIXED,
+        content_type=MediaStreamingContentType.AUDIO,
+        start_media_streaming=False,
+        transport_type=MediaStreamingTransportType.WEBSOCKET,
+        transport_url=wss_url,
+    )
 
     try:
         answer_call_result = await client.answer_call(
             callback_url=callback_url,
             cognitive_services_endpoint=CONFIG.cognitive_service.endpoint,
             incoming_call_context=incoming_context,
+            media_streaming=streaming_options,
         )
         logger.info(
             "Answered call with %s (%s)",
@@ -89,9 +102,7 @@ async def on_new_call(
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
     server_call_id: str,
-    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("Call connected, asking for language")
     call.recognition_retry = 0  # Reset recognition retry counter
@@ -106,8 +117,6 @@ async def on_call_connected(
         _handle_ivr_language(
             call=call,
             client=client,
-            post_callback=post_callback,
-            training_callback=training_callback,
         ),  # First, every time a call is answered, confirm the language
         _db.call_aset(
             call
@@ -134,65 +143,49 @@ async def on_call_disconnected(
     )
 
 
-@tracer.start_as_current_span("on_speech_recognized")
-async def on_speech_recognized(
+@tracer.start_as_current_span("on_audio_connected")
+async def on_audio_connected(  # noqa: PLR0913
+    audio_bits_per_sample: int,
+    audio_channels: int,
+    audio_sample_rate: int,
+    audio_stream: asyncio.Queue[bytes],
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
-    text: str,
     training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
-    logger.info("Voice recognition: %s", text)
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
-    span_attribute(CallAttributes.CALL_MESSAGE, text)
-    call.messages.append(
-        MessageModel(
-            content=text,
-            persona=MessagePersonaEnum.HUMAN,
-        )
+    await load_llm_chat(
+        audio_bits_per_sample=audio_bits_per_sample,
+        audio_channels=audio_channels,
+        audio_sample_rate=audio_sample_rate,
+        audio_stream=audio_stream,
+        automation_client=client,
+        call=call,
+        post_callback=post_callback,
+        training_callback=training_callback,
     )
-    call.recognition_retry = 0  # Reset recognition retry counter
-    await asyncio.gather(
-        handle_clear_queue(
-            call=call,
-            client=client,
-        ),  # First, when the user speak, the conversation should continue based on its last message
-        load_llm_chat(
-            call=call,
-            client=client,
-            post_callback=post_callback,
-            training_callback=training_callback,
-        ),  # Second, the LLM should be loaded to continue the conversation
-        _db.call_aset(
-            call
-        ),  # Third, save in DB allowing SMS responses to be more "in-sync" if they are sent during the generation
-    )  # All in parallel to lower the response latency
 
 
 @tracer.start_as_current_span("on_recognize_timeout_error")
-async def on_recognize_timeout_error(
+async def on_recognize_error(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: set[CallContextEnum] | None,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
-    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     if (
         contexts and CallContextEnum.IVR_LANG_SELECT in contexts
     ):  # Retry IVR recognition
         span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
-        if call.recognition_retry < await voice_recognition_retry_max():
+        if call.recognition_retry < await recognition_retry_max():
             call.recognition_retry += 1
             logger.info(
                 "Timeout, retrying language selection (%s/%s)",
                 call.recognition_retry,
-                await voice_recognition_retry_max(),
+                await recognition_retry_max(),
             )
             await _handle_ivr_language(
                 call=call,
                 client=client,
-                post_callback=post_callback,
-                training_callback=training_callback,
             )
         else:  # IVR retries are exhausted, end call
             logger.info("Timeout, ending call")
@@ -203,7 +196,7 @@ async def on_recognize_timeout_error(
         return
 
     if (
-        call.recognition_retry >= await voice_recognition_retry_max()
+        call.recognition_retry >= await recognition_retry_max()
     ):  # Voice retries are exhausted, end call
         logger.info("Timeout, ending call")
         await _handle_goodbye(
@@ -211,23 +204,6 @@ async def on_recognize_timeout_error(
             client=client,
         )
         return
-
-    # Retry voice recognition
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
-    call.recognition_retry += 1
-    logger.info(
-        "Timeout, retrying voice recognition (%s/%s)",
-        call.recognition_retry,
-        await voice_recognition_retry_max(),
-    )
-    # Never store the warning message in the call history, it has caused hallucinations in the LLM
-    await handle_recognize_text(
-        call=call,
-        client=client,
-        no_response_error=True,
-        store=False,
-        text=await CONFIG.prompts.tts.timeout_silence(call),
-    )
 
 
 async def _handle_goodbye(
@@ -240,33 +216,6 @@ async def _handle_goodbye(
         context=CallContextEnum.GOODBYE,
         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
         text=await CONFIG.prompts.tts.goodbye(call),
-    )
-
-
-@tracer.start_as_current_span("on_recognize_unknown_error")
-async def on_recognize_unknown_error(
-    call: CallStateModel,
-    client: CallAutomationClient,
-    error_code: int,
-) -> None:
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
-
-    if error_code == 8511:  # noqa: PLR2004
-        # Failure while trying to play the prompt
-        logger.warning("Failed to play prompt")
-    else:
-        logger.warning(
-            "Recognition failed with unknown error code %s, answering with default error",
-            error_code,
-        )
-
-    # Never store the error message in the call history, it has caused hallucinations in the LLM
-    await handle_recognize_text(
-        call=call,
-        client=client,
-        no_response_error=True,
-        store=False,
-        text=await CONFIG.prompts.tts.error(call),
     )
 
 
@@ -308,22 +257,23 @@ async def on_play_error(error_code: int) -> None:
     logger.debug("Play failed")
     span_attribute(CallAttributes.CALL_CHANNEL, "voice")
     # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
-    if error_code == 8535:  # noqa: PLR2004
-        # Action failed, file format
-        logger.warning("Error during media play, file format is invalid")
-    elif error_code == 8536:  # noqa: PLR2004
-        # Action failed, file downloaded
-        logger.warning("Error during media play, file could not be downloaded")
-    elif error_code == 8565:  # noqa: PLR2004
-        # Action failed, AI services config
-        logger.error(
-            "Error during media play, impossible to connect with Azure AI services"
-        )
-    elif error_code == 9999:  # noqa: PLR2004
-        # Unknown error code
-        logger.warning("Error during media play, unknown internal server error")
-    else:
-        logger.warning("Error during media play, unknown error code %s", error_code)
+    match error_code:
+        case 8535:
+            # Action failed, file format
+            logger.warning("Error during media play, file format is invalid")
+        case 8536:
+            # Action failed, file downloaded
+            logger.warning("Error during media play, file could not be downloaded")
+        case 8565:
+            # Action failed, AI services config
+            logger.error(
+                "Error during media play, impossible to connect with Azure AI services"
+            )
+        case 9999:
+            # Unknown error code
+            logger.warning("Error during media play, unknown internal server error")
+        case _:
+            logger.warning("Error during media play, unknown error code %s", error_code)
 
 
 @tracer.start_as_current_span("on_ivr_recognized")
@@ -331,8 +281,6 @@ async def on_ivr_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
     label: str,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
-    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     logger.info("IVR recognized: %s", label)
     span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
@@ -353,35 +301,31 @@ async def on_ivr_recognized(
 
     if len(call.messages) <= 1:  # First call, or only the call action
         await asyncio.gather(
-            handle_recognize_text(
+            handle_play_text(
                 call=call,
                 client=client,
                 text=await CONFIG.prompts.tts.hello(call),
             ),  # First, greet the user
             persist_coro,  # Second, persist language change for next messages, should be quick enough to be in sync with the next message
-            load_llm_chat(
+            start_audio_streaming(
                 call=call,
                 client=client,
-                post_callback=post_callback,
-                training_callback=training_callback,
-            ),  # Third, the LLM should be loaded to continue the conversation
+            ),  # Third, the conversation with the LLM should start
         )  # All in parallel to lower the response latency
 
     else:  # Returning call
         await asyncio.gather(
-            handle_recognize_text(
+            handle_play_text(
                 call=call,
                 client=client,
                 style=MessageStyleEnum.CHEERFUL,
                 text=await CONFIG.prompts.tts.welcome_back(call),
             ),  # First, welcome back the user
             persist_coro,  # Second, persist language change for next messages, should be quick enough to be in sync with the next message
-            load_llm_chat(
+            start_audio_streaming(
                 call=call,
                 client=client,
-                post_callback=post_callback,
-                training_callback=training_callback,
-            ),  # Third, the LLM should be loaded to continue the conversation
+            ),  # Third, the conversation with the LLM should start
         )
 
 
@@ -398,11 +342,10 @@ async def on_transfer_error(
     error_code: int,
 ) -> None:
     logger.info("Error during call transfer, subCode %s", error_code)
-    await handle_recognize_text(
+    await handle_play_text(
         call=call,
         client=client,
         context=CallContextEnum.TRANSFER_FAILED,
-        no_response_error=True,
         text=await CONFIG.prompts.tts.calltransfer_failure(call),
     )
 
@@ -410,10 +353,7 @@ async def on_transfer_error(
 @tracer.start_as_current_span("on_sms_received")
 async def on_sms_received(
     call: CallStateModel,
-    client: CallAutomationClient,
     message: str,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
-    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> bool:
     logger.info("SMS received from %s: %s", call.initiate.phone_number, message)
     span_attribute(CallAttributes.CALL_CHANNEL, "sms")
@@ -430,12 +370,12 @@ async def on_sms_received(
         logger.info("Call not in progress, answering with SMS")
     else:
         logger.info("Call in progress, answering with voice")
-        await load_llm_chat(
-            call=call,
-            client=client,
-            post_callback=post_callback,
-            training_callback=training_callback,
-        )
+        # TODO: Reimplement SMS answers in voice
+        # await load_llm_chat(
+        #     call=call,
+        #     client=client,
+        #     post_callback=post_callback,
+        # )
     return True
 
 
@@ -501,7 +441,6 @@ async def _intelligence_sms(call: CallStateModel) -> None:
     if not content:
         logger.warning("Error generating SMS report")
         return
-    logger.info("SMS report: %s", content)
 
     # Send the SMS to both the current caller and the policyholder
     success = False
@@ -592,8 +531,6 @@ async def _intelligence_next(call: CallStateModel) -> None:
 async def _handle_ivr_language(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
-    training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     # If only one language is available, skip the IVR
     if len(CONFIG.conversation.initiate.lang.availables) == 1:
@@ -603,8 +540,6 @@ async def _handle_ivr_language(
             call=call,
             client=client,
             label=short_code,
-            post_callback=post_callback,
-            training_callback=training_callback,
         )
         return
 

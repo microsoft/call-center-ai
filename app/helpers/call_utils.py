@@ -11,6 +11,9 @@ from azure.communication.callautomation import (
     RecognizeInputType,
     SsmlSource,
 )
+from azure.communication.callautomation._generated.models import (
+    StartMediaStreamingRequest,
+)
 from azure.communication.callautomation.aio import (
     CallAutomationClient,
     CallConnectionClient,
@@ -18,7 +21,6 @@ from azure.communication.callautomation.aio import (
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 
 from app.helpers.config import CONFIG
-from app.helpers.features import phone_silence_timeout_sec
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
 from app.models.message import (
@@ -83,51 +85,6 @@ def tts_sentence_split(
             )
 
 
-# TODO: Disable or lower profanity filter. The filter seems enabled by default, it replaces words like "holes in my roof" by "*** in my roof". This is not acceptable for a call center.
-async def _handle_recognize_media(  # noqa: PLR0913
-    call: CallStateModel,
-    client: CallAutomationClient,
-    context: ContextEnum | None,
-    interrupt: bool,
-    style: MessageStyleEnum,
-    text: str | None,
-) -> None:
-    """
-    Play a media to a call participant and start recognizing the response.
-
-    If `context` is provided, it will be used to track the operation.
-    """
-    logger.info("Recognizing voice: %s", text)
-    try:
-        assert call.voice_id, "Voice ID is required for recognizing media"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.start_recognizing_media(
-                end_silence_timeout=await phone_silence_timeout_sec(),
-                input_type=RecognizeInputType.SPEECH,
-                interrupt_call_media_operation=interrupt,
-                interrupt_prompt=True,
-                operation_context=_context_builder({context}),
-                play_prompt=(
-                    _audio_from_text(
-                        call=call,
-                        style=style,
-                        text=text,
-                    )
-                    if text
-                    else None
-                ),  # If no text is provided, only recognize
-                speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # pyright: ignore
-            )
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before recognizing")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before playing")
-        else:
-            raise e
-
-
 async def _handle_play_text(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -186,69 +143,6 @@ async def handle_media(
             logger.debug("Call hung up before playing")
         else:
             raise e
-
-
-async def handle_recognize_text(  # noqa: PLR0913
-    call: CallStateModel,
-    client: CallAutomationClient,
-    text: str | None,
-    context: ContextEnum | None = None,
-    interrupt_queue: bool = False,
-    no_response_error: bool = False,
-    store: bool = True,
-    style: MessageStyleEnum = MessageStyleEnum.NONE,
-) -> None:
-    """
-    Play a text to a call participant and start recognizing the response.
-
-    If `store` is `True`, the text will be stored in the call messages. Starts by playing text, then the "ready" sound, and finally starts recognizing the response.
-    """
-    # Only recognize
-    if not text:
-        await _handle_recognize_media(
-            call=call,
-            client=client,
-            context=context,
-            interrupt=interrupt_queue,
-            style=style,
-            text=None,
-        )
-        return
-
-    # Split text in chunks
-    chunks = await _chunk_before_tts(
-        call=call,
-        store=store,
-        style=style,
-        text=text,
-    )
-
-    # Play each chunk
-    for i, chunk in enumerate(chunks):
-        # For first chunk, interrupt media if needed
-        chunck_interrupt_queue = interrupt_queue if i == 0 else False
-
-        # For last chunk, recognize media to let user to interrupt bot
-        if i == len(chunks) - 1:
-            if no_response_error:
-                await _handle_recognize_media(
-                    call=call,
-                    client=client,
-                    context=context,
-                    interrupt=chunck_interrupt_queue,
-                    style=style,
-                    text=chunk,
-                )
-                return
-
-        # For other chunks, play text
-        await _handle_play_text(
-            call=call,
-            client=client,
-            context=context,
-            style=style,
-            text=chunk,
-        )
 
 
 async def handle_play_text(  # noqa: PLR0913
@@ -460,6 +354,47 @@ async def handle_transfer(
     except HttpResponseError as e:
         if "call already terminated" in e.message.lower():
             logger.debug("Call hung up before transferring")
+        else:
+            raise e
+
+
+async def start_audio_streaming(
+    client: CallAutomationClient,
+    call: CallStateModel,
+) -> None:
+    logger.info("Starting audio streaming")
+    try:
+        assert call.voice_id, "Voice ID is required to control the call"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            # TODO: Use the public API once the "await" have been fixed
+            # await call_client.start_media_streaming()
+            await call_client._call_media_client.start_media_streaming(
+                call_connection_id=call_client._call_connection_id,
+                start_media_streaming_request=StartMediaStreamingRequest(),
+            )
+    except ResourceNotFoundError:
+        logger.debug("Call hung up before starting streaming")
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            logger.debug("Call hung up before starting streaming")
+        else:
+            raise e
+
+
+async def stop_audio_streaming(
+    client: CallAutomationClient,
+    call: CallStateModel,
+) -> None:
+    logger.info("Stopping audio streaming")
+    try:
+        assert call.voice_id, "Voice ID is required to control the call"
+        async with _use_call_client(client, call.voice_id) as call_client:
+            await call_client.stop_media_streaming()
+    except ResourceNotFoundError:
+        logger.debug("Call hung up before stopping streaming")
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            logger.debug("Call hung up before stopping streaming")
         else:
             raise e
 

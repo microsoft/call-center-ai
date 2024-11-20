@@ -1,26 +1,41 @@
 import asyncio
-import time
 from collections.abc import Awaitable, Callable
+from functools import wraps
 
+import aiojobs
+from azure.cognitiveservices.speech import (
+    AudioConfig,
+    SpeechConfig,
+    SpeechRecognitionEventArgs,
+    SpeechRecognizer,
+)
+from azure.cognitiveservices.speech.audio import AudioStreamFormat, PushAudioInputStream
 from azure.communication.callautomation.aio import CallAutomationClient
 from openai import APIError
+from pydub import AudioSegment
 
 from app.helpers.call_utils import (
     handle_clear_queue,
     handle_media,
-    handle_recognize_text,
+    handle_play_text,
     tts_sentence_split,
 )
 from app.helpers.config import CONFIG
-from app.helpers.features import answer_hard_timeout_sec, answer_soft_timeout_sec
-from app.helpers.llm_tools import LlmPlugins
+from app.helpers.features import (
+    answer_hard_timeout_sec,
+    answer_soft_timeout_sec,
+    vad_silence_timeout_ms,
+    vad_threshold,
+)
+from app.helpers.identity import token
+from app.helpers.llm_tools import DefaultPlugin
 from app.helpers.llm_worker import (
     MaximumTokensReachedError,
     SafetyCheckError,
     completion_stream,
 )
 from app.helpers.logging import logger
-from app.helpers.monitoring import tracer
+from app.helpers.monitoring import CallAttributes, span_attribute, tracer
 from app.models.call import CallStateModel
 from app.models.message import (
     ActionEnum as MessageAction,
@@ -32,16 +47,156 @@ from app.models.message import (
     remove_message_action,
 )
 
-_cache = CONFIG.cache.instance()
 _db = CONFIG.database.instance()
 
 
-# TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
+# TODO: Refacto, this function is too long (and remove PLR0913 ignore)
 @tracer.start_as_current_span("call_load_llm_chat")
-async def load_llm_chat(  # noqa: PLR0912, PLR0915
+async def load_llm_chat(  # noqa: PLR0913
+    audio_bits_per_sample: int,
+    audio_channels: int,
+    audio_sample_rate: int,
+    audio_stream: asyncio.Queue[bytes],
+    automation_client: CallAutomationClient,
+    call: CallStateModel,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    training_callback: Callable[[CallStateModel], Awaitable[None]],
+) -> None:
+    # Init language recognition
+    speech_token = await (await token("https://cognitiveservices.azure.com/.default"))()
+    recognizer_buffer: list[str] = []
+    recognizer_lock = asyncio.Event()
+    recognizer_stream = PushAudioInputStream(
+        stream_format=AudioStreamFormat(
+            bits_per_sample=audio_bits_per_sample,
+            channels=audio_channels,
+            samples_per_second=audio_sample_rate,
+        ),
+    )
+    recognizer_config = SpeechConfig(
+        auth_token=f"aad#{CONFIG.cognitive_service.resource_id}#{speech_token}",
+        region=CONFIG.cognitive_service.region,
+    )
+    # recognizer_config.set_property(PropertyId.Speech_LogFilename, f"speech-{uuid4()}.log")
+    recognizer_client = SpeechRecognizer(
+        audio_config=AudioConfig(stream=recognizer_stream),
+        language=call.lang.short_code,
+        speech_config=recognizer_config,
+    )
+
+    def _handle_partial_recognition(event: SpeechRecognitionEventArgs) -> None:
+        text = event.result.text
+        # Skip if no text
+        if not text:
+            return
+        # Init buffer if empty
+        if not recognizer_buffer:
+            recognizer_buffer.append("")
+        # Replace last element by this update
+        recognizer_buffer[-1] = text
+        logger.debug("Partial recognition: %s", recognizer_buffer)
+        # Lock the recognition until the audio stream is ready
+        recognizer_lock.set()
+
+    def _handle_complete_recognition(event: SpeechRecognitionEventArgs) -> None:
+        text = event.result.text
+        # Skip if no text
+        if not text:
+            return
+        # Replace last element by this update
+        recognizer_buffer[-1] = text
+        # Add a new element to the buffer, thus the next partial recognition will be in a new element
+        recognizer_buffer.append("")
+        logger.debug("Complete recognition: %s", recognizer_buffer)
+
+    # Register callback and start recognition
+    recognizer_client.recognizing.connect(_handle_partial_recognition)
+    recognizer_client.recognized.connect(_handle_complete_recognition)
+    recognizer_client.session_started.connect(
+        lambda _: logger.debug("Recognition started")
+    )
+    recognizer_client.session_stopped.connect(
+        lambda _: logger.debug("Recognition stopped")
+    )
+    recognizer_client.canceled.connect(
+        lambda event: logger.warning("Recognition cancelled: %s", event)
+    )
+    recognizer_client.start_continuous_recognition_async()
+
+    # Build scheduler
+    last_response: aiojobs.Job | None = None
+    async with aiojobs.Scheduler() as scheduler:
+
+        async def _clear_audio_callback() -> None:
+            # Wait for the recognition to be ready
+            await recognizer_lock.wait()
+
+            # Clear the LLM queue
+            recognizer_buffer.clear()
+
+            # Clear the TTS queue
+            await scheduler.spawn(
+                handle_clear_queue(
+                    call=call,
+                    client=automation_client,
+                )
+            )
+
+            # Cancel the last response
+            if last_response:
+                # Wait 2 secs maximum for the task to end
+                await last_response.close(timeout=2)
+
+        async def _response_callback() -> None:
+            # Wait for the recognition to be ready
+            await recognizer_lock.wait()
+
+            # Skip if no recognition
+            if not recognizer_buffer or recognizer_buffer[-1] == "":
+                return
+
+            # Add recognition to the call history
+            logger.info("Voice recognition: %s", recognizer_buffer)
+            call.messages.append(
+                MessageModel(
+                    content=" ".join(recognizer_buffer),
+                    persona=MessagePersonaEnum.HUMAN,
+                )
+            )
+
+            # Add recognition to the call history
+            nonlocal last_response
+            last_response = await scheduler.spawn(
+                _out_answer(
+                    call=call,
+                    client=automation_client,
+                    post_callback=post_callback,
+                    scheduler=scheduler,
+                    training_callback=training_callback,
+                )
+            )
+
+            # Clear the LLM queue
+            recognizer_buffer.clear()
+
+        await _in_audio(
+            bits_per_sample=audio_bits_per_sample,
+            channels=audio_channels,
+            clear_audio_callback=_clear_audio_callback,
+            in_stream=audio_stream,
+            out_stream=recognizer_stream,
+            response_callback=_response_callback,
+            sample_rate=audio_sample_rate,
+        )
+
+
+# TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
+@tracer.start_as_current_span("call_load_out_answer")
+async def _out_answer(  # noqa: PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: aiojobs.Scheduler,
     training_callback: Callable[[CallStateModel], Awaitable[None]],
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
@@ -52,8 +207,14 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
 
     Returns the updated call model.
     """
-    logger.info("Loading LLM chat")
+    # Add span attributes
+    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
+    span_attribute(CallAttributes.CALL_MESSAGE, call.messages[-1].content)
 
+    # Reset recognition retry counter
+    call.recognition_retry = 0
+
+    # By default, play the loading sound
     play_loading_sound = True
 
     async def _tts_callback(text: str, style: MessageStyleEnum) -> None:
@@ -61,34 +222,18 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
         Send back the TTS to the user.
         """
         nonlocal play_loading_sound
-
         # For first TTS, interrupt loading sound and disable loading it
-        interrupt_queue = False
         if play_loading_sound:
-            interrupt_queue = True
             play_loading_sound = False
-
-        await asyncio.gather(
-            handle_recognize_text(
+        # Play the TTS
+        await scheduler.spawn(
+            handle_play_text(
                 call=call,
                 client=client,
-                interrupt_queue=interrupt_queue,
                 style=style,
                 text=text,
-            ),  # First, recognize the next voice
-            _db.call_aset(
-                call
-            ),  # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
+            )
         )
-
-    # Pointer
-    pointer_cache_key = f"{__name__}-load_llm_chat-pointer-{call.call_id}"
-    pointer_current = time.time()  # Get system current time
-    await _cache.aset(
-        key=pointer_cache_key,
-        ttl_sec=await answer_hard_timeout_sec(),
-        value=str(pointer_current),
-    )
 
     # Chat
     chat_task = asyncio.create_task(
@@ -129,16 +274,6 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
         while True:
             logger.debug("Chat task status: %s", chat_task.done())
 
-            if pointer_current < float(
-                (await _cache.aget(pointer_cache_key) or b"0").decode()
-            ):  # Test if pointer updated by another instance
-                logger.warning("Another chat is running, stopping this one")
-                # Clean up Communication Services queue
-                await handle_clear_queue(call=call, client=client)
-                # Clean up tasks
-                _clear_tasks()
-                break
-
             if chat_task.done():  # Break when chat coroutine is done
                 # Clean up
                 _clear_tasks()
@@ -171,7 +306,7 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
                     )
                     soft_timeout_triggered = True
                     # Never store the error message in the call history, it has caused hallucinations in the LLM
-                    await handle_recognize_text(
+                    await handle_play_text(
                         call=call,
                         client=client,
                         store=False,
@@ -202,32 +337,27 @@ async def load_llm_chat(  # noqa: PLR0912, PLR0915
 
         else:  # Retry chat after an error
             logger.info("Retrying chat, %s remaining", _iterations_remaining - 1)
-            return await load_llm_chat(
+            return await _out_answer(
                 call=call,
                 client=client,
                 post_callback=post_callback,
+                scheduler=scheduler,
                 training_callback=training_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
-    else:
-        if continue_chat and _iterations_remaining > 0:  # Contiue chat
-            logger.info("Continuing chat, %s remaining", _iterations_remaining - 1)
-            return await load_llm_chat(
-                call=call,
-                client=client,
-                post_callback=post_callback,
-                training_callback=training_callback,
-                _iterations_remaining=_iterations_remaining - 1,
-            )  # Recursive chat (like for for retry or tools)
-
-        # End chat
-        await handle_recognize_text(
+    elif continue_chat and _iterations_remaining > 0:  # Contiue chat
+        logger.info("Continuing chat, %s remaining", _iterations_remaining - 1)
+        return await _out_answer(
             call=call,
             client=client,
-            no_response_error=True,
-            style=MessageStyleEnum.NONE,
-            text=None,
-        )  # Trigger an empty text to recognize and generate timeout error if user does not speak
+            post_callback=post_callback,
+            scheduler=scheduler,
+            training_callback=training_callback,
+            _iterations_remaining=_iterations_remaining - 1,
+        )  # Recursive chat (like for for retry or tools)
+
+        # End chat
+        # TODO: Re-implement
 
     return call
 
@@ -286,8 +416,14 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
         trainings=trainings,
     )
 
+    # Initialize TTS callbacks
+    tts_callback = _tts_callback(
+        automation_client=client,
+        call=call,
+    )
+
     # Build plugins
-    plugins = LlmPlugins(
+    plugins = DefaultPlugin(
         call=call,
         client=client,
         post_callback=post_callback,
@@ -298,7 +434,7 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
     if not use_tools:
         logger.warning("Tools disabled for this chat")
     else:
-        tools = await plugins.to_openai(call)
+        tools = await plugins.to_openai()
         logger.debug("Tools: %s", tools)
 
     # Execute LLM inference
@@ -403,3 +539,126 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
         return False, True, call  # TODO: Should we notify an error?
 
     return False, False, call  # No error, no retry
+
+
+# TODO: Refacto and simplify
+async def _in_audio(  # noqa: PLR0913
+    bits_per_sample: int,
+    channels: int,
+    clear_audio_callback: Callable[[], Awaitable[None]],
+    in_stream: asyncio.Queue[bytes],
+    out_stream: PushAudioInputStream,
+    response_callback: Callable[[], Awaitable[None]],
+    sample_rate: int,
+) -> None:
+    clear_tts_task: asyncio.Task | None = None
+    flush_task: asyncio.Task | None = None
+
+    # Init VAD parameters
+    rms_threshold = await vad_threshold()
+    sample_width = bits_per_sample // 8
+    silence_duration_ms = await vad_silence_timeout_ms()
+
+    async def _flush_callback() -> None:
+        """
+        Flush the audio buffer if no audio is detected for a while.
+        """
+        nonlocal clear_tts_task
+
+        # Wait for the timeout
+        await asyncio.sleep(silence_duration_ms / 1000)
+
+        # Cancel the TTS clear task if any
+        if clear_tts_task:
+            clear_tts_task.cancel()
+            clear_tts_task = None
+
+        logger.debug(
+            "Timeout triggered after %ims, flushing audio buffer", silence_duration_ms
+        )
+
+        # Commit the buffer
+        await response_callback()
+
+    async def _clear_tts_callback() -> None:
+        """
+        Clear the TTS queue.
+
+        Start is the index of the buffer where the TTS was triggered.
+        """
+        # Wait 200ms before clearing the TTS queue
+        await asyncio.sleep(0.2)
+
+        logger.debug("Voice detected, cancelling TTS")
+
+        # Clear the queue
+        await clear_audio_callback()
+
+    # Consumes audio stream
+    while True:
+        # Wait for the next audio packet
+        in_chunck = await in_stream.get()
+
+        # Load audio
+        in_audio: AudioSegment = AudioSegment(
+            channels=channels,
+            data=in_chunck,
+            frame_rate=sample_rate,
+            sample_width=sample_width,
+        )
+
+        # Confirm ASAP that the event is processed
+        in_stream.task_done()
+
+        # Always add the audio to the buffer
+        assert isinstance(in_audio.raw_data, bytes)
+        out_stream.write(in_audio.raw_data)
+
+        # Get the relative dB, silences shoudl be at 1 to 5% of the max, so 0.1 to 0.5 of the threshold
+        in_empty = False
+        if min(in_audio.rms / in_audio.max_possible_amplitude * 10, 1) < rms_threshold:
+            in_empty = True
+            # Start timeout if not already started and VAD already triggered
+            if not flush_task:
+                flush_task = asyncio.create_task(_flush_callback())
+
+        if in_empty:
+            # Continue to the next audio packet
+            continue
+
+        # Voice detected, cancel the flush task if any
+        if flush_task:
+            flush_task.cancel()
+            flush_task = None
+
+        # Start the TTS clear task
+        if not clear_tts_task:
+            clear_tts_task = asyncio.create_task(_clear_tts_callback())
+
+
+def _tts_callback(
+    automation_client: CallAutomationClient,
+    call: CallStateModel,
+) -> Callable[[str, MessageStyleEnum], Awaitable[None]]:
+    """
+    Send back the TTS to the user.
+    """
+
+    @wraps(_tts_callback)
+    async def wrapper(
+        text: str,
+        style: MessageStyleEnum,
+    ) -> None:
+        await asyncio.gather(
+            handle_play_text(
+                call=call,
+                client=automation_client,
+                style=style,
+                text=text,
+            ),  # First, play the TTS to the user
+            _db.call_aset(
+                call
+            ),  # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
+        )
+
+    return wrapper

@@ -1,16 +1,14 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from html import escape
-from inspect import getmembers, isfunction
 from typing import Annotated, Literal, TypedDict
 
 from azure.communication.callautomation.aio import CallAutomationClient
-from openai.types.chat import ChatCompletionToolParam
 from pydantic import ValidationError
 
 from app.helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
 from app.helpers.config import CONFIG
-from app.helpers.llm_utils import function_schema
+from app.helpers.llm_utils import AbstractPlugin
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
 from app.models.message import (
@@ -31,8 +29,7 @@ class UpdateClaimDict(TypedDict):
     value: str
 
 
-class LlmPlugins:
-    call: CallStateModel
+class DefaultPlugin(AbstractPlugin):
     client: CallAutomationClient
     post_callback: Callable[[CallStateModel], Awaitable[None]]
     style: MessageStyleEnum = MessageStyleEnum.NONE
@@ -45,7 +42,7 @@ class LlmPlugins:
         post_callback: Callable[[CallStateModel], Awaitable[None]],
         tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     ):
-        self.call = call
+        super().__init__(call)
         self.client = client
         self.post_callback = post_callback
         self.tts_callback = tts_callback
@@ -581,13 +578,3 @@ class LlmPlugins:
         await self.tts_callback(customer_response, self.style)
         # LLM confirmation
         return f"Voice language set to {lang} (was {initial_lang})"
-
-    @staticmethod
-    async def to_openai(call: CallStateModel) -> list[ChatCompletionToolParam]:
-        return await asyncio.gather(
-            *[
-                function_schema(arg_type, call=call)
-                for name, arg_type in getmembers(LlmPlugins, isfunction)
-                if not name.startswith("_") and name != "to_openai"
-            ]
-        )

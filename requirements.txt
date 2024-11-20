@@ -139,13 +139,21 @@ azure-appconfiguration==1.7.1 \
     --hash=sha256:3ebe41e9be3f4ae6ca61e5dbc42c4b7cc007a01054a8506501a26dfc199fd3ec \
     --hash=sha256:6e62b040a0210071be4423aafbdca3b053884c0d412855e3f8eff8e8d0b1a02b
     # via call-center-ai (pyproject.toml)
+azure-cognitiveservices-speech==1.41.1 \
+    --hash=sha256:039eec52c0a549a30658fa24a06d42afc6366c47b03b961c0b6f730fd421293e \
+    --hash=sha256:0f52f7852965bb2f5cf9aed0d3c6ef58238867bb6f0287eba95e42e1a513dd74 \
+    --hash=sha256:13679949f52f89c263e8b1c6a2d0f384d663917c58b150772cf42b710a01321c \
+    --hash=sha256:70030c6f1c875895eb985de3775f62349aa8687b6616afa9498466e281f178d3 \
+    --hash=sha256:94ddda0deb3a9fee58a0a781b09ab8ab95401c5daf9bfc9f84ce8134d3a77055 \
+    --hash=sha256:ea9d466f236598e37ea3dad1db203a2901ef91b407e435b59d9b22669324074d
+    # via call-center-ai (pyproject.toml)
 azure-common==1.1.28 \
     --hash=sha256:4ac0cd3214e36b6a1b6a442686722a5d8cc449603aa833f3f0f40bda836704a3 \
     --hash=sha256:5c12d3dcf4ec20599ca6b0d3e09e86e146353d443e7fcc050c9a19c1f9df20ad
     # via azure-search-documents
-azure-communication-callautomation==1.2.0 \
-    --hash=sha256:45efce4c0990e9421b3de755d592c750dabd8b19e90441e03f84e12127896461 \
-    --hash=sha256:aa02155878f2540c267729657f1b12e98683bc7e7831e6d576277606ece9e3a7
+azure-communication-callautomation==1.3.0b2 \
+    --hash=sha256:1b7b2164e6d3265f9ac2e7ae4c519a34724f10306e49560addcf0ec34e3ad89a \
+    --hash=sha256:a1b6e4e696b1cfca7957b3de356da6cfea3b73fc54eeb27a6a2b97c872147ff7
     # via call-center-ai (pyproject.toml)
 azure-communication-sms==1.1.0 \
     --hash=sha256:3ce901924661a7e9f684c777784cdd09d0c2277489a3b563b025868f74d7a676 \
@@ -766,7 +774,6 @@ isodate==0.7.2 \
     # via
     #   azure-ai-translation-text
     #   azure-appconfiguration
-    #   azure-communication-callautomation
     #   azure-eventgrid
     #   azure-search-documents
     #   azure-storage-queue
@@ -935,6 +942,7 @@ msrest==0.7.1 \
     --hash=sha256:21120a810e1233e5e6cc7fe40b474eeb4ec6f757a15d7cf86702c369f9567c32 \
     --hash=sha256:6e7661f46f3afd88b75667b7187a92829924446c7ea1d169be8c4bb7eeb788b9
     # via
+    #   azure-communication-callautomation
     #   azure-communication-sms
     #   azure-monitor-opentelemetry-exporter
 multidict==6.1.0 \
@@ -1037,9 +1045,9 @@ oauthlib==3.2.2 \
     --hash=sha256:8139f29aac13e25d502680e9e19963e83f16838d48a0d71c287fe40e7067fbca \
     --hash=sha256:9859c40929662bec5d64f34d01c99e093149682a3f38915dc0655d5a633dd918
     # via requests-oauthlib
-openai==1.55.0 \
-    --hash=sha256:446e08918f8dd70d8723274be860404c8c7cc46b91b93bbc0ef051f57eb503c1 \
-    --hash=sha256:6c0975ac8540fe639d12b4ff5a8e0bf1424c844c4a4251148f59f06c4b2bd5db
+openai==1.54.5 \
+    --hash=sha256:2aab4f9755a3e1e04d8a45ac1f4ce7b6948bab76646020c6386256d7e5cbb7e0 \
+    --hash=sha256:f55a4450f38501814b53e76311ed7845a6f7f35bab46d0fb2a3728035d7a72d8
     # via call-center-ai (pyproject.toml)
 opentelemetry-api==1.28.2 \
     --hash=sha256:6fcec89e265beb258fe6b1acaaa3c8c705a934bd977b9f534a2b7c0d2d4275a6 \
@@ -1507,6 +1515,10 @@ pydantic-extra-types==2.10.0 \
 pydantic-settings==2.6.1 \
     --hash=sha256:7fb0637c786a558d3103436278a7c4f1cfd29ba8973238a50c5bb9a55387da87 \
     --hash=sha256:e0f92546d8a9923cb8941689abf85d6601a8c19a23e97a34b2964a2e3f813ca0
+    # via call-center-ai (pyproject.toml)
+pydub==0.25.1 \
+    --hash=sha256:65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6 \
+    --hash=sha256:980a33ce9949cab2a569606b65674d748ecbca4f0796887fd6f46173a7b0d30f
     # via call-center-ai (pyproject.toml)
 pyjwt[crypto]==2.10.0 \
     --hash=sha256:543b77207db656de204372350926bed5a86201c4cbff159f623f79c7bb487a15 \
