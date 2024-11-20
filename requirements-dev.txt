@@ -118,7 +118,15 @@ aiohttp-retry==2.9.1 \
     # via
     #   call-center-ai (pyproject.toml)
     #   twilio
+aiojobs==1.3.0 \
+    --hash=sha256:03074c884b3dc388b8d798c0de24ec17d72b2799018497fda8062c0431a494b5 \
+    --hash=sha256:1f9f36179b6d50796c4fc9e8851fdae10f38d6c2f64412a91e2c4eff73054ce0
+    # via call-center-ai (pyproject.toml)
 aiosignal==1.3.1 \
+    --hash=sha256:54cd96e15e1649b75d6c87526a6ff0b6c1b0dd3459f43d9ca11d48c339b68cfc \
+    --hash=sha256:f8376fb07dd1e86a584e4fcdec80b36b7f81aac666ebc724e2c090300dd83b17
+    # via aiohttp
+aiosqlite==0.20.0 \
     --hash=sha256:54cd96e15e1649b75d6c87526a6ff0b6c1b0dd3459f43d9ca11d48c339b68cfc \
     --hash=sha256:f8376fb07dd1e86a584e4fcdec80b36b7f81aac666ebc724e2c090300dd83b17
     # via aiohttp
