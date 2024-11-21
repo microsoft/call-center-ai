@@ -12,7 +12,8 @@ dependencies = [
   "aiosqlite~=0.20",  # Async SQLite3 driver
   "azure-ai-translation-text~=1.0",  # Azure Cognitive Services Text Translation
   "azure-appconfiguration~=1.7",  # Outsourced configuration for live updates
-  "azure-communication-callautomation~=1.2",  # Azure Communication Services Call Automation
+  "azure-cognitiveservices-speech~=1.41",  # Azure AI Speech
+  "azure-communication-callautomation~=1.3.0a0",  # Azure Communication Services Call Automation
   "azure-communication-sms~=1.1",  # Azure Communication Services SMS
   "azure-cosmos~=4.7",  # Azure Cosmos DB
   "azure-eventgrid~=4.20",  # Azure Event Grid
@@ -37,6 +38,7 @@ dependencies = [
   "pydantic-extra-types~=2.9",  # Extra types for Pydantic
   "pydantic-settings~=2.6",  # Application configuration management with Pydantic
   "pydantic[email]~=2.9",  # Data serialization and validation, plus email validation
+  "pydub~=0.25",  # Audio processing with FFmpeg
   "pyjwt~=2.9",  # Secure inbound calls from Communication Services
   "python-dotenv~=1.0",  # Load environment variables from .env file
   "python-multipart==0.*",  # Form parsing

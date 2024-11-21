@@ -274,9 +274,7 @@ async def test_llm(  # noqa: PLR0913
     await on_call_connected(
         call=call,
         client=automation_client,
-        post_callback=_post_callback,
         server_call_id="dummy",
-        training_callback=_training_callback,
     )
 
     # First IVR
@@ -284,8 +282,6 @@ async def test_llm(  # noqa: PLR0913
         call=call,
         client=automation_client,
         label=call.lang.short_code,
-        post_callback=_post_callback,
-        training_callback=_training_callback,
     )
 
     # Simulate conversation with speech recognition

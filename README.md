@@ -411,9 +411,11 @@ communication_services:
   resource_id: xxx
   sms_queue_name: sms-33612345678
 
+# Must be of type "AI services multi-service account"
 cognitive_service:
-  # Must be of type "AI services multi-service account"
   endpoint: https://xxx.cognitiveservices.azure.com
+  region: swedencentral
+  resource_id: xxx
 
 llm:
   fast:
@@ -632,10 +634,11 @@ Conversation options are represented as features. They can be configured from Ap
 | `answer_hard_timeout_sec` | The hard timeout for the bot answer in seconds. | `int` | 180 |
 | `answer_soft_timeout_sec` | The soft timeout for the bot answer in seconds. | `int` | 30 |
 | `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 3 |
-| `phone_silence_timeout_sec` | The timeout for phone silence in seconds. | `int` | 1 |
+| `recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
 | `recording_enabled` | Whether call recording is enabled. | `bool` | false |
-| `slow_llm_for_chat` | Whether to use the slower LLM for chat. | `bool` | true |
-| `voice_recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
+| `slow_llm_for_chat` | Whether to use the slow LLM for chat. | `bool` | false |
+| `vad_silence_timeout_ms` | The timeout for phone silence in seconds. | `int` | 500 |
+| `vad_threshold` | The threshold for voice activity detection. | `float` | 0.5 |
 
 ### Use an OpenAI compatible model for the LLM
 
