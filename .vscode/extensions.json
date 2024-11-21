@@ -7,7 +7,6 @@
     "EditorConfig.EditorConfig",
     "github.vscode-github-actions",
     "mikestead.dotenv",
-    "ms-azuretools.vscode-azurefunctions",
     "ms-azuretools.vscode-bicep",
     "ms-python.debugpy",
     "ms-python.python",

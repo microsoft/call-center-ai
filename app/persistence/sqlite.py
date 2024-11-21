@@ -53,7 +53,7 @@ class SqliteStore(IStore):
                 await db.execute("SELECT 1")
             return ReadinessEnum.OK
         except Exception:
-            logger.error("Unknown error while checking SQLite readiness", exc_info=True)
+            logger.exception("Unknown error while checking SQLite readiness")
         return ReadinessEnum.FAIL
 
     async def call_aget(self, call_id: UUID) -> CallStateModel | None:
@@ -92,12 +92,12 @@ class SqliteStore(IStore):
 
         return call
 
+    # TODO: Catch exceptions and return False if something goes wrong
     async def call_aset(self, call: CallStateModel) -> bool:
-        # TODO: Catch exceptions and return False if something goes wrong
+        logger.debug("Saving call %s", call.call_id)
 
         # Update live
         data = call.model_dump_json(exclude_none=True)
-        logger.debug("Saving call %s: %s", call.call_id, data)
         async with self._use_db() as db:
             await db.execute(
                 f"INSERT OR REPLACE INTO {self._config.table} VALUES (?, ?)",

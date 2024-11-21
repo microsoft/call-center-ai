@@ -20,19 +20,11 @@ from app.models.training import TrainingModel
 
 class SoundModel(BaseModel):
     loading_tpl: str = "{public_url}/loading.wav"
-    ready_tpl: str = "{public_url}/ready.wav"
 
     def loading(self) -> str:
         from app.helpers.config import CONFIG
 
         return self.loading_tpl.format(
-            public_url=CONFIG.resources.public_url,
-        )
-
-    def ready(self) -> str:
-        from app.helpers.config import CONFIG
-
-        return self.ready_tpl.format(
             public_url=CONFIG.resources.public_url,
         )
 
@@ -118,7 +110,7 @@ class LlmModel(BaseModel):
         ## Example 1
         Conversation objective: Help the customer with their accident. Customer will be calling from a car, with the SOS button.
         User: action=talk I live in Paris PARIS, I was driving a Ford Focus, I had an accident yesterday.
-        Tools: update indicent location, update vehicule reference, update incident date
+        Tools: update indicent location, update vehicule reference, update incident date, get trainings for the car model
         Assistant: style=sad I understand, your car has been in an accident. style=none Let me think... I have updated your file. Now, could I have the license plate number of your car? Also were there any injuries?
 
         ## Example 2
@@ -126,7 +118,7 @@ class LlmModel(BaseModel):
         Assistant: Hello, I'm Marc, the virtual assistant. I'm here to help you. Don't hesitate to ask me anything.
         Assistant: I'm specialized in insurance contracts. We can discuss that together. How can I help you today?
         User: action=talk The roof has had holes since yesterday's big storm. They're about the size of golf balls. I'm worried about water damage.
-        Tools: update incident description, create a reminder for assistant to plan an appointment with a roofer
+        Tools: update incident description, get trainings for contract details and claim history, create a reminder for assistant to plan an appointment with a roofer
         Assistant: style=sad I know what you mean... I see, your roof has holes since the big storm yesterday. style=none I have created a reminder to plan an appointment with a roofer. style=cheerful I hope you are safe and sound! Take care of yourself... style=none Can you confirm me the address of the house plus the date of the storm?
 
         ## Example 3
@@ -139,13 +131,13 @@ class LlmModel(BaseModel):
         Assistant: Hello, I'm John, the virtual assistant. I'm here to help you. Don't hesitate to ask me anything.
         Assistant: I'm specialized in home care services. How can I help you today?
         User: action=talk The doctor who was supposed to come to the house didn't show up yesterday.
-        Tools: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came
+        Tools: create a reminder for assistant to call the doctor to reschedule the appointment, create a reminder for assistant to call the customer in two days to check if the doctor came, get trainings for the scheduling policy of the doctor
         Assistant: style=sad Let me see, the doctor did not come to your home yesterday... I'll do my best to help you. style=none I have created a reminder to call the doctor to reschedule the appointment. Now, it should be better for you. And, I'll tale care tomorrow to see if the doctor came. style=cheerful Is it the first time the doctor didn't come?
 
         ## Example 5
         Conversation objective: Assistant is a call center agent for a car insurance company. Help through the claim process.
         User: action=call I had an accident this morning, I was shopping. My car is at home, at 134 Rue de Rivoli.
-        Tools: update incident location, update incident description
+        Tools: update incident location, update incident description, get trainings for the claim process
         Assistant: style=sad I understand, you had an accident this morning while shopping. style=none I have updated your file with the location you are at Rue de Rivoli. Can you tell me more about the accident?
         User: action=hungup
         User: action=call
@@ -155,7 +147,7 @@ class LlmModel(BaseModel):
         Conversation objective: Fill the claim with the customer. Claim is about a car accident.
         User: action=talk I had an accident this morning, I was shopping. Let me send the exact location by SMS.
         User: action=sms At the corner of Rue de la Paix and Rue de Rivoli.
-        Tools: update incident location
+        Tools: update incident location,n
         Assistant: style=sad I get it, you had an accident this morning while shopping. style=none I have updated your file with the location you sent me by SMS. style=cheerful Is it correct?
 
         ## Example 7
@@ -167,7 +159,7 @@ class LlmModel(BaseModel):
         ## Example 8
         Conversation objective: Gather feedbacks after an in-person meeting between a sales representative and the customer.
         User: action=talk Can you talk a bit slower?
-        Tools: update voice speed
+        Tools: update voice speed, get trainings for the escalation process
         Assistant: style=none I will talk slower. If you need me to repeat something, just ask me. Now, can you tall me a bit more about the meeting? How did it go?
 
         ## Example 9

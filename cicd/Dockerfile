@@ -6,22 +6,26 @@ FROM base AS build
 
 RUN rm -f /etc/apt/apt.conf.d/docker-clean \
   && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
-RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked --mount=target=/root/.cache/pip,type=cache,sharing=locked \
-  apt-get update -q \
-  && apt-get install -y -q --no-install-recommends \
-  gcc \
-  python3-dev \
-  && python3 -m pip install --upgrade \
-  pip \
-  setuptools \
-  wheel
+RUN --mount=target=/var/lib/apt/lists,type=cache,id=apt-lists-${TARGETPLATFORM},sharing=locked --mount=target=/root/.cache/pip,type=cache,id=pip-${TARGETPLATFORM},sharing=locked \
+    apt-get update -q \
+    && apt-get install -y -q --no-install-recommends \
+        gcc \
+        python3-dev \
+    && python3 -m pip \
+        --disable-pip-version-check \
+        --quiet \
+        install \
+            setuptools wheel
 
 RUN python -m venv /venv
 ENV PATH=/venv/bin:$PATH
 
 COPY requirements.txt .
-RUN --mount=target=/root/.cache/pip,type=cache,sharing=locked \
-  python3 -m pip install --requirement requirements.txt
+RUN --mount=target=/root/.cache/pip,type=cache,id=pip-${TARGETPLATFORM},sharing=locked \
+    python3 -m pip \
+        --disable-pip-version-check \
+        install \
+            --requirement requirements.txt
 
 # Output container
 FROM base
@@ -30,8 +34,8 @@ ARG VERSION
 ENV VERSION=${VERSION}
 
 RUN useradd -m appuser \
-  && mkdir /app \
-  && chown -R appuser:appuser /app
+    && mkdir /app \
+    && chown -R appuser:appuser /app
 
 USER appuser
 

@@ -744,8 +744,5 @@ config*.yaml
 # Tests reports
 test-reports/
 
-# Azure Functions
-.python_packages/
-
 # Azure dev tunnels local installation
 DevTunnels/

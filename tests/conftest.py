@@ -220,7 +220,7 @@ def with_conversations(fn=None) -> MarkDecorator:
         try:
             conversations.append(Conversation.model_validate(conv))
         except ValidationError:
-            logger.error("Failed to parse conversation", exc_info=True)
+            logger.exception("Failed to parse conversation")
     print(f"Loaded {len(conversations)} conversations")  # noqa: T201
     keys = sorted(Conversation.model_fields.keys() - {"id"})
     values = [

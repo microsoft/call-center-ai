@@ -186,12 +186,12 @@ def _field_to_pydantic(
 def _type_to_pydantic(
     data: ClaimTypeEnum,
 ) -> type | Annotated[Any, ...]:
-    if data == ClaimTypeEnum.DATETIME:
-        return datetime
-    if data == ClaimTypeEnum.EMAIL:
-        return EmailStr
-    if data == ClaimTypeEnum.PHONE_NUMBER:
-        return PhoneNumber
-    if data == ClaimTypeEnum.TEXT:
-        return str
-    raise ValueError(f"Unsupported data: {data}")
+    match data:
+        case ClaimTypeEnum.DATETIME:
+            return datetime
+        case ClaimTypeEnum.EMAIL:
+            return EmailStr
+        case ClaimTypeEnum.PHONE_NUMBER:
+            return PhoneNumber
+        case ClaimTypeEnum.TEXT:
+            return str

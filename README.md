@@ -283,12 +283,11 @@ In macOS, with [Homebrew](https://brew.sh), simply type `make brew`.
 
 For other systems, make sure you have the following installed:
 
-- Bash compatible shell, like `bash` or `zsh`
-- [yq](https://github.com/mikefarah/yq?tab=readme-ov-file#install)
-- Make, `apt install make` (Ubuntu), `yum install make` (CentOS), `brew install make` (macOS)
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
-- [Azure Functions Core Tools](https://github.com/Azure/azure-functions-core-tools?tab=readme-ov-file#installing)
 - [Twilio CLI](https://www.twilio.com/docs/twilio-cli/getting-started/install) (optional)
+- [yq](https://github.com/mikefarah/yq?tab=readme-ov-file#install)
+- Bash compatible shell, like `bash` or `zsh`
+- Make, `apt install make` (Ubuntu), `yum install make` (CentOS), `brew install make` (macOS)
 
 Then, Azure resources are needed:
 
@@ -365,7 +364,17 @@ make logs name=my-rg-name
 
 ### Local (on your machine)
 
-#### 1. Create the full config file
+#### 1. Prerequisites
+
+In macOS, with [Homebrew](https://brew.sh), simply type `make brew`, if not already done.
+
+For other systems, make sure you have the following installed:
+
+- [pyenv](https://github.com/pyenv/pyenv) (optional, with a [virtualenv](https://github.com/pyenv/pyenv-virtualenv) named `callcenterai312`)
+- [Python 3.12](https://docs.python.org/3.12)
+- [Rust](https://rust-lang.org)
+
+#### 2. Create the full config file
 
 > [!TIP]
 > To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
@@ -379,7 +388,7 @@ make logs name=my-rg-name
 > [!TIP]
 > If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from the Azure Function App to your local machine.
 
-Local config file is named `config.yaml`:
+Configure the local config file, named `config.yaml`:
 
 ```yaml
 # config.yaml
@@ -402,9 +411,11 @@ communication_services:
   resource_id: xxx
   sms_queue_name: sms-33612345678
 
+# Must be of type "AI services multi-service account"
 cognitive_service:
-  # Must be of type "AI services multi-service account"
   endpoint: https://xxx.cognitiveservices.azure.com
+  region: swedencentral
+  resource_id: xxx
 
 llm:
   fast:
@@ -437,7 +448,7 @@ ai_translation:
   endpoint: https://xxx.cognitiveservices.azure.com
 ```
 
-#### 2. Run the deployment automation
+#### 3. Run the deployment automation
 
 ```zsh
 make deploy-bicep deploy-post name=my-rg-name
@@ -446,14 +457,14 @@ make deploy-bicep deploy-post name=my-rg-name
 - This will deploy the Azure resources without the API server, allowing you to test the bot locally
 - Wait for the deployment to finish
 
-#### 3. Initialize local function config
+#### 4. Initialize local function config
 
 Copy `local.example.settings.json` to `local.settings.json`, then fill the required fields:
 
 - `APPLICATIONINSIGHTS_CONNECTION_STRING`, as the connection string of the Application Insights resource
 - `AzureWebJobsStorage`, as the connection string of the Azure Storage account
 
-#### 4. Connect to Azure Dev tunnels
+#### 5. Connect to Azure Dev tunnels
 
 > [!IMPORTANT]
 > Tunnel requires to be run in a separate terminal, because it needs to be running all the time
@@ -466,7 +477,7 @@ devtunnel login
 make tunnel
 ```
 
-#### 5. Iterate quickly with the code
+#### 6. Iterate quickly with the code
 
 > [!NOTE]
 > To override a specific configuration value, you can use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:
@@ -622,11 +633,12 @@ Conversation options are represented as features. They can be configured from Ap
 |-|-|-|
 | `answer_hard_timeout_sec` | The hard timeout for the bot answer in seconds. | `int` | 180 |
 | `answer_soft_timeout_sec` | The soft timeout for the bot answer in seconds. | `int` | 30 |
-| `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 72 |
-| `phone_silence_timeout_sec` | The timeout for phone silence in seconds. | `int` | 1 |
+| `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 3 |
+| `recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
 | `recording_enabled` | Whether call recording is enabled. | `bool` | false |
-| `slow_llm_for_chat` | Whether to use the slower LLM for chat. | `bool` | true |
-| `voice_recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
+| `slow_llm_for_chat` | Whether to use the slow LLM for chat. | `bool` | false |
+| `vad_silence_timeout_ms` | The timeout for phone silence in seconds. | `int` | 500 |
+| `vad_threshold` | The threshold for voice activity detection. | `float` | 0.5 |
 
 ### Use an OpenAI compatible model for the LLM
 

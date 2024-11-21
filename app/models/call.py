@@ -13,7 +13,12 @@ from app.helpers.config_models.conversation import (
 )
 from app.helpers.monitoring import tracer
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
-from app.models.message import ActionEnum as MessageActionEnum, MessageModel
+from app.models.message import (
+    ActionEnum as MessageActionEnum,
+    MessageModel,
+    PersonaEnum as MessagePersonaEnum,
+    StyleEnum as MessageStyleEnum,
+)
 from app.models.next import NextModel
 from app.models.reminder import ReminderModel
 from app.models.synthesis import SynthesisModel
@@ -51,10 +56,11 @@ class CallGetModel(BaseModel):
         inverted_messages.reverse()
         # Search for the first action we want
         for message in inverted_messages:
-            if message.action == MessageActionEnum.CALL:
-                return True
-            if message.action == MessageActionEnum.HANGUP:
-                return False
+            match message.action:
+                case MessageActionEnum.CALL:
+                    return True
+                case MessageActionEnum.HANGUP:
+                    return False
         # Otherwise, we assume the call is completed
         return False
 
@@ -144,4 +150,19 @@ class CallStateModel(CallGetModel, extra="ignore"):
             return trainings
 
     def tz(self) -> tzinfo:
+        """
+        Get the timezone of the phone number.
+        """
         return PhoneNumber.tz(self.initiate.phone_number)
+
+    def last_assistant_style(self) -> MessageStyleEnum:
+        """
+        Get the last assistant message style.
+        """
+        inverted_messages = self.messages.copy()
+        inverted_messages.reverse()
+        for message in inverted_messages:
+            if message.persona != MessagePersonaEnum.ASSISTANT:
+                continue
+            return message.style
+        return MessageStyleEnum.NONE

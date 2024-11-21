@@ -3,7 +3,7 @@ version_full ?= $(shell $(MAKE) --silent version-full)
 version_small ?= $(shell $(MAKE) --silent version)
 # Dev tunnels configuration
 tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]')
-tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^"]*' | xargs) && echo $${res%/})
+tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^ ]*' | xargs) && echo $${res%/})
 # Container configuration
 container_name := ghcr.io/clemlesne/call-center-ai
 docker := docker
@@ -37,8 +37,11 @@ brew:
 	@echo "➡️ Installing Azure CLI..."
 	brew install azure-cli
 
-	@echo "➡️ Installing Azure Functions Core Tools..."
-	brew tap azure/functions && brew install azure-functions-core-tools@4
+	@echo "➡️ Installing pyenv..."
+	brew install pyenv
+
+	@echo "➡️ Installing Rust..."
+	brew install rust
 
 	@echo "➡️ Installing Azure Dev tunnels..."
 	curl -sL https://aka.ms/DevTunnelCliInstall | bash
@@ -66,12 +69,14 @@ upgrade:
 	@echo "➡️ Compiling app requirements..."
 	pip-compile \
 		--output-file requirements.txt \
+		--upgrade \
 		pyproject.toml
 
 	@echo "➡️ Compiling dev requirements..."
 	pip-compile \
 		--extra dev \
 		--output-file requirements-dev.txt \
+		--upgrade \
 		pyproject.toml
 
 	@echo "➡️ Upgrading Bicep CLI..."
@@ -118,8 +123,10 @@ dev:
 		--workers 2
 
 build:
-	$(docker) build \
+	DOCKER_BUILDKIT=1 $(docker) build \
 		--build-arg VERSION=$(version_full) \
+		--file cicd/Dockerfile \
+		--platform linux/amd64,linux/arm64 \
 		--tag $(container_name):$(version_small) \
 		--tag $(container_name):latest \
 		.
@@ -195,7 +202,7 @@ watch-call:
 	@echo "👀 Watching status of $(phone_number)..."
 	while true; do \
 		clear; \
-		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .phone_number, "claim": .claim, "reminders": .reminders}'; \
+		curl -s "$(endpoint)/call?phone_number=%2B$(phone_number)" | yq --prettyPrint '.[0] | {"phone_number": .initiate.phone_number, "claim": .claim, "reminders": .reminders}'; \
 		sleep 3; \
 	done
 

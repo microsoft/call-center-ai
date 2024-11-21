@@ -68,6 +68,8 @@ var config = {
   sms: localConfig.sms
   cognitive_service: {
     endpoint: cognitiveCommunication.properties.endpoint
+    region: cognitiveCommunication.location
+    resource_id: cognitiveCommunication.id
   }
   llm: {
     fast: {
@@ -468,6 +470,21 @@ resource assignmentsCommunicationServicesCognitiveUser 'Microsoft.Authorization/
     principalId: communicationServices.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: roleCognitiveUser.id
+  }
+}
+
+// Cognitive Services Speech User
+resource roleCognitiveSpeechUser 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'f2dc8367-1007-4938-bd23-fe263f013447'
+}
+
+resource assignmentsAppCognitiveSpeechUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, prefix, cognitiveCommunication.name, 'assignmentsAppCognitiveSpeechUser')
+  scope: cognitiveCommunication
+  properties: {
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: roleCognitiveSpeechUser.id
   }
 }
 
@@ -884,11 +901,12 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
   for item in items({
     answer_hard_timeout_sec: 180
     answer_soft_timeout_sec: 30
-    callback_timeout_hour: 72
-    phone_silence_timeout_sec: 1
+    callback_timeout_hour: 3
+    recognition_retry_max: 2
     recording_enabled: false
-    slow_llm_for_chat: true
-    voice_recognition_retry_max: 2
+    slow_llm_for_chat: false
+    vad_silence_timeout_ms: 500
+    vad_threshold: '0.5'
   }): {
     parent: configStore
     name: item.key

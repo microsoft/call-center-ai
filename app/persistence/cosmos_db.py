@@ -64,9 +64,9 @@ class CosmosDbStore(IStore):
                 return ReadinessEnum.FAIL
             return ReadinessEnum.OK
         except AssertionError:
-            logger.error("Readiness test failed", exc_info=True)
+            logger.exception("Readiness test failed")
         except CosmosHttpResponseError:
-            logger.error("Error requesting CosmosDB", exc_info=True)
+            logger.exception("Error requesting CosmosDB")
         except Exception:
             logger.error(
                 "Unknown error while checking Cosmos DB readiness", exc_info=True
@@ -129,7 +129,6 @@ class CosmosDbStore(IStore):
         # Update live
         data = call.model_dump(mode="json", exclude_none=True)
         data["id"] = str(call.call_id)  # CosmosDB requires an id field
-        logger.debug("Saving call %s: %s", call.call_id, data)
         res = False
         try:
             async with self._use_client() as db:
@@ -189,7 +188,7 @@ class CosmosDbStore(IStore):
         except StopAsyncIteration:
             pass
         except CosmosHttpResponseError:
-            logger.error("Error accessing CosmosDB", exc_info=True)
+            logger.exception("Error accessing CosmosDB")
 
         # Update cache
         if call:
@@ -248,7 +247,7 @@ class CosmosDbStore(IStore):
                     except ValidationError:
                         logger.debug("Parsing error", exc_info=True)
         except CosmosHttpResponseError:
-            logger.error("Error accessing CosmosDB", exc_info=True)
+            logger.exception("Error accessing CosmosDB")
         return calls
 
     async def _call_asearch_all_total_worker(
@@ -274,7 +273,7 @@ class CosmosDbStore(IStore):
                 )
                 total: int = await anext(items)  # pyright: ignore
         except CosmosHttpResponseError:
-            logger.error("Error accessing CosmosDB", exc_info=True)
+            logger.exception("Error accessing CosmosDB")
 
         return total
 

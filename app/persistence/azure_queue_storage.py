@@ -4,6 +4,7 @@ from binascii import Error as BinasciiError
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
+import aiojobs
 from azure.core.exceptions import ServiceRequestError
 from azure.storage.queue.aio import QueueClient, QueueServiceClient
 from pydantic import BaseModel
@@ -125,7 +126,7 @@ class AzureQueueStorage:
         self,
         arg: str,
         func: Callable[..., Awaitable],
-    ):
+    ) -> None:
         """
         Trigger a local function when a message is received.
         """
@@ -134,19 +135,36 @@ class AzureQueueStorage:
             self._name,
             func.__name__,
         )
-        # Loop forever to receive messages
-        while messages := self.receive_messages(
-            max_messages=32,
-            visibility_timeout=32 * 5,  # 5 secs per message
-        ):
-            # Process messages
-            async for message in messages:
-                # Call function with the selected argument name
-                kwargs = {}
-                kwargs[arg] = message
-                # First, call function
-                await func(**kwargs)
-                # Then, delete message
-                await self.delete_message(message)
-            # Add a small delay to avoid tight loop
-            await asyncio.sleep(1)
+        async with aiojobs.Scheduler() as scheduler:
+            # Loop forever to receive messages
+            while messages := self.receive_messages(
+                max_messages=32,
+                visibility_timeout=32 * 5,  # 5 secs per message
+            ):
+                # Process messages
+                async for message in messages:
+                    await scheduler.spawn(
+                        self._process_message(
+                            arg=arg,
+                            func=func,
+                            message=message,
+                        )
+                    )
+                # Add a small delay to avoid high CPU usage
+                await asyncio.sleep(1)
+
+    async def _process_message(
+        self,
+        arg: str,
+        func: Callable[..., Awaitable],
+        message: Message,
+    ) -> None:
+        """
+        Process a message with a function.
+        """
+        # First, call function with the selected argument name
+        kwargs = {}
+        kwargs[arg] = message
+        await func(**kwargs)
+        # Then, delete message
+        await self.delete_message(message)

@@ -56,9 +56,7 @@ async def main() -> None:
     await on_call_connected(
         call=call,
         client=automation_client,
-        post_callback=_post_callback,
         server_call_id="dummy",
-        training_callback=_training_callback,
     )
 
     # First IVR
@@ -66,8 +64,6 @@ async def main() -> None:
         call=call,
         client=automation_client,
         label=call.lang.short_code,
-        post_callback=_post_callback,
-        training_callback=_training_callback,
     )
 
     # Simulate conversation
