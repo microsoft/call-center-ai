@@ -13,6 +13,7 @@ from azure.cognitiveservices.speech.audio import AudioStreamFormat, PushAudioInp
 from azure.communication.callautomation.aio import CallAutomationClient
 from openai import APIError
 from pydub import AudioSegment
+from pydub.effects import high_pass_filter, low_pass_filter
 
 from app.helpers.call_utils import (
     handle_clear_queue,
@@ -634,6 +635,10 @@ async def _in_audio(  # noqa: PLR0913
 
         # Confirm ASAP that the event is processed
         in_stream.task_done()
+
+        # Apply high-pass and low-pass filters in a simple attempt to reduce noise
+        in_audio = high_pass_filter(in_audio, 200)
+        in_audio = low_pass_filter(in_audio, 3000)
 
         # Always add the audio to the buffer
         assert isinstance(in_audio.raw_data, bytes)
