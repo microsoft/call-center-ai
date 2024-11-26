@@ -24,6 +24,7 @@ from app.helpers.config import CONFIG
 from app.helpers.features import (
     answer_hard_timeout_sec,
     answer_soft_timeout_sec,
+    vad_cutoff_timeout_ms,
     vad_silence_timeout_ms,
     vad_threshold,
 )
@@ -611,8 +612,8 @@ async def _in_audio(  # noqa: PLR0913
 
         Start is the index of the buffer where the TTS was triggered.
         """
-        # Wait 200ms before clearing the TTS queue
-        await asyncio.sleep(0.2)
+        # Wait before clearing the TTS queue
+        await asyncio.sleep(await vad_cutoff_timeout_ms() / 1000)
 
         logger.debug("Voice detected, cancelling TTS")
 

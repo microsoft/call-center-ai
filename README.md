@@ -637,6 +637,7 @@ Conversation options are represented as features. They can be configured from Ap
 | `recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
 | `recording_enabled` | Whether call recording is enabled. | `bool` | false |
 | `slow_llm_for_chat` | Whether to use the slow LLM for chat. | `bool` | false |
+| `vad_cutoff_timeout_ms` | The cutoff timeout for voice activity detection in seconds. | `int` | 500 |
 | `vad_silence_timeout_ms` | The timeout for phone silence in seconds. | `int` | 500 |
 | `vad_threshold` | The threshold for voice activity detection. | `float` | 0.5 |
 
