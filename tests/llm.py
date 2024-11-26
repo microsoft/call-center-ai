@@ -3,6 +3,7 @@ import json
 import re
 from datetime import datetime
 
+import aiojobs
 import pytest
 from deepeval import assert_test
 from deepeval.metrics import (
@@ -23,10 +24,11 @@ from app.helpers.call_events import (
     on_end_call,
     on_ivr_recognized,
     on_play_completed,
-    on_speech_recognized,
 )
+from app.helpers.call_llm import _out_answer
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
+from app.models.message import MessageModel, PersonaEnum as MessagePersonaEnum
 from app.models.reminder import ReminderModel
 from app.models.training import TrainingModel
 from tests.conftest import CallAutomationClientMock, with_conversations
@@ -285,24 +287,33 @@ async def test_llm(  # noqa: PLR0913
     )
 
     # Simulate conversation with speech recognition
-    for speech in speeches:
-        # Respond
-        await on_speech_recognized(
-            call=call,
-            client=automation_client,
-            post_callback=_post_callback,
-            text=speech,
-            training_callback=_training_callback,
-        )
-        # Receip
-        await on_play_completed(
-            call=call,
-            client=automation_client,
-            contexts=call_client.last_contexts,
-            post_callback=_post_callback,
-        )
-        # Reset contexts
-        call_client.last_contexts.clear()
+    async with aiojobs.Scheduler() as scheduler:
+        for speech in speeches:
+            # Add message to history
+            call.messages.append(
+                MessageModel(
+                    content=speech,
+                    persona=MessagePersonaEnum.HUMAN,
+                )
+            )
+
+            # Respond
+            await _out_answer(
+                call=call,
+                client=automation_client,
+                post_callback=_post_callback,
+                scheduler=scheduler,
+                training_callback=_training_callback,
+            )
+            # Receip
+            await on_play_completed(
+                call=call,
+                client=automation_client,
+                contexts=call_client.last_contexts,
+                post_callback=_post_callback,
+            )
+            # Reset contexts
+            call_client.last_contexts.clear()
 
     # Disconnect call
     await on_call_disconnected(

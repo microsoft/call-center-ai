@@ -565,72 +565,72 @@ resource contentfilter 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-06
       }
       // Prompt
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'hate'
         severityThreshold: 'High'
         source: 'Prompt'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'sexual'
         severityThreshold: 'High'
         source: 'Prompt'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'selfharm'
         severityThreshold: 'High'
         source: 'Prompt'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'violence'
         severityThreshold: 'High'
         source: 'Prompt'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'profanity'
         severityThreshold: 'High'
         source: 'Prompt'
       }
       // Completion
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'hate'
         severityThreshold: 'High'
         source: 'Completion'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'sexual'
         severityThreshold: 'High'
         source: 'Completion'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'selfharm'
         severityThreshold: 'High'
         source: 'Completion'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'violence'
         severityThreshold: 'High'
         source: 'Completion'
       }
       {
-        blocking: !promptContentFilter
-        enabled: !promptContentFilter
+        blocking: promptContentFilter
+        enabled: promptContentFilter
         name: 'profanity'
         severityThreshold: 'High'
         source: 'Completion'
@@ -905,7 +905,8 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
     recognition_retry_max: 2
     recording_enabled: false
     slow_llm_for_chat: false
-    vad_silence_timeout_ms: 500
+    vad_cutoff_timeout_ms: 400
+    vad_silence_timeout_ms: 400
     vad_threshold: '0.5'
   }): {
     parent: configStore

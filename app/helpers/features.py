@@ -29,7 +29,11 @@ async def callback_timeout_hour() -> int:
 
 
 async def vad_silence_timeout_ms() -> int:
-    return await _get(key="vad_silence_timeout_ms", type_res=int) or 500
+    return await _get(key="vad_silence_timeout_ms", type_res=int) or 400
+
+
+async def vad_cutoff_timeout_ms() -> int:
+    return await _get(key="vad_cutoff_timeout_ms", type_res=int) or 400
 
 
 async def vad_threshold() -> float:
