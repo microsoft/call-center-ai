@@ -65,6 +65,7 @@ async def load_llm_chat(  # noqa: PLR0913
     # Init language recognition
     speech_token = await (await token("https://cognitiveservices.azure.com/.default"))()
     recognizer_buffer: list[str] = []
+    recognizer_store_next_recognition = False
     recognizer_lock = asyncio.Event()
     recognizer_stream = PushAudioInputStream(
         stream_format=AudioStreamFormat(
@@ -105,6 +106,19 @@ async def load_llm_chat(  # noqa: PLR0913
             return
         # Replace last element by this update
         recognizer_buffer[-1] = text
+
+        # If recognition requires to be stored, add it to the call history
+        nonlocal recognizer_store_next_recognition
+        if recognizer_store_next_recognition:
+            recognizer_store_next_recognition = False
+            logger.info("Voice stored: %s", recognizer_buffer)
+            call.messages.append(
+                MessageModel(
+                    content=" ".join(recognizer_buffer),
+                    persona=MessagePersonaEnum.HUMAN,
+                )
+            )
+
         # Add a new element to the buffer, thus the next partial recognition will be in a new element
         recognizer_buffer.append("")
         logger.debug("Complete recognition: %s", recognizer_buffer)
@@ -155,14 +169,10 @@ async def load_llm_chat(  # noqa: PLR0913
             if not recognizer_buffer or recognizer_buffer[-1] == "":
                 return
 
-            # Add recognition to the call history
-            logger.info("Voice recognition: %s", recognizer_buffer)
-            call.messages.append(
-                MessageModel(
-                    content=" ".join(recognizer_buffer),
-                    persona=MessagePersonaEnum.HUMAN,
-                )
-            )
+            # Set recognition to be added to the call history
+            logger.info("Voice recognized: %s", recognizer_buffer)
+            nonlocal recognizer_store_next_recognition
+            recognizer_store_next_recognition = True
 
             # Add recognition to the call history
             nonlocal last_response
@@ -172,6 +182,7 @@ async def load_llm_chat(  # noqa: PLR0913
                     client=automation_client,
                     post_callback=post_callback,
                     scheduler=scheduler,
+                    text=" ".join(recognizer_buffer),
                     training_callback=training_callback,
                 )
             )
@@ -197,6 +208,7 @@ async def _out_answer(  # noqa: PLR0915
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: aiojobs.Scheduler,
+    text: str,
     training_callback: Callable[[CallStateModel], Awaitable[None]],
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
@@ -241,8 +253,9 @@ async def _out_answer(  # noqa: PLR0915
             call=call,
             client=client,
             post_callback=post_callback,
-            use_tools=_iterations_remaining > 0,
+            text=text,
             tts_callback=_tts_callback,
+            use_tools=_iterations_remaining > 0,
         )
     )
 
@@ -342,6 +355,7 @@ async def _out_answer(  # noqa: PLR0915
                 client=client,
                 post_callback=post_callback,
                 scheduler=scheduler,
+                text=text,
                 training_callback=training_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
@@ -352,6 +366,7 @@ async def _out_answer(  # noqa: PLR0915
             client=client,
             post_callback=post_callback,
             scheduler=scheduler,
+            text=text,
             training_callback=training_callback,
             _iterations_remaining=_iterations_remaining - 1,
         )  # Recursive chat (like for for retry or tools)
@@ -368,6 +383,7 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    text: str,
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     use_tools: bool,
 ) -> tuple[bool, bool, CallStateModel]:
@@ -437,6 +453,15 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
         tools = await plugins.to_openai()
         logger.debug("Tools: %s", tools)
 
+    # Add user message in a temporary current context
+    call_copy = call.model_copy()
+    call_copy.messages.append(
+        MessageModel(
+            content=text,
+            persona=MessagePersonaEnum.HUMAN,
+        )
+    )
+
     # Execute LLM inference
     maximum_tokens_reached = False
     content_buffer_pointer = 0
@@ -444,7 +469,7 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
     try:
         async for delta in completion_stream(
             max_tokens=160,  # Lowest possible value for 90% of the cases, if not sufficient, retry will be triggered, 100 tokens ~= 75 words, 20 words ~= 1 sentence, 6 sentences ~= 160 tokens
-            messages=call.messages,
+            messages=call_copy.messages,
             system=system,
             tools=tools,
         ):
