@@ -88,23 +88,29 @@ async def load_llm_chat(  # noqa: PLR0913
 
     def _handle_partial_recognition(event: SpeechRecognitionEventArgs) -> None:
         text = event.result.text
+
         # Skip if no text
         if not text:
             return
+
         # Init buffer if empty
         if not recognizer_buffer:
             recognizer_buffer.append("")
+
         # Replace last element by this update
         recognizer_buffer[-1] = text
         logger.debug("Partial recognition: %s", recognizer_buffer)
+
         # Lock the recognition until the audio stream is ready
         recognizer_lock.set()
 
     def _handle_complete_recognition(event: SpeechRecognitionEventArgs) -> None:
         text = event.result.text
+
         # Skip if no text
         if not text:
             return
+
         # Replace last element by this update
         recognizer_buffer[-1] = text
 
@@ -580,11 +586,6 @@ async def _in_audio(  # noqa: PLR0913
     clear_tts_task: asyncio.Task | None = None
     flush_task: asyncio.Task | None = None
 
-    # Init VAD parameters
-    rms_threshold = await vad_threshold()
-    sample_width = bits_per_sample // 8
-    silence_duration_ms = await vad_silence_timeout_ms()
-
     async def _flush_callback() -> None:
         """
         Flush the audio buffer if no audio is detected for a while.
@@ -592,16 +593,14 @@ async def _in_audio(  # noqa: PLR0913
         nonlocal clear_tts_task
 
         # Wait for the timeout
-        await asyncio.sleep(silence_duration_ms / 1000)
+        await asyncio.sleep(await vad_silence_timeout_ms() / 1000)
 
         # Cancel the TTS clear task if any
         if clear_tts_task:
             clear_tts_task.cancel()
             clear_tts_task = None
 
-        logger.debug(
-            "Timeout triggered after %ims, flushing audio buffer", silence_duration_ms
-        )
+        logger.debug("Timeout triggered, flushing audio buffer")
 
         # Commit the buffer
         await response_callback()
@@ -630,7 +629,7 @@ async def _in_audio(  # noqa: PLR0913
             channels=channels,
             data=in_chunck,
             frame_rate=sample_rate,
-            sample_width=sample_width,
+            sample_width=bits_per_sample // 8,
         )
 
         # Confirm ASAP that the event is processed
@@ -642,7 +641,10 @@ async def _in_audio(  # noqa: PLR0913
 
         # Get the relative dB, silences shoudl be at 1 to 5% of the max, so 0.1 to 0.5 of the threshold
         in_empty = False
-        if min(in_audio.rms / in_audio.max_possible_amplitude * 10, 1) < rms_threshold:
+        if (
+            min(in_audio.rms / in_audio.max_possible_amplitude * 10, 1)
+            < await vad_threshold()
+        ):
             in_empty = True
             # Start timeout if not already started and VAD already triggered
             if not flush_task:
