@@ -209,11 +209,12 @@ watch-call:
 sync-local-config:
 	@echo "📥 Copying remote CONFIG_JSON to local config..."
 	az containerapp revision list \
-		--name $(container_app_name) \
-		--output tsv \
-		--query "[0].properties.template.containers[0].env[?name=='CONFIG_JSON'].value" \
-		--resource-group $(name_sanitized) \
-			| yq \
-				--output-format yaml \
-				--prettyPrint \
-					> config.yaml
+			--name $(container_app_name) \
+			--output tsv \
+			--query "[0].properties.template.containers[0].env[?name=='CONFIG_JSON'].value" \
+			--resource-group $(name_sanitized) \
+		| iconv -f utf-8 -t utf-8 -c \
+		| yq \
+			--output-format yaml \
+			--prettyPrint \
+		> config.yaml
