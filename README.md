@@ -449,6 +449,8 @@ ai_translation:
 
 #### 3. Run the deployment automation
 
+Execute if the solution is not yet deployed on Azure.
+
 ```zsh
 make deploy-bicep deploy-post name=my-rg-name
 ```
@@ -456,14 +458,7 @@ make deploy-bicep deploy-post name=my-rg-name
 - This will deploy the Azure resources without the API server, allowing you to test the bot locally
 - Wait for the deployment to finish
 
-#### 4. Initialize local function config
-
-Copy `local.example.settings.json` to `local.settings.json`, then fill the required fields:
-
-- `APPLICATIONINSIGHTS_CONNECTION_STRING`, as the connection string of the Application Insights resource
-- `AzureWebJobsStorage`, as the connection string of the Azure Storage account
-
-#### 5. Connect to Azure Dev tunnels
+#### 4. Connect to Azure Dev tunnels
 
 > [!IMPORTANT]
 > Tunnel requires to be run in a separate terminal, because it needs to be running all the time
@@ -476,7 +471,7 @@ devtunnel login
 make tunnel
 ```
 
-#### 6. Iterate quickly with the code
+#### 5. Iterate quickly with the code
 
 > [!NOTE]
 > To override a specific configuration value, you can use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:
