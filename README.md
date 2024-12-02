@@ -376,6 +376,8 @@ For other systems, make sure you have the following installed:
 
 #### 2. Create the full config file
 
+If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from remote to your local machine.
+
 > [!TIP]
 > To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
 >
@@ -385,10 +387,7 @@ For other systems, make sure you have the following installed:
 > AZURE_TENANT_ID=xxx
 > ```
 
-> [!TIP]
-> If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from the Azure Function App to your local machine.
-
-Configure the local config file, named `config.yaml`:
+If the solution is not running online, configure the local config file, named `config.yaml`:
 
 ```yaml
 # config.yaml
