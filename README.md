@@ -13,7 +13,7 @@ AI-powered call center solution with Azure and OpenAI GPT.
 
 Send a phone call from AI agent, in an API call. Or, directly call the bot from the configured phone number!
 
-Insurance, IT support, customer service, and more. The bot can be customized in few seconds (really) to fit your needs.
+Insurance, IT support, customer service, and more. The bot can be customized in few hours (really) to fit your needs.
 
 ```bash
 # Ask the bot to call a phone number
