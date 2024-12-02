@@ -228,9 +228,9 @@ class AiSearchSearch(ISearch):
                     vectorizer_name="vectorizer-default",
                     # Without credentials specified, the database will use its system managed identity
                     parameters=AzureOpenAIVectorizerParameters(
-                        deployment_id=self._config.embedding_deployment,
+                        deployment_name=self._config.embedding_deployment,
                         model_name=self._config.embedding_model,
-                        resource_uri=self._config.embedding_endpoint,
+                        resource_url=self._config.embedding_endpoint,
                     ),
                 )
             ],
