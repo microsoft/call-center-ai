@@ -20,6 +20,7 @@ class AbstractPlatformModel(BaseModel):
         "timeout": 60,
     }
     context: int
+    endpoint: str
     model: str
     seed: int = 42  # Reproducible results
     streaming: bool
@@ -36,7 +37,6 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
     _client: AsyncAzureOpenAI | None = None
     api_version: str = "2024-06-01"
     deployment: str
-    endpoint: str
 
     async def instance(self) -> tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
         if not self._client:
@@ -57,7 +57,6 @@ class AzureOpenaiPlatformModel(AbstractPlatformModel):
 class OpenaiPlatformModel(AbstractPlatformModel):
     _client: AsyncOpenAI | None = None
     api_key: SecretStr
-    endpoint: str
 
     async def instance(self) -> tuple[AsyncOpenAI, AbstractPlatformModel]:
         if not self._client:
