@@ -5,11 +5,6 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
-  - package-ecosystem: pip
-    directory: ""
-    target-branch: develop
-    schedule:
-      interval: weekly
   - package-ecosystem: "devcontainers"
     directory: ""
     target-branch: develop

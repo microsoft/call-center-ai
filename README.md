@@ -370,11 +370,12 @@ In macOS, with [Homebrew](https://brew.sh), simply type `make brew`, if not alre
 
 For other systems, make sure you have the following installed:
 
-- [pyenv](https://github.com/pyenv/pyenv) (optional, with a [virtualenv](https://github.com/pyenv/pyenv-virtualenv) named `callcenterai312`)
-- [Python 3.12](https://docs.python.org/3.12)
 - [Rust](https://rust-lang.org)
+- [uv](https://docs.astral.sh/uv)
 
 #### 2. Create the full config file
+
+If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from remote to your local machine.
 
 > [!TIP]
 > To use a Service Principal to authenticate to Azure, you can also add the following in a `.env` file:
@@ -385,10 +386,7 @@ For other systems, make sure you have the following installed:
 > AZURE_TENANT_ID=xxx
 > ```
 
-> [!TIP]
-> If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from the Azure Function App to your local machine.
-
-Configure the local config file, named `config.yaml`:
+If the solution is not running online, configure the local config file, named `config.yaml`:
 
 ```yaml
 # config.yaml
@@ -450,6 +448,8 @@ ai_translation:
 
 #### 3. Run the deployment automation
 
+Execute if the solution is not yet deployed on Azure.
+
 ```zsh
 make deploy-bicep deploy-post name=my-rg-name
 ```
@@ -457,14 +457,7 @@ make deploy-bicep deploy-post name=my-rg-name
 - This will deploy the Azure resources without the API server, allowing you to test the bot locally
 - Wait for the deployment to finish
 
-#### 4. Initialize local function config
-
-Copy `local.example.settings.json` to `local.settings.json`, then fill the required fields:
-
-- `APPLICATIONINSIGHTS_CONNECTION_STRING`, as the connection string of the Application Insights resource
-- `AzureWebJobsStorage`, as the connection string of the Azure Storage account
-
-#### 5. Connect to Azure Dev tunnels
+#### 4. Connect to Azure Dev tunnels
 
 > [!IMPORTANT]
 > Tunnel requires to be run in a separate terminal, because it needs to be running all the time
@@ -477,7 +470,7 @@ devtunnel login
 make tunnel
 ```
 
-#### 6. Iterate quickly with the code
+#### 5. Iterate quickly with the code
 
 > [!NOTE]
 > To override a specific configuration value, you can use environment variables. For example, to override the `llm.fast.endpoint` value, you can use the `LLM__FAST__ENDPOINT` variable:

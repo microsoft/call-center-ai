@@ -1,6 +1,6 @@
 {
   "name": "Development",
-  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
   "forwardPorts": [8080],
   "init": true,
   "remoteEnv": {
@@ -13,16 +13,13 @@
     "ghcr.io/meaningful-ooo/devcontainer-features/homebrew:2": {},
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
-  "onCreateCommand": "cd /workspaces/call-center-ai && python3 -m venv .venv",
-  "updateContentCommand": "cd /workspaces/call-center-ai && . .venv/bin/activate && make brew upgrade install",
+  "updateContentCommand": "cd /workspaces/call-center-ai && make brew upgrade install",
   "customizations": {
     "vscode": {
-      "settings": {
-        "python.defaultInterpreterPath": ".venv/bin/python"
-      },
       "extensions": [
         "bierner.markdown-mermaid",
         "bradlc.vscode-tailwindcss",
+        "charliermarsh.ruff",
         "DavidAnson.vscode-markdownlint",
         "EditorConfig.EditorConfig",
         "github.vscode-github-actions",
@@ -31,11 +28,8 @@
         "ms-azuretools.vscode-bicep",
         "ms-python.black-formatter",
         "ms-python.debugpy",
-        "ms-python.isort",
-        "ms-python.pylint",
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-toolsai.jupyter",
         "ms-vscode.azurecli",
         "ms-vscode.makefile-tools",
         "qwtel.sqlite-viewer",
