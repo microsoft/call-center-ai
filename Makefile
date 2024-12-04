@@ -49,45 +49,32 @@ brew:
 	@echo "➡️ Installing Twilio CLI..."
 	brew tap twilio/brew && brew install twilio
 
+	@echo "➡️ Installing uv..."
+	brew install uv
+
 install:
-	@echo "➡️ Installing pip-tools..."
-	python3 -m pip install pip-tools
+	@echo "➡️ Installing venv..."
+	uv venv --python 3.12
 
 	@echo "➡️ Syncing dependencies..."
-	pip-sync --pip-args "--no-deps" requirements-dev.txt
+	uv sync
 
 upgrade:
 	@echo "➡️ Updating Git submodules..."
 	git submodule update --init --recursive
 
-	@echo "➡️ Upgrading pip..."
-	python3 -m pip install --upgrade pip setuptools wheel
-
-	@echo "➡️ Upgrading pip-tools..."
-	python3 -m pip install --upgrade pip-tools
-
-	@echo "➡️ Compiling app requirements..."
-	pip-compile \
-		--output-file requirements.txt \
-		--upgrade \
-		pyproject.toml
-
-	@echo "➡️ Compiling dev requirements..."
-	pip-compile \
-		--extra dev \
-		--output-file requirements-dev.txt \
-		--upgrade \
-		pyproject.toml
+	@echo "➡️ Compiling requirements..."
+	uv lock --upgrade
 
 	@echo "➡️ Upgrading Bicep CLI..."
 	az bicep upgrade
 
 test:
 	@echo "➡️ Test code smells (Ruff)..."
-	python3 -m ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
+	ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
 
 	@echo "➡️ Test types (Pyright)..."
-	python3 -m pyright .
+	pyright .
 
 	@echo "➡️ Unit tests (Pytest)..."
 	PUBLIC_DOMAIN=dummy pytest \
@@ -96,10 +83,10 @@ test:
 
 lint:
 	@echo "➡️ Fix with formatter..."
-	python3 -m ruff format
+	ruff format
 
 	@echo "➡️ Lint with linter..."
-	python3 -m ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
+	ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
 
 tunnel:
 	@echo "➡️ Creating tunnel..."
@@ -112,7 +99,7 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) python3 -m gunicorn app.main:api \
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) gunicorn app.main:api \
 		--access-logfile - \
 		--bind 0.0.0.0:8080 \
 		--proxy-protocol \

@@ -370,9 +370,8 @@ In macOS, with [Homebrew](https://brew.sh), simply type `make brew`, if not alre
 
 For other systems, make sure you have the following installed:
 
-- [pyenv](https://github.com/pyenv/pyenv) (optional, with a [virtualenv](https://github.com/pyenv/pyenv-virtualenv) named `callcenterai312`)
-- [Python 3.12](https://docs.python.org/3.12)
 - [Rust](https://rust-lang.org)
+- [uv](https://docs.astral.sh/uv)
 
 #### 2. Create the full config file
 

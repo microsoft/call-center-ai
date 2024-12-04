@@ -1,3 +1,4 @@
 *
 !app/
-!requirements.txt
+!pyproject.toml
+!uv.lock
