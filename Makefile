@@ -57,7 +57,7 @@ install:
 	uv venv --python 3.12
 
 	@echo "➡️ Syncing dependencies..."
-	uv sync
+	uv sync --extra dev
 
 upgrade:
 	@echo "➡️ Updating Git submodules..."
@@ -71,22 +71,22 @@ upgrade:
 
 test:
 	@echo "➡️ Test code smells (Ruff)..."
-	ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
+	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
 
 	@echo "➡️ Test types (Pyright)..."
-	pyright .
+	uv run pyright .
 
 	@echo "➡️ Unit tests (Pytest)..."
-	PUBLIC_DOMAIN=dummy pytest \
+	PUBLIC_DOMAIN=dummy uv run pytest \
 		--junit-xml=test-reports/$(version_full).xml \
 		tests/*.py
 
 lint:
 	@echo "➡️ Fix with formatter..."
-	ruff format
+	uv run ruff format
 
 	@echo "➡️ Lint with linter..."
-	ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
+	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
 
 tunnel:
 	@echo "➡️ Creating tunnel..."
@@ -99,7 +99,7 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) gunicorn app.main:api \
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) uv run gunicorn app.main:api \
 		--access-logfile - \
 		--bind 0.0.0.0:8080 \
 		--proxy-protocol \
