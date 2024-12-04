@@ -24,7 +24,7 @@ env:
 jobs:
   init:
     name: Init
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       VERSION: ${{ steps.version.outputs.version }}
       VERSION_FULL: ${{ steps.version.outputs.version_full }}
@@ -45,7 +45,7 @@ jobs:
 
   sast-creds:
     name: SAST - Credentials
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.7
@@ -64,7 +64,7 @@ jobs:
 
   sast-semgrep:
     name: SAST - Semgrep
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       # Allow to write to GitHub Security
       security-events: write
@@ -92,7 +92,7 @@ jobs:
       - init
       - sast-creds
       - sast-semgrep
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       attestations: write
       id-token: write
@@ -173,7 +173,7 @@ jobs:
     permissions:
       # Allow to create releases
       contents: write
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       RELEASE_ID: ${{ steps.create-release.outputs.result }}
     # Only publish on non-scheduled main branch, as there is only one Helm repo and we cannot override an existing version
@@ -209,7 +209,7 @@ jobs:
     permissions:
       # Allow to write releases
       contents: write
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs:
       - create-release
     # Only publish on non-scheduled default branch
