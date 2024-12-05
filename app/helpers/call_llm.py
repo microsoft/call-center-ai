@@ -130,6 +130,7 @@ async def load_llm_chat(  # noqa: PLR0913
                     call=call,
                     client=automation_client,
                     contexts=None,
+                    post_callback=post_callback,
                 )
             )
 
@@ -171,7 +172,10 @@ async def load_llm_chat(  # noqa: PLR0913
                 )
             )
 
-            # Add recognition to the call history
+            # Clear the recognition buffer
+            recognizer_buffer.clear()
+
+            # Store recognitio task
             nonlocal last_response
             last_response = await scheduler.spawn(
                 _out_answer(
@@ -183,11 +187,12 @@ async def load_llm_chat(  # noqa: PLR0913
                 )
             )
 
-            # Clear the recognition buffer
-            recognizer_buffer.clear()
+            # Wait for the response to be processed
+            await last_response.wait()
 
         await _in_audio(
             bits_per_sample=audio_bits_per_sample,
+            call=call,
             channels=audio_channels,
             clear_audio_callback=_clear_audio_callback,
             in_stream=audio_stream,
@@ -249,6 +254,7 @@ async def _out_answer(  # noqa: PLR0915
             call=call,
             client=client,
             post_callback=post_callback,
+            scheduler=scheduler,
             tts_callback=_tts_callback,
             use_tools=_iterations_remaining > 0,
         )
@@ -314,20 +320,24 @@ async def _out_answer(  # noqa: PLR0915
                     )
                     soft_timeout_triggered = True
                     # Never store the error message in the call history, it has caused hallucinations in the LLM
-                    await handle_play_text(
-                        call=call,
-                        client=client,
-                        store=False,
-                        text=await CONFIG.prompts.tts.timeout_loading(call),
+                    await scheduler.spawn(
+                        handle_play_text(
+                            call=call,
+                            client=client,
+                            store=False,
+                            text=await CONFIG.prompts.tts.timeout_loading(call),
+                        )
                     )
 
                 elif loading_task.done():  # Do not play timeout prompt plus loading, it can be frustrating for the user
                     loading_task = _loading_task()
-                    await handle_media(
-                        call=call,
-                        client=client,
-                        sound_url=CONFIG.prompts.sounds.loading(),
-                    )  # Play loading sound
+                    await scheduler.spawn(
+                        handle_media(
+                            call=call,
+                            client=client,
+                            sound_url=CONFIG.prompts.sounds.loading(),
+                        )
+                    )
 
             # Wait to not block the event loop for other requests
             await asyncio.sleep(1)
@@ -372,10 +382,11 @@ async def _out_answer(  # noqa: PLR0915
 
 # TODO: Refacto, this function is too long
 @tracer.start_as_current_span("call_execute_llm_chat")
-async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
+async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: aiojobs.Scheduler,
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     use_tools: bool,
 ) -> tuple[bool, bool, CallStateModel]:
@@ -428,6 +439,7 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
     tts_callback = _tts_callback(
         automation_client=client,
         call=call,
+        scheduler=scheduler,
     )
 
     # Build plugins
@@ -552,6 +564,7 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
 # TODO: Refacto and simplify
 async def _in_audio(  # noqa: PLR0913
     bits_per_sample: int,
+    call: CallStateModel,
     channels: int,
     clear_audio_callback: Callable[[], Awaitable[None]],
     in_stream: asyncio.Queue[bytes],
@@ -561,59 +574,33 @@ async def _in_audio(  # noqa: PLR0913
     timeout_callback: Callable[[], Awaitable[None]],
 ) -> None:
     clear_tts_task: asyncio.Task | None = None
-    no_voice_task: asyncio.Task | None = None
+    flush_task: asyncio.Task | None = None
     vad = Vad(
         # Aggressiveness mode (0, 1, 2, or 3)
         # Sets the VAD operating mode. A more aggressive (higher mode) VAD is more restrictive in reporting speech. Put in other words the probability of being speech when the VAD returns 1 is increased with increasing mode. As a consequence also the missed detection rate goes up.
         mode=3,
     )
 
-    async def _timeout_callback() -> None:
-        """
-        Alert the user that the call is about to be cut off.
-        """
-        timeout_sec = await phone_silence_timeout_sec()
-
-        while True:
-            logger.debug(
-                "Wait foor %i sec before cutting off the call",
-                timeout_sec,
-            )
-
-            # Wait for the timeout
-            await asyncio.sleep(timeout_sec)
-
-            logger.info("Phone silence timeout triggered")
-
-            # Execute the callback
-            await timeout_callback()
-
     async def _flush_callback() -> None:
         """
         Flush the audio buffer if no audio is detected for a while.
         """
-        nonlocal clear_tts_task
-
-        timeout_ms = await vad_silence_timeout_ms()
-
         # Wait for the timeout
+        nonlocal clear_tts_task
+        timeout_ms = await vad_silence_timeout_ms()
         await asyncio.sleep(timeout_ms / 1000)
-
-        # Cancel the TTS clear task if any
         if clear_tts_task:
             clear_tts_task.cancel()
             clear_tts_task = None
-
         logger.debug("Flushing audio buffer after %i ms", timeout_ms)
-
-        # Commit the buffer
         await response_callback()
 
-    async def _no_voice_callback() -> None:
-        await asyncio.gather(
-            _flush_callback(),
-            _timeout_callback(),
-        )
+        # Wait for the timeout, if any
+        timeout_sec = await phone_silence_timeout_sec()
+        while call.in_progress:
+            await asyncio.sleep(timeout_sec)
+            logger.info("Silence triggered after %i sec", timeout_sec)
+            await timeout_callback()
 
     async def _clear_tts_callback() -> None:
         """
@@ -663,17 +650,17 @@ async def _in_audio(  # noqa: PLR0913
         ):
             in_empty = True
             # Start timeout if not already started
-            if not no_voice_task:
-                no_voice_task = asyncio.create_task(_no_voice_callback())
+            if not flush_task:
+                flush_task = asyncio.create_task(_flush_callback())
 
         if in_empty:
             # Continue to the next audio packet
             continue
 
         # Voice detected, cancel the timeout if any
-        if no_voice_task:
-            no_voice_task.cancel()
-            no_voice_task = None
+        if flush_task:
+            flush_task.cancel()
+            flush_task = None
 
         # Start the TTS clear task
         if not clear_tts_task:
@@ -683,6 +670,7 @@ async def _in_audio(  # noqa: PLR0913
 def _tts_callback(
     automation_client: CallAutomationClient,
     call: CallStateModel,
+    scheduler: aiojobs.Scheduler,
 ) -> Callable[[str, MessageStyleEnum], Awaitable[None]]:
     """
     Send back the TTS to the user.
@@ -693,16 +681,16 @@ def _tts_callback(
         text: str,
         style: MessageStyleEnum,
     ) -> None:
-        await asyncio.gather(
+        # First, play the TTS to the user
+        await scheduler.spawn(
             handle_play_text(
                 call=call,
                 client=automation_client,
                 style=style,
                 text=text,
-            ),  # First, play the TTS to the user
-            _db.call_aset(
-                call
-            ),  # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
+            )
         )
+        # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
+        await _db.call_aset(call)
 
     return wrapper
