@@ -28,6 +28,7 @@ from app.helpers.config import CONFIG
 from app.helpers.features import (
     answer_hard_timeout_sec,
     answer_soft_timeout_sec,
+    phone_silence_timeout_sec,
     vad_cutoff_timeout_ms,
     vad_silence_timeout_ms,
 )
@@ -118,6 +119,20 @@ async def load_llm_chat(  # noqa: PLR0913
     last_response: aiojobs.Job | None = None
     async with aiojobs.Scheduler() as scheduler:
 
+        async def _timeout_callback() -> None:
+            from app.helpers.call_events import on_recognize_error
+
+            logger.info("Phone silence timeout triggered")
+
+            # Execute business logic
+            await scheduler.spawn(
+                on_recognize_error(
+                    call=call,
+                    client=automation_client,
+                    contexts=None,
+                )
+            )
+
         async def _clear_audio_callback() -> None:
             # Let 500ms to the TTS to be cleared
             if last_response:
@@ -179,12 +194,13 @@ async def load_llm_chat(  # noqa: PLR0913
             out_stream=recognizer_stream,
             response_callback=_response_callback,
             sample_rate=audio_sample_rate,
+            timeout_callback=_timeout_callback,
         )
 
 
 # TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
 @tracer.start_as_current_span("call_load_out_answer")
-async def _out_answer(  # noqa: PLR0913, PLR0915
+async def _out_answer(  # noqa: PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
@@ -356,7 +372,7 @@ async def _out_answer(  # noqa: PLR0913, PLR0915
 
 # TODO: Refacto, this function is too long
 @tracer.start_as_current_span("call_execute_llm_chat")
-async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
+async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
@@ -542,14 +558,35 @@ async def _in_audio(  # noqa: PLR0913
     out_stream: PushAudioInputStream,
     response_callback: Callable[[], Awaitable[None]],
     sample_rate: int,
+    timeout_callback: Callable[[], Awaitable[None]],
 ) -> None:
     clear_tts_task: asyncio.Task | None = None
-    flush_task: asyncio.Task | None = None
+    no_voice_task: asyncio.Task | None = None
     vad = Vad(
         # Aggressiveness mode (0, 1, 2, or 3)
         # Sets the VAD operating mode. A more aggressive (higher mode) VAD is more restrictive in reporting speech. Put in other words the probability of being speech when the VAD returns 1 is increased with increasing mode. As a consequence also the missed detection rate goes up.
         mode=3,
     )
+
+    async def _timeout_callback() -> None:
+        """
+        Alert the user that the call is about to be cut off.
+        """
+        timeout_sec = await phone_silence_timeout_sec()
+
+        while True:
+            logger.debug(
+                "Wait foor %i sec before cutting off the call",
+                timeout_sec,
+            )
+
+            # Wait for the timeout
+            await asyncio.sleep(timeout_sec)
+
+            logger.info("Phone silence timeout triggered")
+
+            # Execute the callback
+            await timeout_callback()
 
     async def _flush_callback() -> None:
         """
@@ -557,18 +594,26 @@ async def _in_audio(  # noqa: PLR0913
         """
         nonlocal clear_tts_task
 
+        timeout_ms = await vad_silence_timeout_ms()
+
         # Wait for the timeout
-        await asyncio.sleep(await vad_silence_timeout_ms() / 1000)
+        await asyncio.sleep(timeout_ms / 1000)
 
         # Cancel the TTS clear task if any
         if clear_tts_task:
             clear_tts_task.cancel()
             clear_tts_task = None
 
-        logger.debug("Timeout triggered, flushing audio buffer")
+        logger.debug("Flushing audio buffer after %i ms", timeout_ms)
 
         # Commit the buffer
         await response_callback()
+
+    async def _no_voice_callback() -> None:
+        await asyncio.gather(
+            _flush_callback(),
+            _timeout_callback(),
+        )
 
     async def _clear_tts_callback() -> None:
         """
@@ -576,10 +621,12 @@ async def _in_audio(  # noqa: PLR0913
 
         Start is the index of the buffer where the TTS was triggered.
         """
-        # Wait before clearing the TTS queue
-        await asyncio.sleep(await vad_cutoff_timeout_ms() / 1000)
+        timeout_ms = await vad_cutoff_timeout_ms()
 
-        logger.debug("Voice detected, cancelling TTS")
+        # Wait before clearing the TTS queue
+        await asyncio.sleep(timeout_ms / 1000)
+
+        logger.debug("Canceling TTS after %i ms", timeout_ms)
 
         # Clear the queue
         await clear_audio_callback()
@@ -615,18 +662,18 @@ async def _in_audio(  # noqa: PLR0913
             sample_rate=in_audio.frame_rate,
         ):
             in_empty = True
-            # Start timeout if not already started and VAD already triggered
-            if not flush_task:
-                flush_task = asyncio.create_task(_flush_callback())
+            # Start timeout if not already started
+            if not no_voice_task:
+                no_voice_task = asyncio.create_task(_no_voice_callback())
 
         if in_empty:
             # Continue to the next audio packet
             continue
 
-        # Voice detected, cancel the flush task if any
-        if flush_task:
-            flush_task.cancel()
-            flush_task = None
+        # Voice detected, cancel the timeout if any
+        if no_voice_task:
+            no_voice_task.cancel()
+            no_voice_task = None
 
         # Start the TTS clear task
         if not clear_tts_task:
