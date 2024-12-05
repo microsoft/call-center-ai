@@ -574,18 +574,18 @@ async def _in_audio(  # noqa: PLR0913
     timeout_callback: Callable[[], Awaitable[None]],
 ) -> None:
     clear_tts_task: asyncio.Task | None = None
-    flush_task: asyncio.Task | None = None
+    silence_task: asyncio.Task | None = None
     vad = Vad(
         # Aggressiveness mode (0, 1, 2, or 3)
         # Sets the VAD operating mode. A more aggressive (higher mode) VAD is more restrictive in reporting speech. Put in other words the probability of being speech when the VAD returns 1 is increased with increasing mode. As a consequence also the missed detection rate goes up.
         mode=3,
     )
 
-    async def _flush_callback() -> None:
+    async def _silence_callback() -> None:
         """
-        Flush the audio buffer if no audio is detected for a while.
+        Flush the audio buffer if no audio is detected for a while and trigger the timeout if required.
         """
-        # Wait for the timeout
+        # Wait and flush the audio buffer
         nonlocal clear_tts_task
         timeout_ms = await vad_silence_timeout_ms()
         await asyncio.sleep(timeout_ms / 1000)
@@ -595,7 +595,7 @@ async def _in_audio(  # noqa: PLR0913
         logger.debug("Flushing audio buffer after %i ms", timeout_ms)
         await response_callback()
 
-        # Wait for the timeout, if any
+        # Wait for silence and trigger timeout
         timeout_sec = await phone_silence_timeout_sec()
         while call.in_progress:
             await asyncio.sleep(timeout_sec)
@@ -650,17 +650,17 @@ async def _in_audio(  # noqa: PLR0913
         ):
             in_empty = True
             # Start timeout if not already started
-            if not flush_task:
-                flush_task = asyncio.create_task(_flush_callback())
+            if not silence_task:
+                silence_task = asyncio.create_task(_silence_callback())
 
         if in_empty:
             # Continue to the next audio packet
             continue
 
         # Voice detected, cancel the timeout if any
-        if flush_task:
-            flush_task.cancel()
-            flush_task = None
+        if silence_task:
+            silence_task.cancel()
+            silence_task = None
 
         # Start the TTS clear task
         if not clear_tts_task:
