@@ -457,7 +457,7 @@ class LlmModel(BaseModel):
             [line.strip() for line in formatted_prompt.splitlines()]
         )
 
-        self.logger.debug("Formatted prompt: %s", formatted_prompt)
+        # self.logger.debug("Formatted prompt: %s", formatted_prompt)
         return formatted_prompt
 
     def _messages(
