@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from functools import wraps
 
 import aiojobs
@@ -598,7 +599,16 @@ async def _in_audio(  # noqa: PLR0913
         # Wait for silence and trigger timeout
         timeout_sec = await phone_silence_timeout_sec()
         while call.in_progress:
+            timeout_start = datetime.now(UTC)
             await asyncio.sleep(timeout_sec)
+            if (
+                call.messages[-1].created_at + timedelta(seconds=timeout_sec)
+                > timeout_start
+            ):
+                logger.debug(
+                    "Message sent in the meantime, canceling this silence timeout"
+                )
+                continue
             logger.info("Silence triggered after %i sec", timeout_sec)
             await timeout_callback()
 
