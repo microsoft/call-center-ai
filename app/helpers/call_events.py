@@ -106,6 +106,7 @@ async def on_call_connected(
 ) -> None:
     logger.info("Call connected, asking for language")
     call.recognition_retry = 0  # Reset recognition retry counter
+    call.in_progress = True
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.CALL,
@@ -171,6 +172,7 @@ async def on_recognize_error(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: set[CallContextEnum] | None,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     # Retry IVR recognition
     if contexts and CallContextEnum.IVR_LANG_SELECT in contexts:
@@ -190,6 +192,7 @@ async def on_recognize_error(
             await _handle_goodbye(
                 call=call,
                 client=client,
+                post_callback=post_callback,
             )
         return
 
@@ -199,6 +202,7 @@ async def on_recognize_error(
         await _handle_goodbye(
             call=call,
             client=client,
+            post_callback=post_callback,
         )
         return
 
@@ -217,14 +221,23 @@ async def on_recognize_error(
 async def _handle_goodbye(
     call: CallStateModel,
     client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
-    await handle_play_text(
+    res = await handle_play_text(
         call=call,
         client=client,
         context=CallContextEnum.GOODBYE,
         store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
         text=await CONFIG.prompts.tts.goodbye(call),
     )
+
+    if not res:
+        logger.info("Failed to play goodbye prompt, ending call now")
+        await _handle_hangup(
+            call=call,
+            client=client,
+            post_callback=post_callback,
+        )
 
 
 @tracer.start_as_current_span("on_play_completed")
@@ -393,6 +406,7 @@ async def _handle_hangup(
     post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     await handle_hangup(client=client, call=call)
+    call.in_progress = False
     call.messages.append(
         MessageModel(
             action=MessageActionEnum.HANGUP,

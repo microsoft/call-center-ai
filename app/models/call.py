@@ -14,7 +14,6 @@ from app.helpers.config_models.conversation import (
 from app.helpers.monitoring import tracer
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
 from app.models.message import (
-    ActionEnum as MessageActionEnum,
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
     StyleEnum as MessageStyleEnum,
@@ -34,35 +33,15 @@ class CallGetModel(BaseModel):
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     # Editable fields
-    initiate: CallInitiateModel = Field(frozen=True)
     claim: dict[
         str, Any
     ] = {}  # Place after "initiate" as it depends on it for validation
+    in_progress: bool = False
+    initiate: CallInitiateModel = Field(frozen=True)
     messages: list[MessageModel] = []
     next: NextModel | None = None
     reminders: list[ReminderModel] = []
     synthesis: SynthesisModel | None = None
-
-    @computed_field
-    @property
-    def in_progress(self) -> bool:
-        """
-        Check if the call is in progress.
-
-        The call is in progress if the most recent message action status (CALL or HANGUP) is CALL. Otherwise, it is not in progress.
-        """
-        # Reverse
-        inverted_messages = self.messages.copy()
-        inverted_messages.reverse()
-        # Search for the first action we want
-        for message in inverted_messages:
-            match message.action:
-                case MessageActionEnum.CALL:
-                    return True
-                case MessageActionEnum.HANGUP:
-                    return False
-        # Otherwise, we assume the call is completed
-        return False
 
     @field_validator("claim")
     @classmethod

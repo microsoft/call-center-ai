@@ -91,11 +91,13 @@ async def _handle_play_text(
     context: ContextEnum | None,
     style: MessageStyleEnum,
     text: str,
-) -> None:
+) -> bool:
     """
     Play a text to a call participant.
 
     If `context` is provided, it will be used to track the operation.
+
+    Returns `True` if the text was played, `False` otherwise.
     """
     logger.info("Playing TTS: %s", text)
     try:
@@ -109,6 +111,7 @@ async def _handle_play_text(
                     text=text,
                 ),
             )
+        return True
     except ResourceNotFoundError:
         logger.debug("Call hung up before playing")
     except HttpResponseError as e:
@@ -116,6 +119,7 @@ async def _handle_play_text(
             logger.debug("Call hung up before playing")
         else:
             raise e
+    return False
 
 
 async def handle_media(
@@ -152,11 +156,13 @@ async def handle_play_text(  # noqa: PLR0913
     context: ContextEnum | None = None,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
-) -> None:
+) -> bool:
     """
     Play a text to a call participant.
 
     If `store` is `True`, the text will be stored in the call messages.
+
+    Returns `True` if the text was played, `False` otherwise.
     """
     # Split text in chunks
     chunks = await _chunk_before_tts(
@@ -168,13 +174,16 @@ async def handle_play_text(  # noqa: PLR0913
 
     # Play each chunk
     for chunk in chunks:
-        await _handle_play_text(
+        res = await _handle_play_text(
             call=call,
             client=client,
             context=context,
             style=style,
             text=chunk,
         )
+        if not res:
+            return False
+    return True
 
 
 async def handle_clear_queue(

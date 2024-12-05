@@ -735,6 +735,7 @@ async def _communicationservices_event_worker(
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
+                post_callback=_trigger_post_event,
             )
 
         case "Microsoft.Communication.PlayCompleted":  # Media played
