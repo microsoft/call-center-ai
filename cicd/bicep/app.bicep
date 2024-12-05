@@ -905,7 +905,7 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
     recognition_retry_max: 2
     recording_enabled: false
     slow_llm_for_chat: false
-    vad_cutoff_timeout_ms: 400
+    vad_cutoff_timeout_ms: 600
     vad_silence_timeout_ms: 400
   }): {
     parent: configStore

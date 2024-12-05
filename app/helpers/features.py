@@ -33,7 +33,7 @@ async def vad_silence_timeout_ms() -> int:
 
 
 async def vad_cutoff_timeout_ms() -> int:
-    return await _get(key="vad_cutoff_timeout_ms", type_res=int) or 400
+    return await _get(key="vad_cutoff_timeout_ms", type_res=int) or 600
 
 
 async def recording_enabled() -> bool:

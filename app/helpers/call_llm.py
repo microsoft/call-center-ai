@@ -6,7 +6,6 @@ import aiojobs
 from azure.cognitiveservices.speech import (
     AudioConfig,
     SpeechConfig,
-    SpeechRecognitionEventArgs,
     SpeechRecognizer,
 )
 from azure.cognitiveservices.speech.audio import AudioStreamFormat, PushAudioInputStream
@@ -70,8 +69,7 @@ async def load_llm_chat(  # noqa: PLR0913
     # Init language recognition
     speech_token = await (await token("https://cognitiveservices.azure.com/.default"))()
     recognizer_buffer: list[str] = []
-    recognizer_store_next_recognition = False
-    recognizer_lock = asyncio.Event()
+    recognizer_complete_gate = asyncio.Event()
     recognizer_stream = PushAudioInputStream(
         stream_format=AudioStreamFormat(
             bits_per_sample=audio_bits_per_sample,
@@ -90,53 +88,21 @@ async def load_llm_chat(  # noqa: PLR0913
         speech_config=recognizer_config,
     )
 
-    def _handle_partial_recognition(event: SpeechRecognitionEventArgs) -> None:
-        text = event.result.text
-
+    def _handle_complete_recognition(text: str) -> None:
         # Skip if no text
         if not text:
             return
 
-        # Init buffer if empty
-        if not recognizer_buffer:
-            recognizer_buffer.append("")
-
-        # Replace last element by this update
-        recognizer_buffer[-1] = text
-        logger.debug("Partial recognition: %s", recognizer_buffer)
-
-        # Lock the recognition until the audio stream is ready
-        recognizer_lock.set()
-
-    def _handle_complete_recognition(event: SpeechRecognitionEventArgs) -> None:
-        text = event.result.text
-
-        # Skip if no text
-        if not text:
-            return
-
-        # Replace last element by this update
-        recognizer_buffer[-1] = text
-
-        # If recognition requires to be stored, add it to the call history
-        nonlocal recognizer_store_next_recognition
-        if recognizer_store_next_recognition:
-            recognizer_store_next_recognition = False
-            logger.info("Voice stored: %s", recognizer_buffer)
-            call.messages.append(
-                MessageModel(
-                    content=" ".join(recognizer_buffer),
-                    persona=MessagePersonaEnum.HUMAN,
-                )
-            )
-
-        # Add a new element to the buffer, thus the next partial recognition will be in a new element
-        recognizer_buffer.append("")
+        recognizer_buffer.append(text)
         logger.debug("Complete recognition: %s", recognizer_buffer)
 
+        # Open the recognition gate
+        recognizer_complete_gate.set()
+
     # Register callback and start recognition
-    recognizer_client.recognizing.connect(_handle_partial_recognition)
-    recognizer_client.recognized.connect(_handle_complete_recognition)
+    recognizer_client.recognized.connect(
+        lambda e: _handle_complete_recognition(e.result.text)
+    )
     recognizer_client.session_started.connect(
         lambda _: logger.debug("Recognition started")
     )
@@ -153,10 +119,14 @@ async def load_llm_chat(  # noqa: PLR0913
     async with aiojobs.Scheduler() as scheduler:
 
         async def _clear_audio_callback() -> None:
-            # Wait for the recognition to be ready
-            await recognizer_lock.wait()
+            # Let 500ms to the TTS to be cleared
+            if last_response:
+                await scheduler.spawn(last_response.close(timeout=0.5))
 
-            # Clear the LLM queue
+            # Close the recognition gate
+            recognizer_complete_gate.clear()
+
+            # Clear the recognition buffer
             recognizer_buffer.clear()
 
             # Clear the TTS queue
@@ -167,23 +137,24 @@ async def load_llm_chat(  # noqa: PLR0913
                 )
             )
 
-            # Cancel the last response
-            if last_response:
-                # Wait 2 secs maximum for the task to end
-                await last_response.close(timeout=2)
-
         async def _response_callback() -> None:
-            # Wait for the recognition to be ready
-            await recognizer_lock.wait()
+            # Wait for the complete recognition
+            await recognizer_complete_gate.wait()
 
-            # Skip if no recognition
-            if not recognizer_buffer or recognizer_buffer[-1] == "":
+            recognizer_text = " ".join(recognizer_buffer).strip()
+
+            # Skip if no partial recognition
+            if not recognizer_text:
                 return
 
-            # Set recognition to be added to the call history
-            logger.info("Voice recognized: %s", recognizer_buffer)
-            nonlocal recognizer_store_next_recognition
-            recognizer_store_next_recognition = True
+            # Add it to the call history
+            logger.info("Voice stored: %s", recognizer_buffer)
+            call.messages.append(
+                MessageModel(
+                    content=recognizer_text,
+                    persona=MessagePersonaEnum.HUMAN,
+                )
+            )
 
             # Add recognition to the call history
             nonlocal last_response
@@ -193,12 +164,11 @@ async def load_llm_chat(  # noqa: PLR0913
                     client=automation_client,
                     post_callback=post_callback,
                     scheduler=scheduler,
-                    text=" ".join(recognizer_buffer),
                     training_callback=training_callback,
                 )
             )
 
-            # Clear the LLM queue
+            # Clear the recognition buffer
             recognizer_buffer.clear()
 
         await _in_audio(
@@ -219,7 +189,6 @@ async def _out_answer(  # noqa: PLR0913, PLR0915
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: aiojobs.Scheduler,
-    text: str,
     training_callback: Callable[[CallStateModel], Awaitable[None]],
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
@@ -264,7 +233,6 @@ async def _out_answer(  # noqa: PLR0913, PLR0915
             call=call,
             client=client,
             post_callback=post_callback,
-            text=text,
             tts_callback=_tts_callback,
             use_tools=_iterations_remaining > 0,
         )
@@ -366,7 +334,6 @@ async def _out_answer(  # noqa: PLR0913, PLR0915
                 client=client,
                 post_callback=post_callback,
                 scheduler=scheduler,
-                text=text,
                 training_callback=training_callback,
                 _iterations_remaining=_iterations_remaining - 1,
             )
@@ -377,7 +344,6 @@ async def _out_answer(  # noqa: PLR0913, PLR0915
             client=client,
             post_callback=post_callback,
             scheduler=scheduler,
-            text=text,
             training_callback=training_callback,
             _iterations_remaining=_iterations_remaining - 1,
         )  # Recursive chat (like for for retry or tools)
@@ -394,7 +360,6 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
-    text: str,
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     use_tools: bool,
 ) -> tuple[bool, bool, CallStateModel]:
@@ -464,15 +429,6 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         tools = await plugins.to_openai()
         logger.debug("Tools: %s", tools)
 
-    # Add user message in a temporary current context
-    call_copy = call.model_copy()
-    call_copy.messages.append(
-        MessageModel(
-            content=text,
-            persona=MessagePersonaEnum.HUMAN,
-        )
-    )
-
     # Execute LLM inference
     maximum_tokens_reached = False
     content_buffer_pointer = 0
@@ -480,7 +436,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     try:
         async for delta in completion_stream(
             max_tokens=160,  # Lowest possible value for 90% of the cases, if not sufficient, retry will be triggered, 100 tokens ~= 75 words, 20 words ~= 1 sentence, 6 sentences ~= 160 tokens
-            messages=call_copy.messages,
+            messages=call.messages,
             system=system,
             tools=tools,
         ):
