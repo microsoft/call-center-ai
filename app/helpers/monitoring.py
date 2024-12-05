@@ -6,6 +6,7 @@ from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrument
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.trace.span import INVALID_SPAN
 from opentelemetry.util.types import AttributeValue
+from structlog.contextvars import bind_contextvars
 
 VERSION = environ.get("VERSION", "0.0.0-unknown")
 
@@ -33,6 +34,10 @@ def span_attribute(key: str, value: AttributeValue) -> None:
 
     Returns None.
     """
+    # Enrich logging
+    bind_contextvars(**{key: value})
+
+    # Enrich span
     span = trace.get_current_span()
     if span == INVALID_SPAN:
         return

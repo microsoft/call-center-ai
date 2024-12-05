@@ -542,7 +542,7 @@ async def communicationservices_wss_post(
 
     # Accept connection
     await websocket.accept()
-    logger.info("WebSocket connection established for call %s", call.call_id)
+    logger.info("WebSocket connection established")
 
     # Client SDK
     automation_client = await _use_automation_client()
@@ -665,7 +665,7 @@ async def _communicationservices_event_worker(
     automation_client = await _use_automation_client()
 
     # Log
-    logger.debug("Call event received %s for call %s", event_type, call.call_id)
+    logger.debug("Call event received %s", event_type)
 
     match event_type:
         case "Microsoft.Communication.CallConnected":  # Call answered
@@ -754,9 +754,13 @@ async def training_event(
     Returns None.
     """
     call = CallStateModel.model_validate_json(training.content)
-    logger.debug("Training event received for call %s", call)
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+
+    logger.debug("Training event received")
+
     await call.trainings(cache_only=False)  # Get trainings by advance to populate cache
 
 
@@ -773,9 +777,13 @@ async def post_event(
     if not call:
         logger.warning("Call %s not found", post.content)
         return
-    logger.debug("Post event received for call %s", call.call_id)
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+
+    logger.debug("Post event received")
+
     await on_end_call(call)
 
 
