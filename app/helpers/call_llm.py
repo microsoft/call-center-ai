@@ -254,6 +254,7 @@ async def _out_answer(  # noqa: PLR0915
             call=call,
             client=client,
             post_callback=post_callback,
+            scheduler=scheduler,
             tts_callback=_tts_callback,
             use_tools=_iterations_remaining > 0,
         )
@@ -319,20 +320,24 @@ async def _out_answer(  # noqa: PLR0915
                     )
                     soft_timeout_triggered = True
                     # Never store the error message in the call history, it has caused hallucinations in the LLM
-                    await handle_play_text(
-                        call=call,
-                        client=client,
-                        store=False,
-                        text=await CONFIG.prompts.tts.timeout_loading(call),
+                    await scheduler.spawn(
+                        handle_play_text(
+                            call=call,
+                            client=client,
+                            store=False,
+                            text=await CONFIG.prompts.tts.timeout_loading(call),
+                        )
                     )
 
                 elif loading_task.done():  # Do not play timeout prompt plus loading, it can be frustrating for the user
                     loading_task = _loading_task()
-                    await handle_media(
-                        call=call,
-                        client=client,
-                        sound_url=CONFIG.prompts.sounds.loading(),
-                    )  # Play loading sound
+                    await scheduler.spawn(
+                        handle_media(
+                            call=call,
+                            client=client,
+                            sound_url=CONFIG.prompts.sounds.loading(),
+                        )
+                    )
 
             # Wait to not block the event loop for other requests
             await asyncio.sleep(1)
@@ -377,10 +382,11 @@ async def _out_answer(  # noqa: PLR0915
 
 # TODO: Refacto, this function is too long
 @tracer.start_as_current_span("call_execute_llm_chat")
-async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
+async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: aiojobs.Scheduler,
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     use_tools: bool,
 ) -> tuple[bool, bool, CallStateModel]:
@@ -433,6 +439,7 @@ async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
     tts_callback = _tts_callback(
         automation_client=client,
         call=call,
+        scheduler=scheduler,
     )
 
     # Build plugins
@@ -663,6 +670,7 @@ async def _in_audio(  # noqa: PLR0913
 def _tts_callback(
     automation_client: CallAutomationClient,
     call: CallStateModel,
+    scheduler: aiojobs.Scheduler,
 ) -> Callable[[str, MessageStyleEnum], Awaitable[None]]:
     """
     Send back the TTS to the user.
@@ -673,16 +681,16 @@ def _tts_callback(
         text: str,
         style: MessageStyleEnum,
     ) -> None:
-        await asyncio.gather(
+        # First, play the TTS to the user
+        await scheduler.spawn(
             handle_play_text(
                 call=call,
                 client=automation_client,
                 style=style,
                 text=text,
-            ),  # First, play the TTS to the user
-            _db.call_aset(
-                call
-            ),  # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
+            )
         )
+        # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
+        await _db.call_aset(call)
 
     return wrapper
