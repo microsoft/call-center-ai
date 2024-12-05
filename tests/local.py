@@ -1,13 +1,15 @@
 import asyncio
 
+import aiojobs
+
 from app.helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
     on_end_call,
     on_ivr_recognized,
     on_play_completed,
-    on_speech_recognized,
 )
+from app.helpers.call_llm import _out_answer
 from app.helpers.config import CONFIG
 from app.helpers.logging import logger
 from app.models.call import CallInitiateModel, CallStateModel
@@ -66,28 +68,30 @@ async def main() -> None:
         label=call.lang.short_code,
     )
 
-    # Simulate conversation
-    while continue_conversation:
-        message = input("Customer: ")
-        if message.strip().lower() == "exit":
-            break
-        # Respond
-        await on_speech_recognized(
-            call=call,
-            client=automation_client,
-            post_callback=_post_callback,
-            text=message,
-            training_callback=_training_callback,
-        )
-        # Receip
-        await on_play_completed(
-            call=call,
-            client=automation_client,
-            contexts=call_client.last_contexts,
-            post_callback=_post_callback,
-        )
-        # Reset contexts
-        call_client.last_contexts.clear()
+    # Simulate conversation with speech recognition
+    async with aiojobs.Scheduler() as scheduler:
+        # Simulate conversation
+        while continue_conversation:
+            message = input("Customer: ")
+            if message.strip().lower() == "exit":
+                break
+            # Respond
+            await _out_answer(
+                call=call,
+                client=automation_client,
+                post_callback=_post_callback,
+                scheduler=scheduler,
+                training_callback=_training_callback,
+            )
+            # Receip
+            await on_play_completed(
+                call=call,
+                client=automation_client,
+                contexts=call_client.last_contexts,
+                post_callback=_post_callback,
+            )
+            # Reset contexts
+            call_client.last_contexts.clear()
 
     logger.info("Conversation ended, handling disconnection...")
 
