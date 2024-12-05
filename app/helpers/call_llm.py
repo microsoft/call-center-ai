@@ -52,7 +52,7 @@ from app.models.message import (
 _db = CONFIG.database.instance()
 
 
-# TODO: Refacto, this function is too long (and remove PLR0913 ignore)
+# TODO: Refacto, this function is too long
 @tracer.start_as_current_span("call_load_llm_chat")
 async def load_llm_chat(  # noqa: PLR0913
     audio_bits_per_sample: int,
@@ -211,7 +211,7 @@ async def load_llm_chat(  # noqa: PLR0913
 
 # TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
 @tracer.start_as_current_span("call_load_out_answer")
-async def _out_answer(  # noqa: PLR0915
+async def _out_answer(  # noqa: PLR0913, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
@@ -385,9 +385,9 @@ async def _out_answer(  # noqa: PLR0915
     return call
 
 
-# TODO: Refacto, this function is too long (and remove PLR0911/PLR0912/PLR0915 ignore)
+# TODO: Refacto, this function is too long
 @tracer.start_as_current_span("call_execute_llm_chat")
-async def _execute_llm_chat(  # noqa: PLR0911, PLR0912, PLR0915
+async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
