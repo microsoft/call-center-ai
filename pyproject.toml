@@ -51,6 +51,7 @@ dependencies = [
   "twilio~=9.3",  # Twilio SDK, used for SMS
   "typing-extensions~=4.12",  # Typing extensions for Python 3.6+
   "uvicorn[standard]~=0.32",  # Application middleware
+  "webrtcvad~=2.0",  # Voice activity detection
 ]
 
 [project.optional-dependencies]

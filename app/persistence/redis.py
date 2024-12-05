@@ -6,7 +6,11 @@ from opentelemetry.instrumentation.redis import RedisInstrumentor
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
-from redis.exceptions import BusyLoadingError, ConnectionError, RedisError
+from redis.exceptions import (
+    BusyLoadingError,
+    ConnectionError as RedisConnectionError,
+    RedisError,
+)
 
 from app.helpers.config_models.cache import RedisModel
 from app.helpers.logging import logger
@@ -31,7 +35,7 @@ class RedisCache(ICache):
             db=config.database,
             # Reliability
             health_check_interval=10,  # Check the health of the connection every 10 secs
-            retry_on_error=[BusyLoadingError, ConnectionError],
+            retry_on_error=[BusyLoadingError, RedisConnectionError],
             retry_on_timeout=True,
             retry=_retry,
             socket_connect_timeout=5,  # Give the system sufficient time to connect even under higher CPU conditions

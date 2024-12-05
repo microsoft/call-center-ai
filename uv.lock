@@ -507,6 +507,7 @@ dependencies = [
     { name = "twilio" },
     { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "webrtcvad" },
 ]
 
 [package.optional-dependencies]
@@ -578,6 +579,7 @@ requires-dist = [
     { name = "twilio", specifier = "~=9.3" },
     { name = "typing-extensions", specifier = "~=4.12" },
     { name = "uvicorn", extras = ["standard"], specifier = "~=0.32" },
+    { name = "webrtcvad", specifier = "~=2.0" },
 ]
 
 [[package]]
@@ -3017,6 +3019,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/0b/02/ae6ceac1baeda5308
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/24/2a3e3df732393fed8b3ebf2ec078f05546de641fe1b667ee316ec1dcf3b7/webencodings-0.5.1-py2.py3-none-any.whl", hash = "sha256:a0af1213f3c2226497a97e2b3aa01a7e4bee4f403f95be16fc9acd2947514a78", size = 11774 },
 ]
+
+[[package]]
+name = "webrtcvad"
+version = "2.0.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/34/e2de2d97f3288512b9ea56f92e7452f8207eb5a0096500badf9dfd48f5e6/webrtcvad-2.0.10.tar.gz", hash = "sha256:f1bed2fb25b63fb7b1a55d64090c993c9c9167b28485ae0bcdd81cf6ede96aea", size = 66156 }
 
 [[package]]
 name = "websockets"
