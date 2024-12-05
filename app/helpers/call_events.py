@@ -55,7 +55,7 @@ async def on_new_call(
     phone_number: str,
     wss_url: str,
 ) -> bool:
-    logger.debug("Incoming call handler caller ID: %s", phone_number)
+    logger.debug("Incoming call handler")
 
     streaming_options = MediaStreamingOptions(
         audio_channel_type=MediaStreamingAudioChannelType.UNMIXED,
@@ -72,11 +72,7 @@ async def on_new_call(
             incoming_call_context=incoming_context,
             media_streaming=streaming_options,
         )
-        logger.info(
-            "Answered call with %s (%s)",
-            phone_number,
-            answer_call_result.call_connection_id,
-        )
+        logger.info("Answered call (%s)", answer_call_result.call_connection_id)
         return True
 
     except ClientAuthenticationError:

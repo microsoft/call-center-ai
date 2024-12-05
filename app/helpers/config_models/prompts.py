@@ -473,7 +473,7 @@ class LlmModel(BaseModel):
                 role="system",
             ),
         ]
-        self.logger.debug("Messages: %s", messages)
+        # self.logger.debug("Messages: %s", messages)
         return messages
 
     @cached_property
