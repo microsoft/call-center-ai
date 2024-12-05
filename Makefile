@@ -54,7 +54,7 @@ brew:
 
 install:
 	@echo "➡️ Installing venv..."
-	uv venv --python 3.12
+	uv venv --python 3.12 --allow-existing
 
 	@echo "➡️ Syncing dependencies..."
 	uv sync --extra dev
