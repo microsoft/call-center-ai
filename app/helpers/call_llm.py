@@ -13,7 +13,11 @@ from azure.cognitiveservices.speech.audio import AudioStreamFormat, PushAudioInp
 from azure.communication.callautomation.aio import CallAutomationClient
 from openai import APIError
 from pydub import AudioSegment
-from pydub.effects import high_pass_filter, low_pass_filter
+from pydub.effects import (
+    high_pass_filter,
+    low_pass_filter,
+)
+from webrtcvad import Vad
 
 from app.helpers.call_utils import (
     handle_clear_queue,
@@ -27,7 +31,6 @@ from app.helpers.features import (
     answer_soft_timeout_sec,
     vad_cutoff_timeout_ms,
     vad_silence_timeout_ms,
-    vad_threshold,
 )
 from app.helpers.identity import token
 from app.helpers.llm_tools import DefaultPlugin
@@ -586,6 +589,11 @@ async def _in_audio(  # noqa: PLR0913
 ) -> None:
     clear_tts_task: asyncio.Task | None = None
     flush_task: asyncio.Task | None = None
+    vad = Vad(
+        # Aggressiveness mode (0, 1, 2, or 3)
+        # Sets the VAD operating mode. A more aggressive (higher mode) VAD is more restrictive in reporting speech. Put in other words the probability of being speech when the VAD returns 1 is increased with increasing mode. As a consequence also the missed detection rate goes up.
+        mode=3,
+    )
 
     async def _flush_callback() -> None:
         """
@@ -637,18 +645,18 @@ async def _in_audio(  # noqa: PLR0913
         in_stream.task_done()
 
         # Apply high-pass and low-pass filters in a simple attempt to reduce noise
-        in_audio = high_pass_filter(in_audio, 200)
-        in_audio = low_pass_filter(in_audio, 3000)
+        in_audio = high_pass_filter(seg=in_audio, cutoff=85)
+        in_audio = low_pass_filter(seg=in_audio, cutoff=3000)
 
         # Always add the audio to the buffer
         assert isinstance(in_audio.raw_data, bytes)
         out_stream.write(in_audio.raw_data)
 
-        # Get the relative dB, silences shoudl be at 1 to 5% of the max, so 0.1 to 0.5 of the threshold
+        # Use WebRTC VAD algorithm to detect voice
         in_empty = False
-        if (
-            min(in_audio.rms / in_audio.max_possible_amplitude * 10, 1)
-            < await vad_threshold()
+        if not vad.is_speech(
+            buf=in_audio.raw_data,
+            sample_rate=in_audio.frame_rate,
         ):
             in_empty = True
             # Start timeout if not already started and VAD already triggered

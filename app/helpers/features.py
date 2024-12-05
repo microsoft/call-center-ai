@@ -36,10 +36,6 @@ async def vad_cutoff_timeout_ms() -> int:
     return await _get(key="vad_cutoff_timeout_ms", type_res=int) or 400
 
 
-async def vad_threshold() -> float:
-    return await _get(key="vad_threshold", type_res=float) or 0.5
-
-
 async def recording_enabled() -> bool:
     return await _get(key="recording_enabled", type_res=bool) or False
 
