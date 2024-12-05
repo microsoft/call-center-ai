@@ -380,11 +380,16 @@ async def call_post(request: Request) -> CallGetModel:
     except ValidationError as e:
         raise RequestValidationError([str(e)]) from e
 
+    # Get URLs
     callback_url, wss_url, call = await _communicationservices_urls(
         initiate.phone_number, initiate
     )
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+
+    # Init SDK
     automation_client = await _use_automation_client()
     streaming_options = MediaStreamingOptions(
         audio_channel_type=MediaStreamingAudioChannelType.UNMIXED,
@@ -400,10 +405,12 @@ async def call_post(request: Request) -> CallGetModel:
         source_caller_id_number=_source_caller,
         target_participant=PhoneNumberIdentifier(initiate.phone_number),  # pyright: ignore
     )
+
     logger.info(
         "Created call with connection id: %s",
         call_connection_properties.call_connection_id,
     )
+
     return TypeAdapter(CallGetModel).dump_python(call)
 
 
@@ -418,19 +425,26 @@ async def call_event(
 
     Queue message is a JSON object `EventGridEvent` with an event type of `AcsIncomingCallEventName`.
     """
+    # Parse event
     event = EventGridEvent.from_json(call.content)
     event_type = event.event_type
-
     if not event_type == SystemEventNames.AcsIncomingCallEventName:
         logger.warning("Event %s not supported", event_type)
         logger.debug("Event data %s", event.data)
         return
 
+    # Parse phone number
     call_context: str = event.data["incomingCallContext"]
     phone_number = PhoneNumber(event.data["from"]["phoneNumber"]["value"])
+
+    # Get URLs
     callback_url, wss_url, _call = await _communicationservices_urls(phone_number)
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(_call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, _call.initiate.phone_number)
+
+    # Execute business logic
     await on_new_call(
         callback_url=callback_url,
         client=await _use_automation_client(),
@@ -451,23 +465,32 @@ async def sms_event(
 
     Returns None. Can trigger additional events to `training` and `post` queues.
     """
+    # Parse event
     event = EventGridEvent.from_json(sms.content)
     event_type = event.event_type
-
     logger.debug("SMS event with data %s", event.data)
+
+    # Skip non-SMS events
     if not event_type == SystemEventNames.AcsSmsReceivedEventName:
         logger.warning("Event %s not supported", event_type)
         return
 
     message: str = event.data["message"]
     phone_number: str = event.data["from"]
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, phone_number)
+
+    # Get call
     call = await _db.call_asearch_one(phone_number)
     if not call:
         logger.warning("Call for phone number %s not found", phone_number)
         return
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
+    # Execute business logic
     await on_sms_received(
         call=call,
         message=message,
@@ -510,21 +533,27 @@ async def _communicationservices_validate_call_id(
     call_id: UUID,
     secret: str,
 ) -> CallStateModel:
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call_id))
 
+    # Validate call
     call = await _db.call_aget(call_id)
     if not call:
         raise HTTPException(
             detail=f"Call {call_id} not found",
             status_code=HTTPStatus.NOT_FOUND,
         )
+
+    # Validate secret
     if call.callback_secret != secret:
         raise HTTPException(
             detail="Secret does not match",
             status_code=HTTPStatus.UNAUTHORIZED,
         )
 
+    # Enrich span
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+
     return call
 
 
@@ -542,7 +571,7 @@ async def communicationservices_wss_post(
 
     # Accept connection
     await websocket.accept()
-    logger.info("WebSocket connection established for call %s", call.call_id)
+    logger.info("WebSocket connection established")
 
     # Client SDK
     automation_client = await _use_automation_client()
@@ -665,7 +694,7 @@ async def _communicationservices_event_worker(
     automation_client = await _use_automation_client()
 
     # Log
-    logger.debug("Call event received %s for call %s", event_type, call.call_id)
+    logger.debug("Call event received %s", event_type)
 
     match event_type:
         case "Microsoft.Communication.CallConnected":  # Call answered
@@ -753,10 +782,16 @@ async def training_event(
 
     Returns None.
     """
+    # Validate call
     call = CallStateModel.model_validate_json(training.content)
-    logger.debug("Training event received for call %s", call)
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+
+    logger.debug("Training event received")
+
+    # Load trainings
     await call.trainings(cache_only=False)  # Get trainings by advance to populate cache
 
 
@@ -769,13 +804,19 @@ async def post_event(
 
     Queue message is the UUID of a call. The event will load asynchroniously the `on_end_call` workflow.
     """
+    # Validate call
     call = await _db.call_aget(UUID(post.content))
     if not call:
         logger.warning("Call %s not found", post.content)
         return
-    logger.debug("Post event received for call %s", call.call_id)
+
+    # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+
+    logger.debug("Post event received")
+
+    # Execute business logic
     await on_end_call(call)
 
 
@@ -842,24 +883,32 @@ async def twilio_sms_post(
 
     Returns a 200 OK if the SMS is properly formatted. Otherwise, returns a 400 Bad Request.
     """
+    # Enrich span
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, From)
+
+    # Get call
     call = await _db.call_asearch_one(From)
 
     if not call:
         logger.warning("Call for phone number %s not found", From)
     else:
+        # Enrich span
         span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
+        # Execute business logic
         event_status = await on_sms_received(
             call=call,
             message=Body,
         )
+
+        # Return error for unsuccessful event
         if not event_status:
             raise HTTPException(
                 detail="SMS event failed",
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
+    # Default response
     return Response(
         content=str(MessagingResponse()),  # Twilio expects an empty response every time
         media_type="application/xml",

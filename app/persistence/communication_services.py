@@ -1,5 +1,6 @@
 from azure.communication.sms import SmsSendResult
 from azure.communication.sms.aio import SmsClient
+from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 
 from app.helpers.config_models.communication_services import CommunicationServicesModel
@@ -63,6 +64,8 @@ class CommunicationServicesSms(ISms):
                 # Performance
                 transport=await azure_transport(),
                 # Authentication
-                credential=self._config.access_key.get_secret_value(),
+                credential=AzureKeyCredential(
+                    self._config.access_key.get_secret_value()
+                ),
             )
         return self._client

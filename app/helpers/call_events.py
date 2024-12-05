@@ -172,12 +172,10 @@ async def on_recognize_error(
     client: CallAutomationClient,
     contexts: set[CallContextEnum] | None,
 ) -> None:
-    if (
-        contexts and CallContextEnum.IVR_LANG_SELECT in contexts
-    ):  # Retry IVR recognition
+    # Retry IVR recognition
+    if contexts and CallContextEnum.IVR_LANG_SELECT in contexts:
         span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
         if call.recognition_retry < await recognition_retry_max():
-            call.recognition_retry += 1
             logger.info(
                 "Timeout, retrying language selection (%s/%s)",
                 call.recognition_retry,
@@ -195,15 +193,25 @@ async def on_recognize_error(
             )
         return
 
-    if (
-        call.recognition_retry >= await recognition_retry_max()
-    ):  # Voice retries are exhausted, end call
+    # Voice retries are exhausted, end call
+    if call.recognition_retry >= await recognition_retry_max():
         logger.info("Timeout, ending call")
         await _handle_goodbye(
             call=call,
             client=client,
         )
         return
+
+    # Increment the recognition retry counter
+    call.recognition_retry += 1
+
+    # Play a timeout prompt
+    await handle_play_text(
+        call=call,
+        client=client,
+        style=MessageStyleEnum.NONE,
+        text=await CONFIG.prompts.tts.timeout_silence(call),
+    )
 
 
 async def _handle_goodbye(

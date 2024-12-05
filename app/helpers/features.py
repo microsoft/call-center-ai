@@ -28,12 +28,16 @@ async def callback_timeout_hour() -> int:
     return await _get(key="callback_timeout_hour", type_res=int) or 24
 
 
+async def phone_silence_timeout_sec() -> int:
+    return await _get(key="phone_silence_timeout_sec", type_res=int) or 10
+
+
 async def vad_silence_timeout_ms() -> int:
     return await _get(key="vad_silence_timeout_ms", type_res=int) or 400
 
 
 async def vad_cutoff_timeout_ms() -> int:
-    return await _get(key="vad_cutoff_timeout_ms", type_res=int) or 400
+    return await _get(key="vad_cutoff_timeout_ms", type_res=int) or 600
 
 
 async def recording_enabled() -> bool:

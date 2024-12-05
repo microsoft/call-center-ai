@@ -303,7 +303,6 @@ async def test_llm(  # noqa: PLR0913
                 client=automation_client,
                 post_callback=_post_callback,
                 scheduler=scheduler,
-                text=speech,
                 training_callback=_training_callback,
             )
             # Receip

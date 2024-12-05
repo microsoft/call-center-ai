@@ -1,4 +1,4 @@
-name: pipeline
+name: Pipeline
 
 on:
   push:
@@ -86,6 +86,68 @@ jobs:
         with:
           sarif_file: semgrep.sarif
 
+  test:
+    name: Test
+    permissions:
+      id-token: write
+    runs-on: ubuntu-24.04
+    needs:
+      - init
+    strategy:
+      fail-fast: false
+      matrix:
+        # Run all test suites
+        step:
+          - static
+          # TODO: Enable unit tests (Azure login and config file required)
+          # - unit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          version: "0.5.x"
+
+      # - name: Login to Azure
+      #   uses: Azure/login@v2.2.0
+      #   with:
+      #     client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Cache pytest
+        uses: actions/cache@v4.0.2
+        with:
+          key: pytest-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
+          path: .pytest_cache
+
+      - name: Cache Ruff
+        uses: actions/cache@v4.0.2
+        with:
+          key: ruff-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
+          path: .ruff_cache
+
+      - name: Set up dependencies
+        run: make install-deps
+
+      # - name: Configure environment variables
+      #   run: echo "${{ secrets.DOTENV_UNIT_TESTS }}" > .env
+
+      - name: Run tests
+        run: make test-${{ matrix.step }} version_full=${{ needs.init.outputs.VERSION_FULL }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4.3.6
+        if: always()
+        with:
+          compression-level: 9
+          name: test-${{ matrix.step }}
+          path: test-reports/*
+
   build-image:
     name: Build & publish image
     needs:
@@ -168,8 +230,9 @@ jobs:
   create-release:
     name: Create release
     needs:
-      - init
       - build-image
+      - init
+      - test
     permissions:
       # Allow to create releases
       contents: write

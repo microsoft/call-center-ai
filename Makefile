@@ -56,6 +56,9 @@ install:
 	@echo "➡️ Installing venv..."
 	uv venv --python 3.12 --allow-existing
 
+	$(MAKE) install-deps
+
+install-deps:
 	@echo "➡️ Syncing dependencies..."
 	uv sync --extra dev
 
@@ -70,12 +73,17 @@ upgrade:
 	az bicep upgrade
 
 test:
+	$(MAKE) test-static
+	$(MAKE) test-unit
+
+test-static:
 	@echo "➡️ Test code smells (Ruff)..."
 	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
 
 	@echo "➡️ Test types (Pyright)..."
 	uv run pyright .
 
+test-unit:
 	@echo "➡️ Unit tests (Pytest)..."
 	PUBLIC_DOMAIN=dummy uv run pytest \
 		--junit-xml=test-reports/$(version_full).xml \
