@@ -148,6 +148,8 @@ A report is available at `https://[your_domain]/report/[phone_number]` (like `ht
 
 ![User report](./docs/user_report.png)
 
+## Architecture
+
 ### High level architecture
 
 ```mermaid
