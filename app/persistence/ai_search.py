@@ -213,7 +213,7 @@ class AiSearchSearch(ISearch):
                 VectorSearchProfile(
                     algorithm_configuration_name="algorithm-default",
                     name="profile-default",
-                    vectorizer="vectorizer-default",
+                    vectorizer_name="vectorizer-default",
                 ),
             ],
             algorithms=[
@@ -257,10 +257,6 @@ class AiSearchSearch(ISearch):
             # Deployment
             endpoint=self._config.endpoint,
             index_name=self._config.index,
-            # Index configuration
-            fields=fields,
-            semantic_search=semantic_search,
-            vector_search=vector_search,
             # Performance
             transport=await azure_transport(),
             # Authentication
@@ -271,6 +267,7 @@ class AiSearchSearch(ISearch):
                     SearchIndex(
                         fields=fields,
                         name=self._config.index,
+                        semantic_search=semantic_search,
                         vector_search=vector_search,
                     )
                 )
