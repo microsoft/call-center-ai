@@ -209,8 +209,11 @@ jobs:
         with:
           build-args: |
             VERSION=${{ needs.init.outputs.VERSION_FULL }}
-          cache-from: type=gha
-          cache-to: type=gha
+          cache-from: |
+            type=gha,scope=buildkit-${{ github.ref_name }}
+            type=gha,scope=buildkit-develop
+            type=gha,scope=buildkit-main
+          cache-to: type=gha,scope=buildkit-${{ github.ref_name }}
           context: .
           file: cicd/Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
