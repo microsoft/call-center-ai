@@ -12,6 +12,8 @@ from azure.search.documents.indexes.models import (
     AzureOpenAIVectorizerParameters,
     HnswAlgorithmConfiguration,
     LexicalAnalyzerName,
+    RescoringOptions,
+    ScalarQuantizationCompression,
     SearchableField,
     SearchField,
     SearchFieldDataType,
@@ -22,6 +24,7 @@ from azure.search.documents.indexes.models import (
     SemanticSearch,
     SimpleField,
     VectorSearch,
+    VectorSearchCompressionRescoreStorageMethod,
     VectorSearchProfile,
 )
 from azure.search.documents.models import (
@@ -203,6 +206,7 @@ class AiSearchSearch(ISearch):
             SearchField(
                 name="vectors",
                 searchable=True,
+                stored=False,
                 type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
                 vector_search_dimensions=self._config.embedding_dimensions,
                 vector_search_profile_name="profile-default",
@@ -212,8 +216,9 @@ class AiSearchSearch(ISearch):
             profiles=[
                 VectorSearchProfile(
                     algorithm_configuration_name="algorithm-default",
+                    compression_name="compression-scalar",
                     name="profile-default",
-                    vectorizer="vectorizer-default",
+                    vectorizer_name="vectorizer-default",
                 ),
             ],
             algorithms=[
@@ -231,6 +236,17 @@ class AiSearchSearch(ISearch):
                         resource_url=self._config.embedding_endpoint,
                     ),
                 )
+            ],
+            # Eliminate redundant vectors
+            # See: https://learn.microsoft.com/en-us/azure/search/vector-search-how-to-storage-options
+            compressions=[
+                ScalarQuantizationCompression(
+                    compression_name="compression-scalar",
+                    rescomonitorring_options=RescoringOptions(
+                        default_oversampling=10,
+                        rescore_storage_method=VectorSearchCompressionRescoreStorageMethod.PRESERVE_ORIGINALS,
+                    ),
+                ),
             ],
         )
         semantic_search = SemanticSearch(
@@ -257,10 +273,6 @@ class AiSearchSearch(ISearch):
             # Deployment
             endpoint=self._config.endpoint,
             index_name=self._config.index,
-            # Index configuration
-            fields=fields,
-            semantic_search=semantic_search,
-            vector_search=vector_search,
             # Performance
             transport=await azure_transport(),
             # Authentication
@@ -271,6 +283,7 @@ class AiSearchSearch(ISearch):
                     SearchIndex(
                         fields=fields,
                         name=self._config.index,
+                        semantic_search=semantic_search,
                         vector_search=vector_search,
                     )
                 )

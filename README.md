@@ -148,6 +148,8 @@ A report is available at `https://[your_domain]/report/[phone_number]` (like `ht
 
 ![User report](./docs/user_report.png)
 
+## Architecture
+
 ### High level architecture
 
 ```mermaid
@@ -623,7 +625,7 @@ Task can be customized for each call, by adding the `task` field in the `POST /c
 Conversation options are represented as features. They can be configured from App Configuration, without the need to redeploy or restart the application. Once a feature is updated, a delay of 60 seconds is needed to make the change effective.
 
 | Name | Description | Type | Default |
-|-|-|-|
+|-|-|-|-|
 | `answer_hard_timeout_sec` | The hard timeout for the bot answer in seconds. | `int` | 180 |
 | `answer_soft_timeout_sec` | The soft timeout for the bot answer in seconds. | `int` | 30 |
 | `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 3 |
@@ -763,3 +765,41 @@ Feel free to raise an issue or propose a PR if you have any idea to optimize the
 ### Why no LLM framework is used?
 
 At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
+
+### What would it require to make it production ready?
+
+Quality:
+
+- [x] Unit and integration tests for persistence layer
+- [ ] Complete unit and integration tests coverage
+
+Reliability:
+
+- [x] Reproductible builds
+- [x] Traces and telemetry
+- [ ] Operation runbooks for common issues
+- [ ] Proper dashboarding in Azure Application Insights (deployed with the IaC)
+
+Maintainability:
+
+- [x] Automated and required static code checks
+- [ ] Decouple assistant from the insights in a separate service
+- [ ] Peer review to limit the bus factor
+
+Resiliency:
+
+- [x] Infrastructure as Code (IaC)
+- [ ] Multi-region deployment
+- [ ] Reproductible performance tests
+
+Security:
+
+- [x] CI builds attestations
+- [ ] GitOps for deployments
+- [ ] Red team exercises
+
+Responsible AI:
+
+- [x] Harmful content detection
+- [ ] Grounding detection with Content Safety
+- [ ] Social impact assessment
