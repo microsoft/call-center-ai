@@ -625,7 +625,7 @@ Task can be customized for each call, by adding the `task` field in the `POST /c
 Conversation options are represented as features. They can be configured from App Configuration, without the need to redeploy or restart the application. Once a feature is updated, a delay of 60 seconds is needed to make the change effective.
 
 | Name | Description | Type | Default |
-|-|-|-|
+|-|-|-|-|
 | `answer_hard_timeout_sec` | The hard timeout for the bot answer in seconds. | `int` | 180 |
 | `answer_soft_timeout_sec` | The soft timeout for the bot answer in seconds. | `int` | 30 |
 | `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 3 |
