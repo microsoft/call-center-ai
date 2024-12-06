@@ -37,6 +37,8 @@ _TTS_SANITIZER_R = re.compile(
     r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&€$%=]"  # noqa: RUF001
 )  # Sanitize text for TTS
 
+_db = CONFIG.database.instance()
+
 
 class ContextEnum(str, Enum):
     """
@@ -221,13 +223,7 @@ async def _chunk_before_tts(
 
     # Store text in call messages
     if store:
-        if (
-            call.messages
-            and call.messages[-1].persona == MessagePersonaEnum.ASSISTANT
-            and call.messages[-1].style == style
-        ):  # Append to last message if possible
-            call.messages[-1].content += f" {text}"
-        else:
+        async with _db.call_transac(call):
             call.messages.append(
                 MessageModel(
                     content=text,

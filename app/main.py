@@ -48,6 +48,7 @@ from app.helpers.call_events import (
     on_new_call,
     on_play_completed,
     on_play_error,
+    on_play_started,
     on_recognize_error,
     on_sms_received,
     on_transfer_completed,
@@ -201,10 +202,10 @@ async def health_readiness_get() -> JSONResponse:
         search_check,
         sms_check,
     ) = await asyncio.gather(
-        _cache.areadiness(),
-        _db.areadiness(),
-        _search.areadiness(),
-        _sms.areadiness(),
+        _cache.readiness(),
+        _db.readiness(),
+        _search.readiness(),
+        _sms.readiness(),
     )
     readiness = ReadinessModel(
         status=ReadinessEnum.OK,
@@ -246,7 +247,7 @@ async def report_get(phone_number: str | None = None) -> HTMLResponse:
     phone_number = PhoneNumber(phone_number) if phone_number else None
     count = 100
     calls, total = (
-        await _db.call_asearch_all(count=count, phone_number=phone_number) or []
+        await _db.call_search_all(count=count, phone_number=phone_number) or []
     )
 
     template = _jinja.get_template("list.html.jinja")
@@ -281,7 +282,7 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
 
     Returns a single call with a web interface.
     """
-    call = await _db.call_aget(call_id)
+    call = await _db.call_get(call_id)
     if not call:
         return HTMLResponse(
             content=f"Call {call_id} not found",
@@ -319,7 +320,7 @@ async def call_list_get(
     """
     phone_number = PhoneNumber(phone_number) if phone_number else None
     count = 100
-    calls, _ = await _db.call_asearch_all(phone_number=phone_number, count=count)
+    calls, _ = await _db.call_search_all(phone_number=phone_number, count=count)
     if not calls:
         raise HTTPException(
             detail=f"Call {phone_number} not found",
@@ -344,7 +345,7 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
     # First, try to get by call ID
     try:
         call_id = UUID(call_id_or_phone_number)
-        call = await _db.call_aget(call_id)
+        call = await _db.call_get(call_id)
         if call:
             return TypeAdapter(CallGetModel).dump_python(call)
     except ValueError:
@@ -352,7 +353,7 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
 
     # Second, try to get by phone number
     phone_number = PhoneNumber(call_id_or_phone_number)
-    call = await _db.call_asearch_one(phone_number=phone_number)
+    call = await _db.call_search_one(phone_number=phone_number)
     if not call:
         raise HTTPException(
             detail=f"Call {call_id_or_phone_number} not found",
@@ -482,7 +483,7 @@ async def sms_event(
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, phone_number)
 
     # Get call
-    call = await _db.call_asearch_one(phone_number)
+    call = await _db.call_search_one(phone_number)
     if not call:
         logger.warning("Call for phone number %s not found", phone_number)
         return
@@ -537,7 +538,7 @@ async def _communicationservices_validate_call_id(
     span_attribute(CallAttributes.CALL_ID, str(call_id))
 
     # Validate call
-    call = await _db.call_aget(call_id)
+    call = await _db.call_get(call_id)
     if not call:
         raise HTTPException(
             detail=f"Call {call_id} not found",
@@ -682,14 +683,19 @@ async def _communicationservices_event_worker(
     # Event parsing
     event = CloudEvent.from_dict(event_dict)
     assert isinstance(event.data, dict)
+
     # Store connection ID
     connection_id = event.data["callConnectionId"]
-    call.voice_id = connection_id
+    async with _db.call_transac(call):
+        call.voice_id = connection_id
+
     # Extract context
     event_type = event.type
+
     # Extract event context
     operation_context = event.data.get("operationContext", None)
     operation_contexts = _str_to_contexts(operation_context)
+
     # Client SDK
     automation_client = await _use_automation_client()
 
@@ -738,6 +744,11 @@ async def _communicationservices_event_worker(
                 post_callback=_trigger_post_event,
             )
 
+        case "Microsoft.Communication.PlayStarted":  # Media started
+            await on_play_started(
+                call=call,
+            )
+
         case "Microsoft.Communication.PlayCompleted":  # Media played
             await on_play_completed(
                 call=call,
@@ -766,10 +777,6 @@ async def _communicationservices_event_worker(
         case _:
             logger.warning("Event %s not supported", event_type)
             logger.debug("Event data %s", event.data)
-
-    await _db.call_aset(
-        call
-    )  # TODO: Do not persist on every event, this is simpler but not efficient
 
 
 @tracer.start_as_current_span("training_event")
@@ -806,7 +813,7 @@ async def post_event(
     Queue message is the UUID of a call. The event will load asynchroniously the `on_end_call` workflow.
     """
     # Validate call
-    call = await _db.call_aget(UUID(post.content))
+    call = await _db.call_get(UUID(post.content))
     if not call:
         logger.warning("Call %s not found", post.content)
         return
@@ -845,18 +852,22 @@ async def _communicationservices_urls(
 
     Returnes a tuple of the callback URL, the WebSocket URL, and the call object.
     """
-    call = await _db.call_asearch_one(phone_number)
-    if not call or (
-        initiate and call.initiate != initiate
-    ):  # Create new call if initiate is different
-        call = CallStateModel(
-            initiate=initiate
-            or CallInitiateModel(
-                **CONFIG.conversation.initiate.model_dump(),
-                phone_number=phone_number,
+    # Get call
+    call = await _db.call_search_one(phone_number)
+
+    # Create new call if initiate is different
+    if not call or (initiate and call.initiate != initiate):
+        call = await _db.call_create(
+            CallStateModel(
+                initiate=initiate
+                or CallInitiateModel(
+                    **CONFIG.conversation.initiate.model_dump(),
+                    phone_number=phone_number,
+                )
             )
         )
-        await _db.call_aset(call)  # Create for the first time
+
+    # Format URLs
     wss_url = _COMMUNICATIONSERVICES_WSS_TPL.format(
         callback_secret=call.callback_secret,
         call_id=str(call.call_id),
@@ -865,6 +876,7 @@ async def _communicationservices_urls(
         callback_secret=call.callback_secret,
         call_id=str(call.call_id),
     )
+
     return callaback_url, wss_url, call
 
 
@@ -888,7 +900,7 @@ async def twilio_sms_post(
     span_attribute(CallAttributes.CALL_PHONE_NUMBER, From)
 
     # Get call
-    call = await _db.call_asearch_one(From)
+    call = await _db.call_search_one(From)
 
     if not call:
         logger.warning("Call for phone number %s not found", From)

@@ -48,7 +48,7 @@ class RedisCache(ICache):
             password=config.password.get_secret_value(),
         )  # Redis manage by itself a low level connection pool with asyncio, but be warning to not use a generator while consuming the connection, it will close it
 
-    async def areadiness(self) -> ReadinessEnum:
+    async def readiness(self) -> ReadinessEnum:
         """
         Check the readiness of the Redis cache.
 
@@ -76,7 +76,7 @@ class RedisCache(ICache):
             logger.exception("Unknown error while checking Redis readiness")
         return ReadinessEnum.FAIL
 
-    async def aget(self, key: str) -> bytes | None:
+    async def get(self, key: str) -> bytes | None:
         """
         Get a value from the cache.
 
@@ -92,7 +92,7 @@ class RedisCache(ICache):
             logger.exception("Error getting value")
         return res
 
-    async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
+    async def set(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
         """
         Set a value in the cache.
 
@@ -112,7 +112,7 @@ class RedisCache(ICache):
             return False
         return True
 
-    async def adel(self, key: str) -> bool:
+    async def delete(self, key: str) -> bool:
         """
         Delete a value from the cache.
 

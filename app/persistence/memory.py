@@ -28,13 +28,13 @@ class MemoryCache(ICache):
         )
         self._config = config
 
-    async def areadiness(self) -> ReadinessEnum:
+    async def readiness(self) -> ReadinessEnum:
         """
         Check the readiness of the memory cache.
         """
         return ReadinessEnum.OK  # Always ready, it's memory :)
 
-    async def aget(self, key: str) -> bytes | None:
+    async def get(self, key: str) -> bytes | None:
         """
         Get a value from the cache.
 
@@ -53,7 +53,7 @@ class MemoryCache(ICache):
         self._cache.move_to_end(sha_key, last=False)
         return res
 
-    async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
+    async def set(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
         """
         Set a value in the cache.
         """
@@ -68,7 +68,7 @@ class MemoryCache(ICache):
         self._ttl[sha_key] = datetime.now(UTC) + timedelta(seconds=ttl_sec)
         return True
 
-    async def adel(self, key: str) -> bool:
+    async def delete(self, key: str) -> bool:
         """
         Delete a value from the cache.
         """

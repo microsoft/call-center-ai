@@ -17,7 +17,7 @@ class TwilioSms(ISms):
         logger.info("Using Twilio from number %s", config.phone_number)
         self._config = config
 
-    async def areadiness(self) -> ReadinessEnum:
+    async def readiness(self) -> ReadinessEnum:
         """
         Check the readiness of the Twilio SMS service.
 
@@ -36,7 +36,7 @@ class TwilioSms(ISms):
             logger.exception("Unknown error while checking Twilio readiness")
         return ReadinessEnum.FAIL
 
-    async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
+    async def send(self, content: str, phone_number: PhoneNumber) -> bool:
         logger.info("Sending SMS to %s", phone_number)
         success = False
         logger.info("SMS content: %s", content)
@@ -59,7 +59,7 @@ class TwilioSms(ISms):
                 logger.debug("SMS sent to %s", phone_number)
                 success = True
         except TwilioRestException:
-            logger.error("Error sending SMS to %s", phone_number, exc_info=True)
+            logger.exception("Error sending SMS to %s", phone_number)
         return success
 
     async def _use_client(self) -> Client:

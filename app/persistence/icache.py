@@ -6,21 +6,21 @@ from app.models.readiness import ReadinessEnum
 
 class ICache(ABC):
     @abstractmethod
-    @tracer.start_as_current_span("cache_areadiness")
-    async def areadiness(self) -> ReadinessEnum:
+    @tracer.start_as_current_span("cache_readiness")
+    async def readiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("cache_aget")
-    async def aget(self, key: str) -> bytes | None:
+    @tracer.start_as_current_span("cache_get")
+    async def get(self, key: str) -> bytes | None:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("cache_aset")
-    async def aset(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
+    @tracer.start_as_current_span("cache_set")
+    async def set(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("cache_adel")
-    async def adel(self, key: str) -> bool:
+    @tracer.start_as_current_span("cache_delete")
+    async def delete(self, key: str) -> bool:
         pass

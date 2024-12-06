@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from contextlib import AbstractAsyncContextManager
 from uuid import UUID
 
 from app.helpers.monitoring import tracer
@@ -14,28 +15,33 @@ class IStore(ABC):
         self._cache = cache
 
     @abstractmethod
-    @tracer.start_as_current_span("store_areadiness")
-    async def areadiness(self) -> ReadinessEnum:
+    @tracer.start_as_current_span("store_readiness")
+    async def readiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("store_call_aget")
-    async def call_aget(self, call_id: UUID) -> CallStateModel | None:
+    @tracer.start_as_current_span("store_call_get")
+    async def call_get(self, call_id: UUID) -> CallStateModel | None:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("store_call_aset")
-    async def call_aset(self, call: CallStateModel) -> bool:
+    @tracer.start_as_current_span("store_call_transac")
+    def call_transac(self, call: CallStateModel) -> AbstractAsyncContextManager[None]:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("store_call_asearch_one")
-    async def call_asearch_one(self, phone_number: str) -> CallStateModel | None:
+    @tracer.start_as_current_span("store_call_create")
+    async def call_create(self, call: CallStateModel) -> CallStateModel:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("store_call_asearch_all")
-    async def call_asearch_all(
+    @tracer.start_as_current_span("store_call_search_one")
+    async def call_search_one(self, phone_number: str) -> CallStateModel | None:
+        pass
+
+    @abstractmethod
+    @tracer.start_as_current_span("store_call_search_all")
+    async def call_search_all(
         self,
         count: int,
         phone_number: str | None = None,

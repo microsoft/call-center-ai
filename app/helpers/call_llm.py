@@ -164,14 +164,16 @@ async def load_llm_chat(  # noqa: PLR0913
             if not recognizer_text:
                 return
 
-            # Add it to the call history
+            # Add it to the call history and update last interaction
             logger.info("Voice stored: %s", recognizer_buffer)
-            call.messages.append(
-                MessageModel(
-                    content=recognizer_text,
-                    persona=MessagePersonaEnum.HUMAN,
+            async with _db.call_transac(call):
+                call.last_interaction_at = datetime.now(UTC)
+                call.messages.append(
+                    MessageModel(
+                        content=recognizer_text,
+                        persona=MessagePersonaEnum.HUMAN,
+                    )
                 )
-            )
 
             # Clear the recognition buffer
             recognizer_buffer.clear()
@@ -226,7 +228,8 @@ async def _out_answer(  # noqa: PLR0915
     span_attribute(CallAttributes.CALL_MESSAGE, call.messages[-1].content)
 
     # Reset recognition retry counter
-    call.recognition_retry = 0
+    async with _db.call_transac(call):
+        call.recognition_retry = 0
 
     # By default, play the loading sound
     play_loading_sound = True
@@ -287,9 +290,10 @@ async def _out_answer(  # noqa: PLR0915
     continue_chat = True
     try:
         while True:
-            logger.debug("Chat task status: %s", chat_task.done())
+            # logger.debug("Chat task status: %s", chat_task.done())
 
-            if chat_task.done():  # Break when chat coroutine is done
+            # Break when chat coroutine is done
+            if chat_task.done():
                 # Clean up
                 _clear_tasks()
                 # Get result
@@ -297,12 +301,10 @@ async def _out_answer(  # noqa: PLR0915
                     chat_task.result()
                 )  # Store updated chat model
                 await training_callback(call)  # Trigger trainings generation
-                await _db.call_aset(
-                    call
-                )  # Save ASAP in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
                 break
 
-            if hard_timeout_task.done():  # Break when hard timeout is reached
+            # Break when hard timeout is reached
+            if hard_timeout_task.done():
                 logger.warning(
                     "Hard timeout of %ss reached",
                     await answer_hard_timeout_sec(),
@@ -311,10 +313,10 @@ async def _out_answer(  # noqa: PLR0915
                 _clear_tasks()
                 break
 
-            if play_loading_sound:  # Catch timeout if async loading is not started
-                if (
-                    soft_timeout_task.done() and not soft_timeout_triggered
-                ):  # Speak when soft timeout is reached
+            # Catch timeout if async loading is not started
+            if play_loading_sound:
+                # Speak when soft timeout is reached
+                if soft_timeout_task.done() and not soft_timeout_triggered:
                     logger.warning(
                         "Soft timeout of %ss reached",
                         await answer_soft_timeout_sec(),
@@ -330,7 +332,8 @@ async def _out_answer(  # noqa: PLR0915
                         )
                     )
 
-                elif loading_task.done():  # Do not play timeout prompt plus loading, it can be frustrating for the user
+                # Do not play timeout prompt plus loading, it can be frustrating for the user
+                elif loading_task.done():
                     loading_task = _loading_task()
                     await scheduler.spawn(
                         handle_media(
@@ -344,7 +347,8 @@ async def _out_answer(  # noqa: PLR0915
             await asyncio.sleep(1)
 
     except Exception:
-        logger.warning("Error loading intelligence", exc_info=True)
+        # TODO: Remove last message
+        logger.exception("Error loading intelligence")
 
     if is_error:  # Error during chat
         if not continue_chat or _iterations_remaining < 1:  # Maximum retries reached
@@ -408,27 +412,20 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     logger.debug("Running LLM chat")
     content_full = ""
 
-    async def _buffer_callback(text: str, style: MessageStyleEnum) -> None:
+    async def _plugin_tts_callback(text: str) -> None:
         nonlocal content_full
         content_full += f" {text}"
-        await tts_callback(text, style)
+        await tts_callback(text, MessageStyleEnum.NONE)
 
-    async def _content_callback(
-        buffer: str, style: MessageStyleEnum
-    ) -> MessageStyleEnum:
+    async def _content_callback(buffer: str) -> None:
         # Remove tool calls from buffer content and detect style
-        local_style, local_content = extract_message_style(
-            remove_message_action(buffer)
-        )
-        new_style = local_style or style
-        if local_content:
-            await tts_callback(local_content, new_style)
-        return new_style
+        style, local_content = extract_message_style(remove_message_action(buffer))
+        await tts_callback(local_content, style)
 
     # Build RAG
     trainings = await call.trainings()
     logger.info("Enhancing LLM chat with %s trainings", len(trainings))
-    logger.debug("Trainings: %s", trainings)
+    # logger.debug("Trainings: %s", trainings)
 
     # System prompts
     system = CONFIG.prompts.llm.chat_system(
@@ -448,7 +445,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         call=call,
         client=client,
         post_callback=post_callback,
-        tts_callback=_buffer_callback,
+        tts_callback=_plugin_tts_callback,
     )
 
     tools = []
@@ -456,7 +453,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         logger.warning("Tools disabled for this chat")
     else:
         tools = await plugins.to_openai()
-        logger.debug("Tools: %s", tools)
+        # logger.debug("Tools: %s", tools)
 
     # Execute LLM inference
     maximum_tokens_reached = False
@@ -482,7 +479,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
                     content_full[content_buffer_pointer:], False
                 ):
                     content_buffer_pointer += length
-                    plugins.style = await _content_callback(sentence, plugins.style)
+                    await _content_callback(sentence)
     except MaximumTokensReachedError:  # Retry on maximum tokens reached
         logger.warning("Maximum tokens reached for this completion, retry asked")
         maximum_tokens_reached = True
@@ -505,15 +502,15 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
 
     # Flush the remaining buffer
     if content_buffer_pointer < len(content_full):
-        plugins.style = await _content_callback(
-            content_full[content_buffer_pointer:], plugins.style
-        )
+        await _content_callback(content_full[content_buffer_pointer:])
 
     # Convert tool calls buffer
     tool_calls = [tool_call for _, tool_call in tool_calls_buffer.items()]
 
     # Delete action and style from the message as they are in the history and LLM hallucinates them
-    _, content_full = extract_message_style(remove_message_action(content_full))
+    last_style, content_full = extract_message_style(
+        remove_message_action(content_full)
+    )
 
     logger.debug("Chat response: %s", content_full)
     logger.debug("Tool calls: %s", tool_calls)
@@ -538,17 +535,12 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     call = plugins.call  # Update call model if object reference changed
 
     # Store message
-    if call.messages[-1].persona == MessagePersonaEnum.ASSISTANT:
-        message = call.messages[-1]
-        message.content = content_full.strip()
-        message.style = plugins.style
-        message.tool_calls = tool_calls
-    else:
+    async with _db.call_transac(call):
         call.messages.append(
             MessageModel(
-                content=content_full.strip(),
+                content="",  # Content has already been stored within the TTS callback
                 persona=MessagePersonaEnum.ASSISTANT,
-                style=plugins.style,
+                style=last_style,
                 tool_calls=tool_calls,
             )
         )
@@ -586,29 +578,43 @@ async def _in_audio(  # noqa: PLR0913
         """
         Flush the audio buffer if no audio is detected for a while and trigger the timeout if required.
         """
-        # Wait and flush the audio buffer
+        # Wait before flushing
         nonlocal clear_tts_task
         timeout_ms = await vad_silence_timeout_ms()
         await asyncio.sleep(timeout_ms / 1000)
+
+        # Cancel the clear TTS task if any
         if clear_tts_task:
             clear_tts_task.cancel()
             clear_tts_task = None
+
+        # Flush the audio buffer
         logger.debug("Flushing audio buffer after %i ms", timeout_ms)
         await response_callback()
 
         # Wait for silence and trigger timeout
         timeout_sec = await phone_silence_timeout_sec()
-        while call.in_progress:
+        while True:
+            # Stop this time if the call played a message
             timeout_start = datetime.now(UTC)
             await asyncio.sleep(timeout_sec)
+
+            # Stop if the call ended
+            if not call.in_progress:
+                break
+
+            # Cancel if an interaction happened in the meantime
             if (
-                call.messages[-1].created_at + timedelta(seconds=timeout_sec)
+                call.last_interaction_at
+                and call.last_interaction_at + timedelta(seconds=timeout_sec)
                 > timeout_start
             ):
                 logger.debug(
                     "Message sent in the meantime, canceling this silence timeout"
                 )
                 continue
+
+            # Trigger the timeout
             logger.info("Silence triggered after %i sec", timeout_sec)
             await timeout_callback()
 
@@ -691,7 +697,11 @@ def _tts_callback(
         text: str,
         style: MessageStyleEnum,
     ) -> None:
-        # First, play the TTS to the user
+        # Skip if no text
+        if not text:
+            return
+
+        # Play the TTS
         await scheduler.spawn(
             handle_play_text(
                 call=call,
@@ -700,7 +710,5 @@ def _tts_callback(
                 text=text,
             )
         )
-        # Second, save in DB allowing (1) user to cut off the Assistant and (2) SMS answers to be in order
-        await _db.call_aset(call)
 
     return wrapper

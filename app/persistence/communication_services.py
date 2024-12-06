@@ -19,14 +19,14 @@ class CommunicationServicesSms(ISms):
         logger.info("Using Communication Services from number %s", config.phone_number)
         self._config = config
 
-    async def areadiness(self) -> ReadinessEnum:
+    async def readiness(self) -> ReadinessEnum:
         """
         Check the readiness of the Communication Services SMS service.
         """
         # TODO: How to check the readiness of the SMS service? We could send a SMS for each test, but that would be damm expensive.
         return ReadinessEnum.OK
 
-    async def asend(self, content: str, phone_number: PhoneNumber) -> bool:
+    async def send(self, content: str, phone_number: PhoneNumber) -> bool:
         logger.info("Sending SMS to %s", phone_number)
         success = False
         logger.info("SMS content: %s", content)
@@ -49,11 +49,9 @@ class CommunicationServicesSms(ISms):
                         response.error_message,
                     )
         except ClientAuthenticationError:
-            logger.error(
-                "Authentication error for SMS, check the credentials", exc_info=True
-            )
+            logger.exception("Authentication error for SMS, check the credentials")
         except HttpResponseError:
-            logger.error("Error sending SMS to %s", phone_number, exc_info=True)
+            logger.exception("Error sending SMS to %s", phone_number)
         return success
 
     async def _use_client(self) -> SmsClient:

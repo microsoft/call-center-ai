@@ -36,7 +36,7 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> str |
 
     # Try cache
     cache_key = f"{__name__}-translate_text-{text}-{source_lang}-{target_lang}"
-    cached = await _cache.aget(cache_key)
+    cached = await _cache.get(cache_key)
     if cached:
         return cached.decode()
 
@@ -51,7 +51,7 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> str |
     translation = res[0].translations[0].text if res and res[0].translations else None
 
     # Update cache
-    await _cache.aset(
+    await _cache.set(
         key=cache_key,
         ttl_sec=60 * 60 * 24,  # 1 day
         value=translation,

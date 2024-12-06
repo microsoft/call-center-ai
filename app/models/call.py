@@ -48,6 +48,9 @@ class CallGetModel(BaseModel):
     def _validate_claim(
         cls, claim: dict[str, Any] | None, info: ValidationInfo
     ) -> dict[str, Any]:
+        """
+        Validate the claim field against the initiate data model.
+        """
         initiate: CallInitiateModel | None = info.data.get("initiate", None)
         if not initiate:
             return {}
@@ -60,6 +63,26 @@ class CallGetModel(BaseModel):
             )
         )
 
+    @field_validator("messages")
+    @classmethod
+    def _validate_messages(cls, messages: list[MessageModel]) -> list[MessageModel]:
+        """
+        Merge messages with the same persona.
+        """
+        merged: list[MessageModel] = []
+        for new_message in messages:
+            if not (
+                merged
+                and (last := merged[-1]).persona == new_message.persona
+                and last.action == new_message.action
+            ):
+                merged.append(new_message)
+                continue
+            last.content = (last.content + " " + new_message.content).strip()
+            last.style = new_message.style
+            last.tool_calls += new_message.tool_calls
+        return merged
+
 
 class CallStateModel(CallGetModel, extra="ignore"):
     # Immutable fields
@@ -71,6 +94,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
     )
     # Editable fields
     lang_short_code: str | None = None
+    last_interaction_at: datetime | None = None
     recognition_retry: int = 0
     voice_id: str | None = None
 
@@ -108,7 +132,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
             search = CONFIG.ai_search.instance()
             tasks = await asyncio.gather(
                 *[
-                    search.training_asearch_all(
+                    search.training_search_all(
                         cache_only=cache_only,
                         lang=self.lang.short_code,
                         text=message.content,

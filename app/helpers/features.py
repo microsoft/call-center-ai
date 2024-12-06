@@ -29,7 +29,7 @@ async def callback_timeout_hour() -> int:
 
 
 async def phone_silence_timeout_sec() -> int:
-    return await _get(key="phone_silence_timeout_sec", type_res=int) or 10
+    return await _get(key="phone_silence_timeout_sec", type_res=int) or 20
 
 
 async def vad_silence_timeout_ms() -> int:
@@ -55,7 +55,7 @@ async def recognition_retry_max() -> int:
 async def _get(key: str, type_res: type[T]) -> T | None:
     # Try cache
     cache_key = _cache_key(key)
-    cached = await _cache.aget(cache_key)
+    cached = await _cache.get(cache_key)
     if cached:
         return _parse(value=cached.decode(), type_res=type_res)
     # Try live
@@ -69,7 +69,7 @@ async def _get(key: str, type_res: type[T]) -> T | None:
         logger.warning("Setting %s not found", key)
         return
     # Update cache
-    await _cache.aset(
+    await _cache.set(
         key=cache_key,
         ttl_sec=CONFIG.app_configuration.ttl_sec,
         value=setting.value,
