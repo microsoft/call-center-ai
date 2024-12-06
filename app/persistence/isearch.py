@@ -13,13 +13,13 @@ class ISearch(ABC):
         self._cache = cache
 
     @abstractmethod
-    @tracer.start_as_current_span("search_areadiness")
-    async def areadiness(self) -> ReadinessEnum:
+    @tracer.start_as_current_span("search_readiness")
+    async def readiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("search_training_asearch_all")
-    async def training_asearch_all(
+    @tracer.start_as_current_span("search_training_search_all")
+    async def training_search_all(
         self,
         lang: str,
         text: str,

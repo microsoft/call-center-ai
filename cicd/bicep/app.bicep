@@ -33,7 +33,6 @@ var phonenumberSanitized = replace(localConfig.communication_services.phone_numb
 var config = {
   public_domain: appUrl
   database: {
-    mode: 'cosmos_db'
     cosmos_db: {
       container: container.name
       database: database.name
@@ -902,7 +901,7 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
     answer_hard_timeout_sec: 180
     answer_soft_timeout_sec: 30
     callback_timeout_hour: 3
-    phone_silence_timeout_sec: 10
+    phone_silence_timeout_sec: 20
     recognition_retry_max: 2
     recording_enabled: false
     slow_llm_for_chat: false

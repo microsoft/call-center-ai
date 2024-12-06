@@ -64,7 +64,7 @@ class AiSearchSearch(ISearch):
         )
         self._config = config
 
-    async def areadiness(self) -> ReadinessEnum:
+    async def readiness(self) -> ReadinessEnum:
         """
         Check the readiness of the AI Search service.
         """
@@ -77,9 +77,7 @@ class AiSearchSearch(ISearch):
         except ServiceRequestError:
             logger.exception("Error connecting to AI Search")
         except Exception:
-            logger.error(
-                "Unknown error while checking AI Search readiness", exc_info=True
-            )
+            logger.exception("Unknown error while checking AI Search readiness")
         return ReadinessEnum.FAIL
 
     @retry(
@@ -88,7 +86,7 @@ class AiSearchSearch(ISearch):
         stop=stop_after_attempt(3),
         wait=wait_random_exponential(multiplier=0.8, max=8),
     )
-    async def training_asearch_all(
+    async def training_search_all(
         self,
         lang: str,
         text: str,
@@ -100,7 +98,7 @@ class AiSearchSearch(ISearch):
 
         # Try cache
         cache_key = f"{self.__class__.__name__}-training_asearch_all-v2-{text}"  # Cache sort method has been updated in v6, thus the v2
-        cached = await self._cache.aget(cache_key)
+        cached = await self._cache.get(cache_key)
         if cached:
             try:
                 return TypeAdapter(list[TrainingModel]).validate_json(cached)
@@ -166,7 +164,7 @@ class AiSearchSearch(ISearch):
 
         # Update cache
         if trainings:
-            await self._cache.aset(
+            await self._cache.set(
                 key=cache_key,
                 ttl_sec=60 * 60 * 24,  # 1 day
                 value=TypeAdapter(list[TrainingModel]).dump_json(trainings),

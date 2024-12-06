@@ -46,7 +46,7 @@ class CacheModel(BaseModel):
 
     @field_validator("redis")
     @classmethod
-    def _validate_sqlite(
+    def _validate_redis(
         cls,
         redis: RedisModel | None,
         info: ValidationInfo,

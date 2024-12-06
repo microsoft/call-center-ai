@@ -15,7 +15,6 @@ from app.models.message import (
     ActionEnum as MessageActionEnum,
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
-    StyleEnum as MessageStyleEnum,
 )
 from app.models.reminder import ReminderModel
 from app.models.training import TrainingModel
@@ -32,15 +31,14 @@ class UpdateClaimDict(TypedDict):
 class DefaultPlugin(AbstractPlugin):
     client: CallAutomationClient
     post_callback: Callable[[CallStateModel], Awaitable[None]]
-    style: MessageStyleEnum = MessageStyleEnum.NONE
-    tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]]
+    tts_callback: Callable[[str], Awaitable[None]]
 
     def __init__(
         self,
         call: CallStateModel,
         client: CallAutomationClient,
         post_callback: Callable[[CallStateModel], Awaitable[None]],
-        tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
+        tts_callback: Callable[[str], Awaitable[None]],
     ):
         super().__init__(call)
         self.client = client
@@ -103,7 +101,7 @@ class DefaultPlugin(AbstractPlugin):
         - Customer wants explicitely to create a new claim
         - Talking about a totally different subject
         """
-        await self.tts_callback(customer_response, self.style)
+        await self.tts_callback(customer_response)
         # Launch post-call intelligence for the current call
         await self.post_callback(self.call)
         # Store the last message and use it at first message of the new claim
@@ -174,7 +172,7 @@ class DefaultPlugin(AbstractPlugin):
         - Call back for a follow-up
         - Wait for customer to send a document
         """
-        await self.tts_callback(customer_response, self.style)
+        await self.tts_callback(customer_response)
 
         # Check if reminder already exists, if so update it
         for reminder in self.call.reminders:
@@ -261,7 +259,7 @@ class DefaultPlugin(AbstractPlugin):
         - Store details about the conversation
         - Update the claim with a new phone number
         """
-        await self.tts_callback(customer_response, self.style)
+        await self.tts_callback(customer_response)
         # Update all claim fields
         res = "# Updated fields"
         for field in updates:
@@ -343,11 +341,11 @@ class DefaultPlugin(AbstractPlugin):
         - Know the procedure to declare a stolen luxury watch
         - Understand the requirements to ask for a cyber attack insurance
         """
-        await self.tts_callback(customer_response, self.style)
+        await self.tts_callback(customer_response)
         # Execute in parallel
         tasks = await asyncio.gather(
             *[
-                _search.training_asearch_all(text=query, lang="en-US")
+                _search.training_search_all(text=query, lang="en-US")
                 for query in queries
             ]
         )
@@ -415,7 +413,7 @@ class DefaultPlugin(AbstractPlugin):
         - A neighbor is having a heart attack
         - Someons is stuck in a car accident
         """
-        await self.tts_callback(customer_response, self.style)
+        await self.tts_callback(customer_response)
         # TODO: Implement notification to emergency services for production usage
         logger.info(
             "Notifying %s, location %s, contact %s, reason %s",
@@ -457,8 +455,8 @@ class DefaultPlugin(AbstractPlugin):
         - Confirm a detail like a reference number, if there is a misunderstanding
         - Send a confirmation, if the customer wants to have a written proof
         """
-        await self.tts_callback(customer_response, self.style)
-        success = await _sms.asend(
+        await self.tts_callback(customer_response)
+        success = await _sms.send(
             content=message,
             phone_number=self.call.initiate.phone_number,
         )
@@ -512,7 +510,7 @@ class DefaultPlugin(AbstractPlugin):
         initial_speed = self.call.initiate.prosody_rate
         self.call.initiate.prosody_rate = speed
         # Customer confirmation (with new speed)
-        await self.tts_callback(customer_response, self.style)
+        await self.tts_callback(customer_response)
         # LLM confirmation
         return f"Voice speed set to {speed} (was {initial_speed})"
 
@@ -575,6 +573,6 @@ class DefaultPlugin(AbstractPlugin):
         initial_lang = self.call.lang.short_code
         self.call.lang = lang
         # Customer confirmation (with new language)
-        await self.tts_callback(customer_response, self.style)
+        await self.tts_callback(customer_response)
         # LLM confirmation
         return f"Voice language set to {lang} (was {initial_lang})"

@@ -24,6 +24,7 @@ from app.helpers.call_events import (
     on_end_call,
     on_ivr_recognized,
     on_play_completed,
+    on_play_started,
 )
 from app.helpers.call_llm import _out_answer
 from app.helpers.logging import logger
@@ -304,6 +305,10 @@ async def test_llm(  # noqa: PLR0913
                 post_callback=_post_callback,
                 scheduler=scheduler,
                 training_callback=_training_callback,
+            )
+            # Play
+            await on_play_started(
+                call=call,
             )
             # Receip
             await on_play_completed(

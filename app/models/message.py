@@ -132,11 +132,10 @@ class ToolModel(BaseModel):
                 res = "Wrong arguments, please fix them and try again."
                 res_log = res
             except Exception as e:
-                logger.warning(
+                logger.exception(
                     "Error executing function %s with args %s",
                     self.function_name,
                     args,
-                    exc_info=True,
                 )
                 res = f"Error: {e}."
                 res_log = res
@@ -224,6 +223,10 @@ class MessageModel(BaseModel):
 def remove_message_action(text: str) -> str:
     """
     Remove action from content. AI often adds it by mistake event if explicitly asked not to.
+
+    Example:
+    - Input: "action=talk Hello!"
+    - Output: "Hello!"
     """
     # TODO: Use JSON as LLM response instead of using a regex to parse the text
     res = re.match(_MESSAGE_ACTION_R, text)
@@ -235,18 +238,22 @@ def remove_message_action(text: str) -> str:
         return text
 
 
-def extract_message_style(text: str) -> tuple[StyleEnum | None, str]:
+def extract_message_style(text: str) -> tuple[StyleEnum, str]:
     """
-    Detect the style of a message.
+    Detect the style of a message and extract it from the text.
+
+    Example:
+    - Input: "style=cheerful Hello!"
+    - Output: (StyleEnum.CHEERFUL, "Hello!")
     """
-    # TODO: Use JSON as LLM response instead of using a regex to parse the text
+    default_style = StyleEnum.NONE
     res = re.match(_MESSAGE_STYLE_R, text)
     if not res:
-        return None, text
+        return default_style, text
     try:
         return (
             StyleEnum(res.group(1)),  # style
             (res.group(2) or ""),  # content
         )
     except ValueError:  # Regex failed, return original text
-        return None, text
+        return default_style, text

@@ -40,7 +40,7 @@ class RootModel(BaseSettings):
     communication_services: CommunicationServicesModel = Field(
         serialization_alias="communication_service",  # Compatibility with v5
     )
-    database: DatabaseModel = DatabaseModel()  # Object is fully defined by default
+    database: DatabaseModel
     llm: LlmModel
     monitoring: MonitoringModel = (
         MonitoringModel()
