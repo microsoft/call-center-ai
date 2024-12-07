@@ -795,6 +795,7 @@ Resiliency:
 Security:
 
 - [x] CI builds attestations
+- [x] CodeQL static code checks
 - [ ] GitOps for deployments
 - [ ] Red team exercises
 
