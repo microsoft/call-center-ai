@@ -55,6 +55,26 @@ class ToolModel(BaseModel):
     function_name: str = ""
     tool_id: str = ""
 
+    def __add__(self, other: object) -> "ToolModel":
+        if not isinstance(other, ChoiceDeltaToolCall):
+            return NotImplemented
+        if other.id:
+            self.tool_id = other.id
+        if other.function:
+            if other.function.name:
+                self.function_name = other.function.name
+            if other.function.arguments:
+                self.function_arguments += other.function.arguments
+        return self
+
+    def __hash__(self) -> int:
+        return self.tool_id.__hash__()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ToolModel):
+            return False
+        return self.tool_id == other.tool_id
+
     def to_openai(self) -> ChatCompletionMessageToolCallParam:
         return ChatCompletionMessageToolCallParam(
             id=self.tool_id,
@@ -70,16 +90,6 @@ class ToolModel(BaseModel):
                 ),  # Sanitize with dashes then deduplicate dashes, backward compatibility with old models
             },
         )
-
-    def __add__(self, other: ChoiceDeltaToolCall) -> "ToolModel":
-        if other.id:
-            self.tool_id = other.id
-        if other.function:
-            if other.function.name:
-                self.function_name = other.function.name
-            if other.function.arguments:
-                self.function_arguments += other.function.arguments
-        return self
 
     async def execute_function(self, plugin: object) -> None:
         from app.helpers.logging import logger

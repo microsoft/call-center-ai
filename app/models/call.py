@@ -70,18 +70,26 @@ class CallGetModel(BaseModel):
         """
         Merge messages with the same persona.
         """
-        merged: list[MessageModel] = []
-        for new_message in messages:
-            if not (
-                merged
-                and (last := merged[-1]).persona == new_message.persona
-                and last.action == new_message.action
-            ):
+
+        # Skip if there are no messages
+        if not messages:
+            return messages
+
+        # Iterate over the messages
+        merged: list[MessageModel] = [messages[0]]
+        for new_message in messages[1:]:
+            # If the last message is not from the same persona or action, keep it as is
+            last = merged[-1]
+            if last.persona != new_message.persona or last.action != new_message.action:
                 merged.append(new_message)
                 continue
+
+            # Merge the content and tool calls
             last.content = (last.content + " " + new_message.content).strip()
+            last.tool_calls = list({*last.tool_calls, *new_message.tool_calls})
+            # Override the style
             last.style = new_message.style
-            last.tool_calls += new_message.tool_calls
+
         return merged
 
 
