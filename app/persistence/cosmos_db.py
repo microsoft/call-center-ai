@@ -133,16 +133,11 @@ class CosmosDbStore(IStore):
         async def _exec() -> None:
             # Compute the diff
             call_data = call.model_dump(mode="json", exclude_none=True)
-            update_data: dict[str, Any | list[Any]] = {}
+            update_data: dict[str, Any] = {}
             for field, new_value in call_data.items():
                 init_value = init_data.get(field)
                 if init_value != new_value:
-                    if isinstance(new_value, list) and isinstance(init_value, list):
-                        update_data[field] = [
-                            item for item in new_value if item not in init_value
-                        ]
-                    else:
-                        update_data[field] = new_value
+                    update_data[field] = new_value
 
             # Skip if no diff
             if not update_data:
@@ -163,27 +158,12 @@ class CosmosDbStore(IStore):
                         item=str(call.call_id),
                         partition_key=call.initiate.phone_number,
                         patch_operations=[
-                            # Replace fields
-                            *[
-                                {
-                                    "op": "set",
-                                    "path": f"/{field}",
-                                    "value": value,
-                                }
-                                for field, value in update_data.items()
-                                if not isinstance(value, list)
-                            ],
-                            # Add to arrays
-                            *[
-                                {
-                                    "op": "add",
-                                    "path": f"/{field}/-",
-                                    "value": value,
-                                }
-                                for field, values in update_data.items()
-                                if isinstance(values, list)
-                                for value in values
-                            ],
+                            {
+                                "op": "set",
+                                "path": f"/{field}",
+                                "value": value,
+                            }
+                            for field, value in update_data.items()
                         ],
                     )
             except CosmosHttpResponseError as e:
