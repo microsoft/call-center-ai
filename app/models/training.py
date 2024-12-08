@@ -20,7 +20,7 @@ class TrainingModel(BaseModel, frozen=True):
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TrainingModel):
-            return NotImplemented
+            return False
         return self.id == other.id
 
     def __lt__(self, other: object) -> bool:
