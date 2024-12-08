@@ -274,7 +274,8 @@ class DefaultPlugin(AbstractPlugin):
             self.call.claim[field] = new_value
             CallStateModel.model_validate(self.call)  # Force a re-validation
             return f'Updated claim field "{field}" with value "{new_value}".'
-        except ValidationError as e:  # Catch error to inform LLM and rollback changes
+        # Catch error to inform LLM and rollback changes
+        except ValidationError as e:
             self.call.claim[field] = old_value
             return f'Failed to edit field "{field}": {e.json()}'
 

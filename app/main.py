@@ -702,7 +702,8 @@ async def _communicationservices_event_worker(
     logger.debug("Call event received %s", event_type)
 
     match event_type:
-        case "Microsoft.Communication.CallConnected":  # Call answered
+        # Call answered
+        case "Microsoft.Communication.CallConnected":
             server_call_id = event.data["serverCallId"]
             await on_call_connected(
                 call=call,
@@ -710,16 +711,19 @@ async def _communicationservices_event_worker(
                 server_call_id=server_call_id,
             )
 
-        case "Microsoft.Communication.CallDisconnected":  # Call hung up
+        # Call hung up
+        case "Microsoft.Communication.CallDisconnected":
             await on_call_disconnected(
                 call=call,
                 client=automation_client,
                 post_callback=_trigger_post_event,
             )
 
-        case "Microsoft.Communication.RecognizeCompleted":  # Speech/IVR recognized
+        # Speech/IVR recognized
+        case "Microsoft.Communication.RecognizeCompleted":
             recognition_result: str = event.data["recognitionType"]
-            if recognition_result == "choices":  # Handle IVR
+            # Handle IVR
+            if recognition_result == "choices":
                 label_detected: str = event.data["choiceResult"]["label"]
                 await on_ivr_recognized(
                     call=call,
@@ -727,7 +731,8 @@ async def _communicationservices_event_worker(
                     label=label_detected,
                 )
 
-        case "Microsoft.Communication.RecognizeFailed":  # Speech/IVR failed
+        # Speech/IVR failed
+        case "Microsoft.Communication.RecognizeFailed":
             result_information = event.data["resultInformation"]
             error_code: int = result_information["subCode"]
             error_message: str = result_information["message"]
@@ -743,12 +748,14 @@ async def _communicationservices_event_worker(
                 post_callback=_trigger_post_event,
             )
 
-        case "Microsoft.Communication.PlayStarted":  # Media started
+        # Media started
+        case "Microsoft.Communication.PlayStarted":
             await on_play_started(
                 call=call,
             )
 
-        case "Microsoft.Communication.PlayCompleted":  # Media played
+        # Media played
+        case "Microsoft.Communication.PlayCompleted":
             await on_play_completed(
                 call=call,
                 client=automation_client,
@@ -756,7 +763,8 @@ async def _communicationservices_event_worker(
                 post_callback=_trigger_post_event,
             )
 
-        case "Microsoft.Communication.PlayFailed":  # Media play failed
+        # Media play failed
+        case "Microsoft.Communication.PlayFailed":
             result_information = event.data["resultInformation"]
             error_code: int = result_information["subCode"]
             await on_play_error(error_code)

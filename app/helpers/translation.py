@@ -31,7 +31,8 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> str |
 
     Catch errors for a maximum of 3 times.
     """
-    if source_lang == target_lang:  # No need to translate
+    # No need to translate
+    if source_lang == target_lang:
         return text
 
     # Try cache

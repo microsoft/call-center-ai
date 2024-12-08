@@ -175,7 +175,8 @@ async def _completion_stream_worker(  # noqa: PLR0912
     maximum_tokens_reached = False
 
     try:
-        if platform.streaming:  # Streaming
+        # Streaming
+        if platform.streaming:
             stream: AsyncStream[
                 ChatCompletionChunk
             ] = await client.chat.completions.create(
@@ -184,15 +185,13 @@ async def _completion_stream_worker(  # noqa: PLR0912
             )
             async for chunck in stream:
                 choices = chunck.choices
-                if (
-                    not choices
-                ):  # Skip empty choices, happens sometimes with GPT-4 Turbo
+                # Skip empty choices, happens sometimes with GPT-4 Turbo
+                if not choices:
                     continue
                 choice = choices[0]
                 delta = choice.delta
-                if (
-                    choice.finish_reason == "content_filter"
-                ):  # Azure OpenAI content filter
+                # Azure OpenAI content filter
+                if choice.finish_reason == "content_filter":
                     raise SafetyCheckError(f"Issue detected in text: {delta.content}")
                 if choice.finish_reason == "length":
                     logger.warning(
@@ -202,12 +201,14 @@ async def _completion_stream_worker(  # noqa: PLR0912
                 if delta:
                     yield delta
 
-        else:  # Non-streaming, emulate streaming with a single completion
+        # Non-streaming, emulate streaming with a single completion
+        else:
             completion: ChatCompletion = await client.chat.completions.create(
                 **chat_kwargs
             )
             choice = completion.choices[0]
-            if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+            # Azure OpenAI content filter
+            if choice.finish_reason == "content_filter":
                 raise SafetyCheckError(
                     f"Issue detected in generation: {choice.message.content}"
                 )
@@ -284,7 +285,8 @@ async def completion_sync(
 
     # Validate
     is_valid, validation_error, res_object = validation_callback(res_content)
-    if not is_valid:  # Retry if validation failed
+    # Retry if validation failed
+    if not is_valid:
         if _retries_remaining == 0:
             logger.error("LLM validation error: %s", validation_error)
             return None
@@ -356,7 +358,8 @@ async def _completion_sync_worker(
                     raise SafetyCheckError("Issue detected in prompt") from e
                 raise e
             choice = res.choices[0]
-            if choice.finish_reason == "content_filter":  # Azure OpenAI content filter
+            # Azure OpenAI content filter
+            if choice.finish_reason == "content_filter":
                 raise SafetyCheckError(
                     f"Issue detected in generation: {choice.message.content}"
                 )

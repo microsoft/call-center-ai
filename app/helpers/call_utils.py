@@ -48,7 +48,6 @@ class CallHangupException(Exception):
     pass
 
 
-
 class ContextEnum(str, Enum):
     """
     Enum for call context.
@@ -79,17 +78,21 @@ def tts_sentence_split(
     # Split by sentence by punctuation
     splits = re.split(_SENTENCE_PUNCTUATION_R, text)
     for i, split in enumerate(splits):
-        if i % 2 == 1:  # Skip punctuation
+        # Skip punctuation
+        if i % 2 == 1:
             continue
-        if not split.strip():  # Skip empty lines
+        # Skip empty lines
+        if not split.strip():
             continue
-        if i == len(splits) - 1:  # Skip last line in case of missing punctuation
+        # Skip last line in case of missing punctuation
+        if i == len(splits) - 1:
             if include_last:
                 yield (
                     split.strip(),
                     len(split),
                 )
-        else:  # Add punctuation back
+        # Add punctuation back
+        else:
             yield (
                 split.strip() + splits[i + 1].strip(),
                 len(split) + len(splits[i + 1]),
@@ -238,9 +241,8 @@ async def _chunk_before_tts(
     chunks = []
     chunk = ""
     for to_add, _ in tts_sentence_split(text, True):
-        if (
-            len(chunk) + len(to_add) >= _MAX_CHARACTERS_PER_TTS
-        ):  # If chunck overflows TTS capacity, start a new record
+        # If chunck overflows TTS capacity, start a new record
+        if len(chunk) + len(to_add) >= _MAX_CHARACTERS_PER_TTS:
             # Remove trailing space as sentences are separated by spaces
             chunks.append(chunk.strip())
             # Reset chunk
@@ -248,7 +250,8 @@ async def _chunk_before_tts(
         # Add space to separate sentences
         chunk += to_add + " "
 
-    if chunk:  # If there is a remaining chunk, add it
+    # If there is a remaining chunk, add it
+    if chunk:
         # Remove trailing space as sentences are separated by spaces
         chunks.append(chunk.strip())
 
