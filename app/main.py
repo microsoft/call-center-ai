@@ -1,7 +1,7 @@
 import asyncio
 import json
 from base64 import b64decode
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
@@ -343,13 +343,11 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
     Returns a single call object `CallGetModel`, in JSON format.
     """
     # First, try to get by call ID
-    try:
+    with suppress(ValueError):
         call_id = UUID(call_id_or_phone_number)
         call = await _db.call_get(call_id)
         if call:
             return TypeAdapter(CallGetModel).dump_python(call)
-    except ValueError:
-        pass
 
     # Second, try to get by phone number
     phone_number = PhoneNumber(call_id_or_phone_number)

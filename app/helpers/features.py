@@ -1,3 +1,4 @@
+from contextlib import suppress
 from typing import TypeVar, cast
 
 from azure.appconfiguration.aio import AzureAppConfigurationClient
@@ -100,7 +101,7 @@ def _cache_key(key: str) -> str:
 
 
 def _parse(value: str, type_res: type[T]) -> T | None:
-    try:
+    with suppress(ValueError):
         if type_res is bool:
             return cast(T, value.lower() == "true")
         if type_res is int:
@@ -110,5 +111,3 @@ def _parse(value: str, type_res: type[T]) -> T | None:
         if type_res is str:
             return cast(T, str(value))
         raise ValueError(f"Unsupported type: {type_res}")
-    except ValueError:
-        pass

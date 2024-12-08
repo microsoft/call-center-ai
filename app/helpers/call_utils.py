@@ -1,7 +1,7 @@
 import json
 import re
 from collections.abc import AsyncGenerator, Generator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from enum import Enum
 
 from azure.communication.callautomation import (
@@ -38,6 +38,15 @@ _TTS_SANITIZER_R = re.compile(
 )  # Sanitize text for TTS
 
 _db = CONFIG.database.instance()
+
+
+class CallHangupException(Exception):
+    """
+    Exception raised when a call is hung up.
+    """
+
+    pass
+
 
 
 class ContextEnum(str, Enum):
@@ -106,7 +115,7 @@ async def _handle_play_text(
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
-                operation_context=_context_builder({context}),
+                operation_context=_context_serializer({context}),
                 play_source=_audio_from_text(
                     call=call,
                     style=style,
@@ -135,20 +144,13 @@ async def handle_media(
 
     If `context` is provided, it will be used to track the operation.
     """
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
-                operation_context=_context_builder({context}),
+                operation_context=_context_serializer({context}),
                 play_source=FileSource(url=sound_url),
             )
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before playing")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before playing")
-        else:
-            raise e
 
 
 async def handle_play_text(  # noqa: PLR0913
@@ -309,7 +311,7 @@ async def handle_recognize_ivr(
                 choices=choices,
                 input_type=RecognizeInputType.CHOICES,
                 interrupt_prompt=True,
-                operation_context=_context_builder({context}),
+                operation_context=_context_serializer({context}),
                 play_prompt=_audio_from_text(
                     call=call,
                     style=MessageStyleEnum.NONE,
@@ -327,17 +329,15 @@ async def handle_hangup(
     call: CallStateModel,
 ) -> None:
     logger.info("Hanging up: %s", call.initiate.phone_number)
-    try:
+    with (
+        # Suppress hangup exception
+        suppress(CallHangupException),
+        # Detect hangup exception
+        _detect_hangup(),
+    ):
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.hang_up(is_for_everyone=True)
-    except ResourceNotFoundError:
-        logger.debug("Call already hung up")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before playing")
-        else:
-            raise e
 
 
 async def handle_transfer(
@@ -347,20 +347,13 @@ async def handle_transfer(
     context: ContextEnum | None = None,
 ) -> None:
     logger.info("Transferring call: %s", target)
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.transfer_call_to_participant(
-                operation_context=_context_builder({context}),
+                operation_context=_context_serializer({context}),
                 target_participant=PhoneNumberIdentifier(target),
             )
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before transferring")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before transferring")
-        else:
-            raise e
 
 
 async def start_audio_streaming(
@@ -368,7 +361,7 @@ async def start_audio_streaming(
     call: CallStateModel,
 ) -> None:
     logger.info("Starting audio streaming")
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             # TODO: Use the public API once the "await" have been fixed
@@ -377,13 +370,6 @@ async def start_audio_streaming(
                 call_connection_id=call_client._call_connection_id,
                 start_media_streaming_request=StartMediaStreamingRequest(),
             )
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before starting streaming")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before starting streaming")
-        else:
-            raise e
 
 
 async def stop_audio_streaming(
@@ -391,23 +377,39 @@ async def stop_audio_streaming(
     call: CallStateModel,
 ) -> None:
     logger.info("Stopping audio streaming")
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.stop_media_streaming()
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before stopping streaming")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before stopping streaming")
-        else:
-            raise e
 
 
-def _context_builder(contexts: set[ContextEnum | None] | None) -> str | None:
+def _context_serializer(contexts: set[ContextEnum | None] | None) -> str | None:
+    """
+    Serialize a set of contexts to a JSON string.
+
+    Returns `None` if no context is provided.
+    """
     if not contexts:
         return None
     return json.dumps([context.value for context in contexts if context])
+
+
+@contextmanager
+def _detect_hangup() -> Generator[None, None, None]:
+    """
+    Catch a call hangup and raise a `CallHangupException` instead of the Call Automation SDK exceptions.
+    """
+    try:
+        yield
+    except ResourceNotFoundError:
+        logger.debug("Call hung up")
+        raise CallHangupException
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            logger.debug("Call hung up")
+            raise CallHangupException
+        else:
+            raise e
 
 
 @asynccontextmanager

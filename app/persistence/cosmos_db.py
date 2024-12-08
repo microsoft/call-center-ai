@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -75,11 +75,9 @@ class CosmosDbStore(IStore):
     async def _item_exists(self, test_id: str, partition_key: str) -> bool:
         exist = False
         async with self._use_client() as db:
-            try:
+            with suppress(CosmosResourceNotFoundError):
                 await db.read_item(item=test_id, partition_key=partition_key)
                 exist = True
-            except CosmosResourceNotFoundError:
-                pass
         return exist
 
     async def call_get(self, call_id: UUID) -> CallStateModel | None:
@@ -97,18 +95,17 @@ class CosmosDbStore(IStore):
         # Try live
         call = None
         try:
-            async with self._use_client() as db:
-                items = db.query_items(
-                    query="SELECT * FROM c WHERE STRINGEQUALS(c.id, @id)",
-                    parameters=[{"name": "@id", "value": str(call_id)}],
-                )
-                raw = await anext(items)
-                try:
-                    call = CallStateModel.model_validate(raw)
-                except ValidationError as e:
-                    logger.debug("Parsing error: %s", e.errors())
-        except StopAsyncIteration:
-            pass
+            with suppress(StopAsyncIteration):
+                async with self._use_client() as db:
+                    items = db.query_items(
+                        query="SELECT * FROM c WHERE STRINGEQUALS(c.id, @id)",
+                        parameters=[{"name": "@id", "value": str(call_id)}],
+                    )
+                    raw = await anext(items)
+                    try:
+                        call = CallStateModel.model_validate(raw)
+                    except ValidationError as e:
+                        logger.debug("Parsing error: %s", e.errors())
         except CosmosHttpResponseError as e:
             logger.error("Error accessing CosmosDB: %s", e)
 
@@ -258,24 +255,23 @@ class CosmosDbStore(IStore):
         # Try live
         call = None
         try:
-            async with self._use_client() as db:
-                items = db.query_items(
-                    max_item_count=1,
-                    query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{await callback_timeout_hour()}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
-                    parameters=[
-                        {
-                            "name": "@phone_number",
-                            "value": phone_number,
-                        }
-                    ],
-                )
-                raw = await anext(items)
-                try:
-                    call = CallStateModel.model_validate(raw)
-                except ValidationError:
-                    logger.debug("Parsing error", exc_info=True)
-        except StopAsyncIteration:
-            pass
+            with suppress(StopAsyncIteration):
+                async with self._use_client() as db:
+                    items = db.query_items(
+                        max_item_count=1,
+                        query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{await callback_timeout_hour()}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
+                        parameters=[
+                            {
+                                "name": "@phone_number",
+                                "value": phone_number,
+                            }
+                        ],
+                    )
+                    raw = await anext(items)
+                    try:
+                        call = CallStateModel.model_validate(raw)
+                    except ValidationError:
+                        logger.debug("Parsing error", exc_info=True)
         except CosmosHttpResponseError:
             logger.exception("Error accessing CosmosDB")
 
