@@ -241,12 +241,19 @@ class CosmosDbStore(IStore):
         # Persist
         try:
             async with self._use_client() as db:
-                raw = await db.create_item(body=data)
-                return CallStateModel.model_validate(raw)
+                await db.create_item(body=data)
         except CosmosHttpResponseError:
             logger.exception("Error accessing CosmosDB")
         except ValidationError:
             logger.debug("Parsing error", exc_info=True)
+
+        # Update cache
+        cache_key = self._cache_key_call_id(call.call_id)
+        await self._cache.set(
+            key=cache_key,
+            ttl_sec=await callback_timeout_hour(),
+            value=call.model_dump_json(),
+        )
 
         return call
 
