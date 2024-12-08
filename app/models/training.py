@@ -18,12 +18,12 @@ class TrainingModel(BaseModel, frozen=True):
     def __hash__(self) -> int:
         return self.id.__hash__()
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, TrainingModel):
             return NotImplemented
         return self.id == other.id
 
-    def __lt__(self, other):
+    def __lt__(self, other: object) -> bool:
         if not isinstance(other, TrainingModel):
             return NotImplemented
         return self.score < other.score
