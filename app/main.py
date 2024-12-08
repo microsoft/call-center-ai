@@ -39,6 +39,7 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.call_events import (
     on_audio_connected,
     on_call_connected,
@@ -1014,6 +1015,7 @@ def _standard_error(
     )
 
 
+@async_lru_cache()
 async def _use_automation_client() -> CallAutomationClient:
     """
     Get the call automation client for Azure Communication Services.
@@ -1022,16 +1024,13 @@ async def _use_automation_client() -> CallAutomationClient:
 
     Returns a `CallAutomationClient` instance.
     """
-    global _automation_client  # noqa: PLW0603
-    if not isinstance(_automation_client, CallAutomationClient):
-        _automation_client = CallAutomationClient(
-            # Deployment
-            endpoint=CONFIG.communication_services.endpoint,
-            # Performance
-            transport=await azure_transport(),
-            # Authentication
-            credential=AzureKeyCredential(
-                CONFIG.communication_services.access_key.get_secret_value()
-            ),  # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
-        )
-    return _automation_client
+    return CallAutomationClient(
+        # Deployment
+        endpoint=CONFIG.communication_services.endpoint,
+        # Performance
+        transport=await azure_transport(),
+        # Authentication
+        credential=AzureKeyCredential(
+            CONFIG.communication_services.access_key.get_secret_value()
+        ),  # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
+    )
