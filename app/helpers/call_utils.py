@@ -221,6 +221,8 @@ async def _chunk_before_tts(
 ) -> list[str]:
     """
     Split a text in chunks and store them in the call messages.
+
+    Chunks are separated by sentences and are limited to the TTS capacity.
     """
     # Sanitize text for TTS
     text = re.sub(_TTS_SANITIZER_R, " ", text)  # Remove unwanted characters
@@ -266,7 +268,7 @@ def _audio_from_text(
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
-    Text requires to be SVG escaped, and SSML tags are used to control the voice. Plus, text is slowed down by 5% to make it more understandable for elderly people. Text is also truncated, as this is the limit of Azure Communication Services TTS, but a warning is logged.
+    Text requires to be SVG escaped, and SSML tags are used to control the voice. Text is also truncated, as this is the limit of Azure Communication Services TTS, but a warning is logged.
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-structure
     """
@@ -331,6 +333,11 @@ async def handle_hangup(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
+    """
+    Hang up a call.
+
+    If the call is already hung up, the exception will be suppressed.
+    """
     logger.info("Hanging up: %s", call.initiate.phone_number)
     with (
         # Suppress hangup exception
@@ -349,6 +356,11 @@ async def handle_transfer(
     target: str,
     context: ContextEnum | None = None,
 ) -> None:
+    """
+    Transfer a call to another participant.
+
+    Can raise a `CallHangupException` if the call is hung up.
+    """
     logger.info("Transferring call: %s", target)
     with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
@@ -363,6 +375,11 @@ async def start_audio_streaming(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
+    """
+    Start audio streaming to the call.
+
+    Can raise a `CallHangupException` if the call is hung up.
+    """
     logger.info("Starting audio streaming")
     with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
@@ -379,6 +396,11 @@ async def stop_audio_streaming(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
+    """
+    Stop audio streaming to the call.
+
+    Can raise a `CallHangupException` if the call is hung up.
+    """
     logger.info("Stopping audio streaming")
     with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
@@ -419,4 +441,8 @@ def _detect_hangup() -> Generator[None, None, None]:
 async def _use_call_client(
     client: CallAutomationClient, voice_id: str
 ) -> AsyncGenerator[CallConnectionClient, None]:
+    """
+    Return the call client for a given call.
+    """
+    # Client already been created in the call client, never close it from here
     yield client.get_call_connection(call_connection_id=voice_id)

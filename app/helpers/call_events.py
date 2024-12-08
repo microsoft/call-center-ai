@@ -56,6 +56,11 @@ async def on_new_call(
     phone_number: str,
     wss_url: str,
 ) -> bool:
+    """
+    Callback for when a new call is received.
+
+    Answers the call and starts the media streaming.
+    """
     logger.debug("Incoming call handler")
 
     streaming_options = MediaStreamingOptions(
@@ -99,6 +104,11 @@ async def on_call_connected(
     client: CallAutomationClient,
     server_call_id: str,
 ) -> None:
+    """
+    Callback for when the call is connected.
+
+    Ask for the language and start recording the call.
+    """
     logger.info("Call connected, asking for language")
 
     # Add define the call as in progress
@@ -133,6 +143,11 @@ async def on_call_disconnected(
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
+    """
+    Callback for when the call is disconnected.
+
+    Hangs up the call and stores the final message.
+    """
     logger.info("Call disconnected")
     await _handle_hangup(
         call=call,
@@ -152,6 +167,9 @@ async def on_audio_connected(  # noqa: PLR0913
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
+    """
+    Callback for when the audio stream is connected.
+    """
     await load_llm_chat(
         audio_bits_per_sample=audio_bits_per_sample,
         audio_channels=audio_channels,
@@ -248,6 +266,11 @@ async def _handle_goodbye(
 async def on_play_started(
     call: CallStateModel,
 ) -> None:
+    """
+    Callback for when a media play action starts.
+
+    Updates the last interaction time.
+    """
     logger.debug("Play started")
 
     # Enrich span
@@ -265,6 +288,11 @@ async def on_play_completed(
     contexts: set[CallContextEnum] | None,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
+    """
+    Callback for when a media play action completes.
+
+    If the call should continue, updates the last interaction time. Else, hangs up the call.
+    """
     logger.debug("Play completed")
 
     # Enrich span
@@ -306,6 +334,11 @@ async def on_play_completed(
 
 @tracer.start_as_current_span("on_play_error")
 async def on_play_error(error_code: int) -> None:
+    """
+    Callback for when a media play action fails.
+
+    Logs the error and suppresses known errors from the Communication Services SDK.
+    """
     logger.debug("Play failed")
 
     # Enrich span
@@ -338,6 +371,9 @@ async def on_ivr_recognized(
     client: CallAutomationClient,
     label: str,
 ) -> None:
+    """
+    Callback for when an IVR recognition is successful.
+    """
     logger.info("IVR recognized: %s", label)
 
     # Enrich span
@@ -399,6 +435,11 @@ async def on_transfer_error(
     client: CallAutomationClient,
     error_code: int,
 ) -> None:
+    """
+    Callback for when a call transfer fails.
+
+    Logs the error and plays a TTS message to the user.
+    """
     logger.info("Error during call transfer, subCode %s", error_code)
     await handle_play_text(
         call=call,
@@ -413,6 +454,11 @@ async def on_sms_received(
     call: CallStateModel,
     message: str,
 ) -> bool:
+    """
+    Callback for when an SMS is received.
+
+    Adds the SMS to the call history and answers with voice if the call is in progress. If not, answers with SMS.
+    """
     logger.info("SMS received from %s: %s", call.initiate.phone_number, message)
 
     # Enrich span
@@ -470,7 +516,9 @@ async def on_end_call(
     call: CallStateModel,
 ) -> None:
     """
-    Shortcut to run all post-call intelligence tasks in background.
+    Callback for when a call ends.
+
+    Generates post-call intelligence if the call had interactions.
     """
     if (
         len(call.messages) >= 3  # noqa: PLR2004
@@ -603,6 +651,11 @@ async def _handle_ivr_language(
     call: CallStateModel,
     client: CallAutomationClient,
 ) -> None:
+    """
+    Handle IVR language selection.
+
+    If only one language is available, selects it by default. Else, plays the IVR prompt.
+    """
     # If only one language is available, skip the IVR
     if len(CONFIG.conversation.initiate.lang.availables) == 1:
         short_code = CONFIG.conversation.initiate.lang.availables[0].short_code
@@ -648,6 +701,11 @@ async def _handle_recording(
     client: CallAutomationClient,
     server_call_id: str,
 ) -> None:
+    """
+    Start recording the call.
+
+    Feature activation is checked before starting the recording.
+    """
     if not await recording_enabled():
         return
 
