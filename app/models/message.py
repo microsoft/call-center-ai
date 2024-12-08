@@ -47,6 +47,7 @@ class PersonaEnum(str, Enum):
     ASSISTANT = "assistant"
     HUMAN = "human"
     TOOL = "tool"
+    """Not used but deprecated, kept for backward compatibility."""
 
 
 class ToolModel(BaseModel):
