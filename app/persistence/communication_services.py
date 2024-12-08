@@ -3,6 +3,7 @@ from azure.communication.sms.aio import SmsClient
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config_models.communication_services import CommunicationServicesModel
 from app.helpers.http import azure_transport
 from app.helpers.logging import logger
@@ -54,16 +55,13 @@ class CommunicationServicesSms(ISms):
             logger.exception("Error sending SMS to %s", phone_number)
         return success
 
+    @async_lru_cache()
     async def _use_client(self) -> SmsClient:
-        if not self._client:
-            self._client = SmsClient(
-                # Deployment
-                endpoint=self._config.endpoint,
-                # Performance
-                transport=await azure_transport(),
-                # Authentication
-                credential=AzureKeyCredential(
-                    self._config.access_key.get_secret_value()
-                ),
-            )
-        return self._client
+        return SmsClient(
+            # Deployment
+            endpoint=self._config.endpoint,
+            # Performance
+            transport=await azure_transport(),
+            # Authentication
+            credential=AzureKeyCredential(self._config.access_key.get_secret_value()),
+        )
