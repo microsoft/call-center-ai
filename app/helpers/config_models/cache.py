@@ -8,7 +8,9 @@ from app.persistence.icache import ICache
 
 class ModeEnum(str, Enum):
     MEMORY = "memory"
+    """Use memory cache."""
     REDIS = "redis"
+    """Use Redis cache."""
 
 
 class MemoryModel(BaseModel, frozen=True):

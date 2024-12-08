@@ -9,7 +9,9 @@ from app.persistence.isms import ISms
 
 class ModeEnum(str, Enum):
     COMMUNICATION_SERVICES = "communication_services"
+    """Use Communication Services."""
     TWILIO = "twilio"
+    """Use Twilio."""
 
 
 class CommunicationServiceModel(BaseModel, frozen=True):

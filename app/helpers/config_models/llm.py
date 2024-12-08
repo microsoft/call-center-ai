@@ -11,7 +11,9 @@ from app.helpers.identity import token
 
 class ModeEnum(str, Enum):
     AZURE_OPENAI = "azure_openai"
+    """Use Azure OpenAI."""
     OPENAI = "openai"
+    """Use OpenAI."""
 
 
 class AbstractPlatformModel(BaseModel, frozen=True):

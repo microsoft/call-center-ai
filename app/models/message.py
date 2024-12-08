@@ -32,20 +32,27 @@ class StyleEnum(str, Enum):
     """
 
     CHEERFUL = "cheerful"
-    NONE = "none"  # This is not a valid style, but we use it in the code to indicate no style
+    NONE = "none"
+    """This is not a valid style, but we use it in the code to indicate no style."""
     SAD = "sad"
 
 
 class ActionEnum(str, Enum):
     CALL = "call"
+    """User called the assistant."""
     HANGUP = "hangup"
+    """User hung up the call."""
     SMS = "sms"
+    """User sent an SMS."""
     TALK = "talk"
+    """User sent a message."""
 
 
 class PersonaEnum(str, Enum):
     ASSISTANT = "assistant"
+    """Represents an AI assistant."""
     HUMAN = "human"
+    """Represents a human user."""
     TOOL = "tool"
     """Not used but deprecated, kept for backward compatibility."""
 
