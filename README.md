@@ -218,63 +218,6 @@ graph LR
   user -- Call --> communication_services
 ```
 
-### Sequence diagram
-
-```mermaid
-sequenceDiagram
-    autonumber
-
-    actor Customer
-    participant PSTN
-    participant Text to Speech
-    participant Speech to Text
-    actor Human agent
-    participant Event Grid
-    participant Communication Services
-    participant App
-    participant Cosmos DB
-    participant OpenAI GPT
-    participant AI Search
-
-    App->>Event Grid: Subscribe to events
-    Customer->>PSTN: Initiate a call
-    PSTN->>Communication Services: Forward call
-    Communication Services->>Event Grid: New call event
-    Event Grid->>App: Send event to event URL (HTTP webhook)
-    activate App
-    App->>Communication Services: Accept the call and give inbound URL
-    deactivate App
-    Communication Services->>Speech to Text: Transform speech to text
-
-    Communication Services->>App: Send text to the inbound URL
-    activate App
-    alt First call
-        App->>Communication Services: Send static SSML text
-    else Callback
-        App->>AI Search: Gather training data
-        App->>OpenAI GPT: Ask for a completion
-        OpenAI GPT-->>App: Respond (HTTP/2 SSE)
-        loop Over buffer
-            loop Over multiple tools
-                alt Is this a claim data update?
-                    App->>Cosmos DB: Update claim data
-                else Does the user want the human agent?
-                    App->>Communication Services: Send static SSML text
-                    App->>Communication Services: Transfer to a human
-                    Communication Services->>Human agent: Call the phone number
-                else Should we end the call?
-                    App->>Communication Services: Send static SSML text
-                    App->>Communication Services: End the call
-                end
-            end
-        end
-        App->>Cosmos DB: Persist conversation
-    end
-    deactivate App
-    Communication Services->>PSTN: Send voice
-    PSTN->>Customer: Forward voice
-```
-
 ## Deployment
 
 ### Prerequisites
