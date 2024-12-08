@@ -188,91 +188,35 @@ graph LR
     redis[("Cache<br>(Redis)")]
     search[("RAG<br>(AI Search)")]
     sounds[("Sounds<br>(Azure Storage)")]
-    sst["Speech-to-Text<br>(Cognitive Services)"]
+    sst["Speech-to-text<br>(Cognitive Services)"]
     translation["Translation<br>(Cognitive Services)"]
-    tts["Text-to-Speech<br>(Cognitive Services)"]
+    tts["Text-to-speech<br>(Cognitive Services)"]
   end
 
-  app -- Respond with text --> communication_services
-  app -- Ask for translation --> translation
-  app -- Ask to transfer --> communication_services
-  app -- Few-shot training --> search
+  app -- Translate static TTS --> translation
+  app -- Sezarch RAG data --> search
   app -- Generate completion --> gpt
+  gpt -. Answer with completion .-> app
+  app -- Generate voice --> tts
+  tts -. Answer with voice .-> app
   app -- Get cached data --> redis
   app -- Save conversation --> db
-  app -- Send SMS report --> communication_services
+  app -- Transform voice --> sst
+  sst -. Answer with text .-> app
+  app <-. Exchange audio .-> communication_services
   app -. Watch .-> queues
 
-  communication_services -- Generate voice --> tts
   communication_services -- Load sound --> sounds
   communication_services -- Notifies --> eventgrid
-  communication_services -- Send SMS --> user
   communication_services -- Transfer to --> agent
-  communication_services -- Transform voice --> sst
-  communication_services -. Send voice .-> user
+  communication_services <-. Exchange audio .-> agent
+  communication_services <-. Exchange audio .-> user
 
   eventgrid -- Push to --> queues
 
   search -- Generate embeddings --> ada
 
   user -- Call --> communication_services
-```
-
-### Sequence diagram
-
-```mermaid
-sequenceDiagram
-    autonumber
-
-    actor Customer
-    participant PSTN
-    participant Text to Speech
-    participant Speech to Text
-    actor Human agent
-    participant Event Grid
-    participant Communication Services
-    participant App
-    participant Cosmos DB
-    participant OpenAI GPT
-    participant AI Search
-
-    App->>Event Grid: Subscribe to events
-    Customer->>PSTN: Initiate a call
-    PSTN->>Communication Services: Forward call
-    Communication Services->>Event Grid: New call event
-    Event Grid->>App: Send event to event URL (HTTP webhook)
-    activate App
-    App->>Communication Services: Accept the call and give inbound URL
-    deactivate App
-    Communication Services->>Speech to Text: Transform speech to text
-
-    Communication Services->>App: Send text to the inbound URL
-    activate App
-    alt First call
-        App->>Communication Services: Send static SSML text
-    else Callback
-        App->>AI Search: Gather training data
-        App->>OpenAI GPT: Ask for a completion
-        OpenAI GPT-->>App: Respond (HTTP/2 SSE)
-        loop Over buffer
-            loop Over multiple tools
-                alt Is this a claim data update?
-                    App->>Cosmos DB: Update claim data
-                else Does the user want the human agent?
-                    App->>Communication Services: Send static SSML text
-                    App->>Communication Services: Transfer to a human
-                    Communication Services->>Human agent: Call the phone number
-                else Should we end the call?
-                    App->>Communication Services: Send static SSML text
-                    App->>Communication Services: End the call
-                end
-            end
-        end
-        App->>Cosmos DB: Persist conversation
-    end
-    deactivate App
-    Communication Services->>PSTN: Send voice
-    PSTN->>Customer: Forward voice
 ```
 
 ## Deployment
@@ -751,7 +695,7 @@ prompts:
 
 The delay mainly come from two things:
 
-- The fact that Azure Communication Services is sequential in the way it forwards the audio (it technically foarwards only the text, not the audio, and once the entire audio is transformed, after waited for a specified blank time)
+- Voice in and voice out are processed by Azure AI Speech, both are implemented in streaming mode but voice is not directly streamed to the LLM
 - The LLM, more specifically the delay between API call and first sentence infered, can be long (as the sentences are sent one by one once they are made avalable), even longer if it hallucinate and returns empty answers (it happens regularly, and the applicatoipn retries the call)
 
 From now, the only impactful thing you can do is the LLM part. This can be acheieve by a PTU on Azure or using a less smart model like `gpt-4o-mini` (selected by default on the latest versions). With a PTU on Azure OpenAI, you can divide by 2 the latency in some case.
@@ -795,6 +739,7 @@ Resiliency:
 Security:
 
 - [x] CI builds attestations
+- [x] CodeQL static code checks
 - [ ] GitOps for deployments
 - [ ] Red team exercises
 

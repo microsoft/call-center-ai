@@ -3,8 +3,8 @@ import json
 import re
 from datetime import datetime
 
-import aiojobs
 import pytest
+from aiojobs import Scheduler
 from deepeval import assert_test
 from deepeval.metrics import (
     AnswerRelevancyMetric,
@@ -19,20 +19,25 @@ from pydantic import TypeAdapter
 from pytest_assume.plugin import assume
 
 from app.helpers.call_events import (
+    on_automation_play_completed,
     on_call_connected,
     on_call_disconnected,
     on_end_call,
     on_ivr_recognized,
-    on_play_completed,
     on_play_started,
 )
 from app.helpers.call_llm import _out_answer
+from app.helpers.config import CONFIG
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
 from app.models.message import MessageModel, PersonaEnum as MessagePersonaEnum
 from app.models.reminder import ReminderModel
 from app.models.training import TrainingModel
-from tests.conftest import CallAutomationClientMock, with_conversations
+from tests.conftest import (
+    CallAutomationClientMock,
+    SpeechSynthesizerMock,
+    with_conversations,
+)
 
 
 class ClaimRelevancyMetric(BaseMetric):
@@ -249,6 +254,7 @@ async def test_llm(  # noqa: PLR0913
     3. Test claim data exists
     4. Test LLM metrics
     """
+    db = CONFIG.database.instance()
 
     def _play_media_callback(text: str) -> None:
         nonlocal actual_output
@@ -257,6 +263,9 @@ async def test_llm(  # noqa: PLR0913
     actual_output = ""
 
     # Mock client
+    tts_client = SpeechSynthesizerMock(
+        play_media_callback=_play_media_callback,
+    )
     automation_client = CallAutomationClientMock(
         hang_up_callback=lambda: None,
         play_media_callback=_play_media_callback,
@@ -267,36 +276,48 @@ async def test_llm(  # noqa: PLR0913
     # Mock call
     call.lang = lang
 
-    async def _post_callback(_call: CallStateModel) -> None:
-        await on_end_call(call=_call)
+    async with Scheduler() as scheduler:
 
-    async def _training_callback(_call: CallStateModel) -> None:
-        await _call.trainings(cache_only=False)
+        async def _post_callback(_call: CallStateModel) -> None:
+            await on_end_call(
+                call=_call,
+                scheduler=scheduler,
+            )
 
-    # Connect call
-    await on_call_connected(
-        call=call,
-        client=automation_client,
-        server_call_id="dummy",
-    )
+        async def _training_callback(_call: CallStateModel) -> None:
+            await _call.trainings(cache_only=False)
 
-    # First IVR
-    await on_ivr_recognized(
-        call=call,
-        client=automation_client,
-        label=call.lang.short_code,
-    )
+        # Connect call
+        await on_call_connected(
+            call=call,
+            client=automation_client,
+            post_callback=_post_callback,
+            scheduler=scheduler,
+            server_call_id="dummy",
+        )
 
-    # Simulate conversation with speech recognition
-    async with aiojobs.Scheduler() as scheduler:
+        # First IVR
+        await on_ivr_recognized(
+            call=call,
+            client=automation_client,
+            label=call.lang.short_code,
+            post_callback=_post_callback,
+            scheduler=scheduler,
+        )
+
+        # Simulate conversation with speech recognition
         for speech in speeches:
             # Add message to history
-            call.messages.append(
-                MessageModel(
-                    content=speech,
-                    persona=MessagePersonaEnum.HUMAN,
+            async with db.call_transac(
+                call=call,
+                scheduler=scheduler,
+            ):
+                call.messages.append(
+                    MessageModel(
+                        content=speech,
+                        persona=MessagePersonaEnum.HUMAN,
+                    )
                 )
-            )
 
             # Respond
             await _out_answer(
@@ -305,27 +326,34 @@ async def test_llm(  # noqa: PLR0913
                 post_callback=_post_callback,
                 scheduler=scheduler,
                 training_callback=_training_callback,
+                tts_client=tts_client,
             )
+
             # Play
             await on_play_started(
                 call=call,
+                scheduler=scheduler,
             )
+
             # Receip
-            await on_play_completed(
+            await on_automation_play_completed(
                 call=call,
                 client=automation_client,
                 contexts=call_client.last_contexts,
                 post_callback=_post_callback,
+                scheduler=scheduler,
             )
+
             # Reset contexts
             call_client.last_contexts.clear()
 
-    # Disconnect call
-    await on_call_disconnected(
-        call=call,
-        client=automation_client,
-        post_callback=_post_callback,
-    )
+        # Disconnect call
+        await on_call_disconnected(
+            call=call,
+            client=automation_client,
+            post_callback=_post_callback,
+            scheduler=scheduler,
+        )
 
     # Remove newlines for log comparison
     actual_output = _remove_newlines(actual_output)
@@ -362,13 +390,11 @@ async def test_llm(  # noqa: PLR0913
         ToxicityMetric(threshold=1, model=deepeval_model),  # Hate speech, insults
     ]  # Include those by default
 
-    if not any(
-        field == "answer_relevancy" for field in claim_tests_excl
-    ):  # Test respond relevancy from questions
+    # Test respond relevancy from questions
+    if not any(field == "answer_relevancy" for field in claim_tests_excl):
         llm_metrics.append(AnswerRelevancyMetric(threshold=0.5, model=deepeval_model))
-    if not any(
-        field == "contextual_relevancy" for field in claim_tests_excl
-    ):  # Test respond relevancy from context
+    # Test respond relevancy from context
+    if not any(field == "contextual_relevancy" for field in claim_tests_excl):
         llm_metrics.append(
             ContextualRelevancyMetric(threshold=0.25, model=deepeval_model)
         )

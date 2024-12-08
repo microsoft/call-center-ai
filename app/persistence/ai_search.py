@@ -1,3 +1,5 @@
+from contextlib import suppress
+
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceExistsError,
@@ -279,17 +281,16 @@ class AiSearchSearch(ISearch):
             credential=await credential(),
         ) as client:
             try:
-                await client.create_index(
-                    SearchIndex(
-                        fields=fields,
-                        name=self._config.index,
-                        semantic_search=semantic_search,
-                        vector_search=vector_search,
+                with suppress(ResourceExistsError):
+                    await client.create_index(
+                        SearchIndex(
+                            fields=fields,
+                            name=self._config.index,
+                            semantic_search=semantic_search,
+                            vector_search=vector_search,
+                        )
                     )
-                )
-                logger.info('Created Search "%s"', self._config.index)
-            except ResourceExistsError:
-                pass
+                    logger.info('Created Search "%s"', self._config.index)
             except HttpResponseError as e:
                 if not e.error or not e.error.code == "ResourceNameAlreadyInUse":
                     raise e

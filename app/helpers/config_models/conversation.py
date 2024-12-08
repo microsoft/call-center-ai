@@ -24,7 +24,10 @@ class LanguageEntryModel(BaseModel):
     def human_name(self) -> str:
         return self.pronunciations_en[0]
 
-    def __str__(self):  # Pretty print for logs
+    def __str__(self):
+        """
+        Return the short code as string.
+        """
         return self.short_code
 
 

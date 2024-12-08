@@ -234,7 +234,8 @@ def remove_message_action(text: str) -> str:
         return text
     try:
         return res.group(2) or ""
-    except ValueError:  # Regex failed, return original text
+    # Regex failed, return original text
+    except ValueError:
         return text
 
 
@@ -255,5 +256,6 @@ def extract_message_style(text: str) -> tuple[StyleEnum, str]:
             StyleEnum(res.group(1)),  # style
             (res.group(2) or ""),  # content
         )
-    except ValueError:  # Regex failed, return original text
+    # Regex failed, return original text
+    except ValueError:
         return default_style, text

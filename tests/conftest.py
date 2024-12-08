@@ -9,7 +9,16 @@ from typing import Any
 import pytest
 import yaml
 from _pytest.mark.structures import MarkDecorator
+from azure.cognitiveservices.speech import (
+    ResultFuture,
+    SpeechSynthesisResult,
+    SpeechSynthesizer,
+)
+from azure.cognitiveservices.speech.interop import _spx_handle
 from azure.communication.callautomation import FileSource, SsmlSource, TextSource
+from azure.communication.callautomation._generated.aio.operations import (
+    CallMediaOperations,
+)
 from azure.communication.callautomation._models import TransferCallResult
 from azure.communication.callautomation.aio import (
     CallAutomationClient,
@@ -27,7 +36,21 @@ from app.main import _str_to_contexts
 from app.models.call import CallInitiateModel, CallStateModel
 
 
+class CallMediaOperationsMock(CallMediaOperations):
+    def __init__(self) -> None:
+        pass
+
+    async def start_media_streaming(
+        self,
+        *args,
+        **kwargs,
+    ) -> None:
+        pass
+
+
 class CallConnectionClientMock(CallConnectionClient):
+    _call_connection_id: str = "dummy"
+    _call_media_client = CallMediaOperationsMock()
     _hang_up_callback: Callable[[], None]
     _play_media_callback: Callable[[str], None]
     _transfer_callback: Callable[[], None]
@@ -121,6 +144,26 @@ class CallAutomationClientMock(CallAutomationClient):
         **kwargs,  # noqa: ARG002
     ) -> CallConnectionClientMock:
         return self._call_client
+
+
+class SpeechSynthesizerMock(SpeechSynthesizer):
+    _play_media_callback: Callable[[str], None]
+
+    def __init__(self, play_media_callback: Callable[[str], None]) -> None:
+        self._play_media_callback = play_media_callback
+
+    def speak_text_async(
+        self,
+        text: str,
+        *args,  # noqa: ARG002
+        **kwargs,  # noqa: ARG002
+    ) -> ResultFuture:
+        self._play_media_callback(text)
+        return ResultFuture(
+            async_handle=_spx_handle(0),
+            get_function=lambda _: _spx_handle(0),
+            wrapped_type=SpeechSynthesisResult,
+        )
 
 
 class DeepEvalAzureOpenAI(GPTModel):

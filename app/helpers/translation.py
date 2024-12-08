@@ -9,6 +9,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config import CONFIG
 from app.helpers.http import azure_transport
 from app.helpers.logging import logger
@@ -16,7 +17,6 @@ from app.helpers.logging import logger
 logger.info("Using Translation %s", CONFIG.ai_translation.endpoint)
 
 _cache = CONFIG.cache.instance()
-_client: TextTranslationClient | None = None
 
 
 @retry(
@@ -31,7 +31,8 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> str |
 
     Catch errors for a maximum of 3 times.
     """
-    if source_lang == target_lang:  # No need to translate
+    # No need to translate
+    if source_lang == target_lang:
         return text
 
     # Try cache
@@ -60,20 +61,18 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> str |
     return translation
 
 
+@async_lru_cache()
 async def _use_client() -> TextTranslationClient:
     """
     Generate the Translation client and close it after use.
     """
-    global _client  # noqa: PLW0603
-    if not isinstance(_client, TextTranslationClient):
-        _client = TextTranslationClient(
-            # Performance
-            transport=await azure_transport(),
-            # Deployment
-            endpoint=CONFIG.ai_translation.endpoint,
-            # Authentication
-            credential=AzureKeyCredential(
-                CONFIG.ai_translation.access_key.get_secret_value()
-            ),
-        )
-    return _client
+    return TextTranslationClient(
+        # Performance
+        transport=await azure_transport(),
+        # Deployment
+        endpoint=CONFIG.ai_translation.endpoint,
+        # Authentication
+        credential=AzureKeyCredential(
+            CONFIG.ai_translation.access_key.get_secret_value()
+        ),
+    )

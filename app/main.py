@@ -1,7 +1,7 @@
 import asyncio
 import json
-from base64 import b64decode
-from contextlib import asynccontextmanager
+from base64 import b64decode, b64encode
+from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
@@ -11,6 +11,7 @@ from uuid import UUID
 
 import jwt
 import mistune
+from aiojobs import Scheduler
 from azure.communication.callautomation import (
     MediaStreamingAudioChannelType,
     MediaStreamingContentType,
@@ -29,6 +30,7 @@ from fastapi import (
     Request,
     Response,
     WebSocket,
+    WebSocketDisconnect,
 )
 from fastapi.exceptions import RequestValidationError, ValidationException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -39,19 +41,19 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.call_events import (
     on_audio_connected,
+    on_automation_play_completed,
+    on_automation_recognize_error,
     on_call_connected,
     on_call_disconnected,
     on_end_call,
     on_ivr_recognized,
     on_new_call,
-    on_play_completed,
     on_play_error,
     on_play_started,
-    on_recognize_error,
     on_sms_received,
-    on_transfer_completed,
     on_transfer_error,
 )
 from app.helpers.call_utils import ContextEnum as CallContextEnum
@@ -88,7 +90,6 @@ _jinja.filters["markdown"] = lambda x: (
 )  # pyright: ignore
 
 # Azure Communication Services
-_automation_client: CallAutomationClient | None = None
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
 logger.info("Using phone number %s", CONFIG.communication_services.phone_number)
 _communication_services_jwks_client = jwt.PyJWKClient(
@@ -343,13 +344,11 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
     Returns a single call object `CallGetModel`, in JSON format.
     """
     # First, try to get by call ID
-    try:
+    with suppress(ValueError):
         call_id = UUID(call_id_or_phone_number)
         call = await _db.call_get(call_id)
         if call:
             return TypeAdapter(CallGetModel).dump_python(call)
-    except ValueError:
-        pass
 
     # Second, try to get by phone number
     phone_number = PhoneNumber(call_id_or_phone_number)
@@ -492,10 +491,12 @@ async def sms_event(
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
     # Execute business logic
-    await on_sms_received(
-        call=call,
-        message=message,
-    )
+    async with Scheduler() as scheduler:
+        await on_sms_received(
+            call=call,
+            message=message,
+            scheduler=scheduler,
+        )
 
 
 async def _communicationservices_validate_jwt(
@@ -577,46 +578,79 @@ async def communicationservices_wss_post(
     # Client SDK
     automation_client = await _use_automation_client()
 
-    # Queue audio data
-    audio_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    # Queues
+    audio_in: asyncio.Queue[bytes] = asyncio.Queue()
+    audio_out: asyncio.Queue[bytes | bool] = asyncio.Queue()
 
     async def _consume_audio() -> None:
+        """
+        Consume audio data from the WebSocket.
+        """
         logger.debug("Audio data consumer started")
-        async for event in websocket.iter_json():
-            # DEBUG: Uncomment to see all events, but be careful, it will be verbose ^_^
-            # logger.debug("Audio event received %s", event)
+        with suppress(WebSocketDisconnect):
+            async for event in websocket.iter_json():
+                # TODO: Handle configuration event (audio format, sample rate, etc.)
+                # Skip non-audio events
+                if "kind" not in event or event["kind"] != "AudioData":
+                    continue
+                # Filter out silent audio
+                audio_data: dict[str, Any] = event.get("audioData", {})
+                audio_base64: str | None = audio_data.get("data", None)
+                audio_silent: bool | None = audio_data.get("silent", True)
+                if audio_silent or not audio_base64:
+                    continue
+                # Queue audio
+                await audio_in.put(b64decode(audio_base64))
 
-            # TODO: Handle configuration event (audio format, sample rate, etc.)
-            # Skip non-audio events
-            if "kind" not in event or event["kind"] != "AudioData":
-                continue
+    async def _send_audio() -> None:
+        """
+        Send audio data to the WebSocket
+        """
+        logger.debug("Audio data sender started")
+        with suppress(WebSocketDisconnect):
+            while True:
+                audio_data = await audio_out.get()
+                # Send audio
+                if isinstance(audio_data, bytes):
+                    await websocket.send_json(
+                        {
+                            "kind": "AudioData",
+                            "audioData": {
+                                "data": b64encode(audio_data).decode("utf-8"),
+                            },
+                        }
+                    )
+                # Stop audio
+                elif audio_data is False:
+                    await websocket.send_json(
+                        {
+                            "kind": "StopAudio",
+                            "stopAudio": {},
+                        }
+                    )
+                audio_out.task_done()
 
-            # Filter out silent audio
-            audio_data: dict[str, Any] = event.get("audioData", {})
-            audio_base64: str | None = audio_data.get("data", None)
-            audio_silent: bool | None = audio_data.get("silent", True)
-            if audio_silent or not audio_base64:
-                continue
-
-            # Queue audio
-            await audio_queue.put(b64decode(audio_base64))
-
-    await asyncio.gather(
-        # Consume audio from the WebSocket
-        _consume_audio(),
-        # Process audio
-        # TODO: Dynamically set the audio format
-        on_audio_connected(
-            audio_bits_per_sample=16,
-            audio_channels=1,
-            audio_sample_rate=16000,
-            audio_stream=audio_queue,
-            call=call,
-            client=automation_client,
-            post_callback=_trigger_post_event,
-            training_callback=_trigger_training_event,
-        ),
-    )
+    async with Scheduler() as scheduler:
+        await asyncio.gather(
+            # Consume audio from the WebSocket
+            _consume_audio(),
+            # Send audio to the WebSocket
+            _send_audio(),
+            # Process audio
+            # TODO: Dynamically set the audio format
+            on_audio_connected(
+                audio_bits_per_sample=16,
+                audio_channels=1,
+                audio_in=audio_in,
+                audio_out=audio_out,
+                audio_sample_rate=16000,
+                call=call,
+                client=automation_client,
+                post_callback=_trigger_post_event,
+                scheduler=scheduler,
+                training_callback=_trigger_training_event,
+            ),
+        )
 
 
 @api.post("/communicationservices/callback/{call_id}/{secret}")
@@ -643,22 +677,25 @@ async def communicationservices_callback_post(
         raise RequestValidationError(["Events must be a list"])
 
     # Process events in parallel
-    await asyncio.gather(
-        *[
-            _communicationservices_event_worker(
-                call_id=call_id,
-                event_dict=event,
-                secret=secret,
-            )
-            for event in events
-        ]
-    )
+    async with Scheduler() as scheduler:
+        await asyncio.gather(
+            *[
+                _communicationservices_event_worker(
+                    call_id=call_id,
+                    event_dict=event,
+                    secret=secret,
+                    scheduler=scheduler,
+                )
+                for event in events
+            ]
+        )
 
 
 # TODO: Refacto, too long (and remove PLR0912/PLR0915 ignore)
 async def _communicationservices_event_worker(
     call_id: UUID,
     event_dict: dict,
+    scheduler: Scheduler,
     secret: str,
 ) -> None:
     """
@@ -686,7 +723,10 @@ async def _communicationservices_event_worker(
 
     # Store connection ID
     connection_id = event.data["callConnectionId"]
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.voice_id = connection_id
 
     # Extract context
@@ -703,32 +743,42 @@ async def _communicationservices_event_worker(
     logger.debug("Call event received %s", event_type)
 
     match event_type:
-        case "Microsoft.Communication.CallConnected":  # Call answered
+        # Call answered
+        case "Microsoft.Communication.CallConnected":
             server_call_id = event.data["serverCallId"]
             await on_call_connected(
                 call=call,
                 client=automation_client,
+                post_callback=_trigger_post_event,
+                scheduler=scheduler,
                 server_call_id=server_call_id,
             )
 
-        case "Microsoft.Communication.CallDisconnected":  # Call hung up
+        # Call hung up
+        case "Microsoft.Communication.CallDisconnected":
             await on_call_disconnected(
                 call=call,
                 client=automation_client,
                 post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
-        case "Microsoft.Communication.RecognizeCompleted":  # Speech/IVR recognized
+        # Speech/IVR recognized
+        case "Microsoft.Communication.RecognizeCompleted":
             recognition_result: str = event.data["recognitionType"]
-            if recognition_result == "choices":  # Handle IVR
+            # Handle IVR
+            if recognition_result == "choices":
                 label_detected: str = event.data["choiceResult"]["label"]
                 await on_ivr_recognized(
                     call=call,
                     client=automation_client,
                     label=label_detected,
+                    post_callback=_trigger_post_event,
+                    scheduler=scheduler,
                 )
 
-        case "Microsoft.Communication.RecognizeFailed":  # Speech/IVR failed
+        # Speech/IVR failed
+        case "Microsoft.Communication.RecognizeFailed":
             result_information = event.data["resultInformation"]
             error_code: int = result_information["subCode"]
             error_message: str = result_information["message"]
@@ -737,41 +787,47 @@ async def _communicationservices_event_worker(
                 error_code,
                 error_message,
             )
-            await on_recognize_error(
+            await on_automation_recognize_error(
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
                 post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
-        case "Microsoft.Communication.PlayStarted":  # Media started
+        # Media started
+        case "Microsoft.Communication.PlayStarted":
             await on_play_started(
                 call=call,
+                scheduler=scheduler,
             )
 
-        case "Microsoft.Communication.PlayCompleted":  # Media played
-            await on_play_completed(
+        # Media played
+        case "Microsoft.Communication.PlayCompleted":
+            await on_automation_play_completed(
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
                 post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
-        case "Microsoft.Communication.PlayFailed":  # Media play failed
+        # Media play failed
+        case "Microsoft.Communication.PlayFailed":
             result_information = event.data["resultInformation"]
             error_code: int = result_information["subCode"]
             await on_play_error(error_code)
 
-        case "Microsoft.Communication.CallTransferAccepted":  # Call transfer accepted
-            await on_transfer_completed()
-
-        case "Microsoft.Communication.CallTransferFailed":  # Call transfer failed
+        # Call transfer failed
+        case "Microsoft.Communication.CallTransferFailed":
             result_information = event.data["resultInformation"]
             sub_code: int = result_information["subCode"]
             await on_transfer_error(
                 call=call,
                 client=automation_client,
                 error_code=sub_code,
+                post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
         case _:
@@ -825,7 +881,11 @@ async def post_event(
     logger.debug("Post event received")
 
     # Execute business logic
-    await on_end_call(call)
+    async with Scheduler() as scheduler:
+        await on_end_call(
+            call=call,
+            scheduler=scheduler,
+        )
 
 
 async def _trigger_training_event(call: CallStateModel) -> None:
@@ -908,11 +968,11 @@ async def twilio_sms_post(
         # Enrich span
         span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
-        # Execute business logic
-        event_status = await on_sms_received(
-            call=call,
-            message=Body,
-        )
+        async with Scheduler() as scheduler:
+            # Execute business logic
+            event_status = await on_sms_received(
+                call=call, message=Body, scheduler=scheduler
+            )
 
         # Return error for unsuccessful event
         if not event_status:
@@ -1016,6 +1076,7 @@ def _standard_error(
     )
 
 
+@async_lru_cache()
 async def _use_automation_client() -> CallAutomationClient:
     """
     Get the call automation client for Azure Communication Services.
@@ -1024,16 +1085,13 @@ async def _use_automation_client() -> CallAutomationClient:
 
     Returns a `CallAutomationClient` instance.
     """
-    global _automation_client  # noqa: PLW0603
-    if not isinstance(_automation_client, CallAutomationClient):
-        _automation_client = CallAutomationClient(
-            # Deployment
-            endpoint=CONFIG.communication_services.endpoint,
-            # Performance
-            transport=await azure_transport(),
-            # Authentication
-            credential=AzureKeyCredential(
-                CONFIG.communication_services.access_key.get_secret_value()
-            ),  # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
-        )
-    return _automation_client
+    return CallAutomationClient(
+        # Deployment
+        endpoint=CONFIG.communication_services.endpoint,
+        # Performance
+        transport=await azure_transport(),
+        # Authentication
+        credential=AzureKeyCredential(
+            CONFIG.communication_services.access_key.get_secret_value()
+        ),  # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
+    )

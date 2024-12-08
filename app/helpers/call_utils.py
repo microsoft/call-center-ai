@@ -1,9 +1,24 @@
+import asyncio
 import json
 import re
-from collections.abc import AsyncGenerator, Generator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
+from contextlib import asynccontextmanager, contextmanager, suppress
 from enum import Enum
 
+from aiojobs import Job, Scheduler
+from azure.cognitiveservices.speech import (
+    AudioConfig,
+    SpeechConfig,
+    SpeechRecognizer,
+    SpeechSynthesizer,
+)
+from azure.cognitiveservices.speech.audio import (
+    AudioOutputConfig,
+    AudioStreamFormat,
+    PushAudioInputStream,
+    PushAudioOutputStream,
+    PushAudioOutputStreamCallback,
+)
 from azure.communication.callautomation import (
     FileSource,
     PhoneNumberIdentifier,
@@ -21,6 +36,7 @@ from azure.communication.callautomation.aio import (
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 
 from app.helpers.config import CONFIG
+from app.helpers.identity import token
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
 from app.models.message import (
@@ -40,6 +56,27 @@ _TTS_SANITIZER_R = re.compile(
 _db = CONFIG.database.instance()
 
 
+class CallHangupException(Exception):
+    """
+    Exception raised when a call is hung up.
+    """
+
+    pass
+
+
+class TtsCallback(PushAudioOutputStreamCallback):
+    """
+    Callback for Azure Speech Synthesizer to push audio data to a queue.
+    """
+
+    def __init__(self, queue: asyncio.Queue[bytes | bool]):
+        self.queue = queue
+
+    def write(self, audio_buffer: memoryview) -> int:
+        self.queue.put_nowait(audio_buffer.tobytes())
+        return audio_buffer.nbytes
+
+
 class ContextEnum(str, Enum):
     """
     Enum for call context.
@@ -47,9 +84,9 @@ class ContextEnum(str, Enum):
     Used to track the operation context of a call in Azure Communication Services.
     """
 
-    CONNECT_AGENT = "connect_agent"  # Transfer to agent
     GOODBYE = "goodbye"  # Hang up
     IVR_LANG_SELECT = "ivr_lang_select"  # IVR language selection
+    START_REALTIME = "start_realtime"  # Start realtime call
     TRANSFER_FAILED = "transfer_failed"  # Transfer failed
 
 
@@ -70,58 +107,25 @@ def tts_sentence_split(
     # Split by sentence by punctuation
     splits = re.split(_SENTENCE_PUNCTUATION_R, text)
     for i, split in enumerate(splits):
-        if i % 2 == 1:  # Skip punctuation
+        # Skip punctuation
+        if i % 2 == 1:
             continue
-        if not split.strip():  # Skip empty lines
+        # Skip empty lines
+        if not split.strip():
             continue
-        if i == len(splits) - 1:  # Skip last line in case of missing punctuation
+        # Skip last line in case of missing punctuation
+        if i == len(splits) - 1:
             if include_last:
                 yield (
                     split.strip(),
                     len(split),
                 )
-        else:  # Add punctuation back
+        # Add punctuation back
+        else:
             yield (
                 split.strip() + splits[i + 1].strip(),
                 len(split) + len(splits[i + 1]),
             )
-
-
-async def _handle_play_text(
-    call: CallStateModel,
-    client: CallAutomationClient,
-    context: ContextEnum | None,
-    style: MessageStyleEnum,
-    text: str,
-) -> bool:
-    """
-    Play a text to a call participant.
-
-    If `context` is provided, it will be used to track the operation.
-
-    Returns `True` if the text was played, `False` otherwise.
-    """
-    logger.info("Playing TTS: %s", text)
-    try:
-        assert call.voice_id, "Voice ID is required to control the call"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.play_media(
-                operation_context=_context_builder({context}),
-                play_source=_audio_from_text(
-                    call=call,
-                    style=style,
-                    text=text,
-                ),
-            )
-        return True
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before playing")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before playing")
-        else:
-            raise e
-    return False
 
 
 async def handle_media(
@@ -135,110 +139,180 @@ async def handle_media(
 
     If `context` is provided, it will be used to track the operation.
     """
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.play_media(
-                operation_context=_context_builder({context}),
+                operation_context=_context_serializer({context}),
                 play_source=FileSource(url=sound_url),
             )
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before playing")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before playing")
-        else:
-            raise e
 
 
-async def handle_play_text(  # noqa: PLR0913
+async def handle_automation_tts(  # noqa: PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
     text: str,
     context: ContextEnum | None = None,
     store: bool = True,
     style: MessageStyleEnum = MessageStyleEnum.NONE,
-) -> bool:
+) -> None:
     """
     Play a text to a call participant.
 
     If `store` is `True`, the text will be stored in the call messages.
 
-    Returns `True` if the text was played, `False` otherwise.
+    If the call hangs up, the call will be ended.
     """
-    # Split text in chunks
-    chunks = await _chunk_before_tts(
-        call=call,
-        store=store,
-        style=style,
-        text=text,
-    )
+    assert call.voice_id, "Voice ID is required to control the call"
 
     # Play each chunk
-    for chunk in chunks:
-        res = await _handle_play_text(
-            call=call,
-            client=client,
-            context=context,
-            style=style,
-            text=chunk,
+    jobs: list[Job] = []
+    chunks = _chunk_for_tts(text)
+    async with _use_call_client(client, call.voice_id) as call_client:
+        jobs += [
+            await scheduler.spawn(
+                _automation_play_text(
+                    call_client=call_client,
+                    call=call,
+                    context=context,
+                    style=style,
+                    text=chunk,
+                )
+            )
+            for chunk in chunks
+        ]
+
+    # Wait for all jobs to finish and catch hangup
+    for job in jobs:
+        try:
+            await job.wait()
+        except CallHangupException:
+            from app.helpers.call_events import hangup_now
+
+            logger.info("Failed to play prompt, ending call now")
+            await hangup_now(
+                call=call,
+                client=client,
+                post_callback=post_callback,
+                scheduler=scheduler,
+            )
+            return
+
+    if store:
+        await scheduler.spawn(
+            _store_assistant_message(
+                call=call,
+                style=style,
+                text=text,
+                scheduler=scheduler,
+            )
         )
-        if not res:
-            return False
-    return True
 
 
-async def handle_clear_queue(
-    client: CallAutomationClient,
+async def _automation_play_text(
+    call_client: CallConnectionClient,
     call: CallStateModel,
+    context: ContextEnum | None,
+    style: MessageStyleEnum,
+    text: str,
 ) -> None:
     """
-    Clear the media queue of a call.
+    Play a text to a call participant.
+
+    If `context` is provided, it will be used to track the operation. Can raise a `CallHangupException` if the call is hung up.
+
+    Returns `True` if the text was played, `False` otherwise.
     """
-    try:
-        assert call.voice_id, "Voice ID is required for recognizing media"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.cancel_all_media_operations()
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before playing")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before playing")
-        else:
-            raise e
+    logger.info("Playing TTS: %s", text)
+    with _detect_hangup():
+        assert call.voice_id, "Voice ID is required to control the call"
+        await call_client.play_media(
+            operation_context=_context_serializer({context}),
+            play_source=_ssml_from_text(
+                call=call,
+                style=style,
+                text=text,
+            ),
+        )
 
 
-async def _chunk_before_tts(
+async def handle_realtime_tts(  # noqa: PLR0913
+    call: CallStateModel,
+    scheduler: Scheduler,
+    text: str,
+    tts_client: SpeechSynthesizer,
+    store: bool = True,
+    style: MessageStyleEnum = MessageStyleEnum.NONE,
+) -> None:
+    """
+    Play a text to the realtime TTS.
+
+    If `store` is `True`, the text will be stored in the call messages.
+    """
+    # Play each chunk
+    chunks = _chunk_for_tts(text)
+    for chunk in chunks:
+        tts_client.speak_ssml_async(
+            _ssml_from_text(
+                call=call,
+                style=style,
+                text=chunk,
+            ).ssml_text
+        )
+
+    if store:
+        await scheduler.spawn(
+            _store_assistant_message(
+                call=call,
+                style=style,
+                text=text,
+                scheduler=scheduler,
+            )
+        )
+
+
+async def _store_assistant_message(
     call: CallStateModel,
     style: MessageStyleEnum,
     text: str,
-    store: bool = True,
+    scheduler: Scheduler,
+) -> None:
+    """
+    Store an assistant message in the call history.
+    """
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
+        call.messages.append(
+            MessageModel(
+                content=text,
+                persona=MessagePersonaEnum.ASSISTANT,
+                style=style,
+            )
+        )
+
+
+def _chunk_for_tts(
+    text: str,
 ) -> list[str]:
     """
     Split a text in chunks and store them in the call messages.
+
+    Chunks are separated by sentences and are limited to the TTS capacity.
     """
     # Sanitize text for TTS
     text = re.sub(_TTS_SANITIZER_R, " ", text)  # Remove unwanted characters
     text = re.sub(r"\s+", " ", text)  # Remove multiple spaces
 
-    # Store text in call messages
-    if store:
-        async with _db.call_transac(call):
-            call.messages.append(
-                MessageModel(
-                    content=text,
-                    persona=MessagePersonaEnum.ASSISTANT,
-                    style=style,
-                )
-            )
-
     # Split text in chunks, separated by sentence
     chunks = []
     chunk = ""
     for to_add, _ in tts_sentence_split(text, True):
-        if (
-            len(chunk) + len(to_add) >= _MAX_CHARACTERS_PER_TTS
-        ):  # If chunck overflows TTS capacity, start a new record
+        # If chunck overflows TTS capacity, start a new record
+        if len(chunk) + len(to_add) >= _MAX_CHARACTERS_PER_TTS:
             # Remove trailing space as sentences are separated by spaces
             chunks.append(chunk.strip())
             # Reset chunk
@@ -246,14 +320,15 @@ async def _chunk_before_tts(
         # Add space to separate sentences
         chunk += to_add + " "
 
-    if chunk:  # If there is a remaining chunk, add it
+    # If there is a remaining chunk, add it
+    if chunk:
         # Remove trailing space as sentences are separated by spaces
         chunks.append(chunk.strip())
 
     return chunks
 
 
-def _audio_from_text(
+def _ssml_from_text(
     call: CallStateModel,
     style: MessageStyleEnum,
     text: str,
@@ -261,7 +336,7 @@ def _audio_from_text(
     """
     Generate an audio source that can be read by Azure Communication Services SDK.
 
-    Text requires to be SVG escaped, and SSML tags are used to control the voice. Plus, text is slowed down by 5% to make it more understandable for elderly people. Text is also truncated, as this is the limit of Azure Communication Services TTS, but a warning is logged.
+    Text requires to be SVG escaped, and SSML tags are used to control the voice. Text is also truncated, as this is the limit of Azure Communication Services TTS, but a warning is logged.
 
     See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-structure
     """
@@ -309,8 +384,8 @@ async def handle_recognize_ivr(
                 choices=choices,
                 input_type=RecognizeInputType.CHOICES,
                 interrupt_prompt=True,
-                operation_context=_context_builder({context}),
-                play_prompt=_audio_from_text(
+                operation_context=_context_serializer({context}),
+                play_prompt=_ssml_from_text(
                     call=call,
                     style=MessageStyleEnum.NONE,
                     text=text,
@@ -326,18 +401,21 @@ async def handle_hangup(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
+    """
+    Hang up a call.
+
+    If the call is already hung up, the exception will be suppressed.
+    """
     logger.info("Hanging up: %s", call.initiate.phone_number)
-    try:
+    with (
+        # Suppress hangup exception
+        suppress(CallHangupException),
+        # Detect hangup exception
+        _detect_hangup(),
+    ):
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.hang_up(is_for_everyone=True)
-    except ResourceNotFoundError:
-        logger.debug("Call already hung up")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before playing")
-        else:
-            raise e
 
 
 async def handle_transfer(
@@ -346,29 +424,32 @@ async def handle_transfer(
     target: str,
     context: ContextEnum | None = None,
 ) -> None:
+    """
+    Transfer a call to another participant.
+
+    Can raise a `CallHangupException` if the call is hung up.
+    """
     logger.info("Transferring call: %s", target)
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.transfer_call_to_participant(
-                operation_context=_context_builder({context}),
+                operation_context=_context_serializer({context}),
                 target_participant=PhoneNumberIdentifier(target),
             )
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before transferring")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before transferring")
-        else:
-            raise e
 
 
 async def start_audio_streaming(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
+    """
+    Start audio streaming to the call.
+
+    Can raise a `CallHangupException` if the call is hung up.
+    """
     logger.info("Starting audio streaming")
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             # TODO: Use the public API once the "await" have been fixed
@@ -377,41 +458,146 @@ async def start_audio_streaming(
                 call_connection_id=call_client._call_connection_id,
                 start_media_streaming_request=StartMediaStreamingRequest(),
             )
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before starting streaming")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before starting streaming")
-        else:
-            raise e
 
 
 async def stop_audio_streaming(
     client: CallAutomationClient,
     call: CallStateModel,
 ) -> None:
+    """
+    Stop audio streaming to the call.
+
+    Can raise a `CallHangupException` if the call is hung up.
+    """
     logger.info("Stopping audio streaming")
-    try:
+    with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
         async with _use_call_client(client, call.voice_id) as call_client:
             await call_client.stop_media_streaming()
-    except ResourceNotFoundError:
-        logger.debug("Call hung up before stopping streaming")
-    except HttpResponseError as e:
-        if "call already terminated" in e.message.lower():
-            logger.debug("Call hung up before stopping streaming")
-        else:
-            raise e
 
 
-def _context_builder(contexts: set[ContextEnum | None] | None) -> str | None:
+def _context_serializer(contexts: set[ContextEnum | None] | None) -> str | None:
+    """
+    Serialize a set of contexts to a JSON string.
+
+    Returns `None` if no context is provided.
+    """
     if not contexts:
         return None
     return json.dumps([context.value for context in contexts if context])
+
+
+@contextmanager
+def _detect_hangup() -> Generator[None, None, None]:
+    """
+    Catch a call hangup and raise a `CallHangupException` instead of the Call Automation SDK exceptions.
+    """
+    try:
+        yield
+    except ResourceNotFoundError:
+        logger.debug("Call hung up")
+        raise CallHangupException
+    except HttpResponseError as e:
+        if "call already terminated" in e.message.lower():
+            logger.debug("Call hung up")
+            raise CallHangupException
+        else:
+            raise e
 
 
 @asynccontextmanager
 async def _use_call_client(
     client: CallAutomationClient, voice_id: str
 ) -> AsyncGenerator[CallConnectionClient, None]:
+    """
+    Return the call client for a given call.
+    """
+    # Client already been created in the call client, never close it from here
     yield client.get_call_connection(call_connection_id=voice_id)
+
+
+@asynccontextmanager
+async def use_tts_client(
+    audio: asyncio.Queue[bytes | bool],
+    call: CallStateModel,
+) -> AsyncGenerator[SpeechSynthesizer, None]:
+    """
+    Use a text-to-speech client for a call.
+    """
+    # Get AAD token
+    aad_token = await (await token("https://cognitiveservices.azure.com/.default"))()
+
+    # Create real-time client
+    # TODO: Use v2 endpoint (https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-lower-speech-synthesis-latency?pivots=programming-language-python#how-to-use-text-streaming) but seems compatible with AAD auth? Found nothing in the docs (https://github.com/Azure-Samples/cognitive-services-speech-sdk/blob/e392c9ca09d44ebd65081e7cb44593a2b16cd5a7/samples/python/web/avatar/app.py#L137).
+    config = SpeechConfig(
+        endpoint=f"wss://{CONFIG.cognitive_service.region}.tts.speech.microsoft.com/cognitiveservices/websocket/v1",
+    )
+    config.authorization_token = (
+        f"aad#{CONFIG.cognitive_service.resource_id}#{aad_token}"
+    )
+    config.speech_synthesis_voice_name = call.lang.voice
+    if call.lang.custom_voice_endpoint_id:
+        config.endpoint_id = call.lang.custom_voice_endpoint_id
+    # TODO: How to close the client?
+    client = SpeechSynthesizer(
+        speech_config=config,
+        audio_config=AudioOutputConfig(
+            stream=PushAudioOutputStream(TtsCallback(audio))
+        ),
+    )
+
+    # Connect events
+    client.synthesis_started.connect(lambda _: logger.debug("TTS started"))
+    client.synthesis_completed.connect(lambda _: logger.debug("TTS completed"))
+
+    # Return
+    yield client
+
+
+@asynccontextmanager
+async def use_stt_client(
+    audio_bits_per_sample: int,
+    audio_channels: int,
+    audio_sample_rate: int,
+    call: CallStateModel,
+    callback: Callable[[str], None],
+) -> AsyncGenerator[PushAudioInputStream, None]:
+    """
+    Use a speech-to-text client for a call.
+
+    Yields a stream to push audio data to the client. Once the context is exited, the client will stop.
+    """
+    # Get AAD token
+    aad_token = await (await token("https://cognitiveservices.azure.com/.default"))()
+
+    # Create client
+    stream = PushAudioInputStream(
+        stream_format=AudioStreamFormat(
+            bits_per_sample=audio_bits_per_sample,
+            channels=audio_channels,
+            samples_per_second=audio_sample_rate,
+        ),
+    )
+    client = SpeechRecognizer(
+        audio_config=AudioConfig(stream=stream),
+        language=call.lang.short_code,
+        speech_config=SpeechConfig(
+            auth_token=f"aad#{CONFIG.cognitive_service.resource_id}#{aad_token}",
+            region=CONFIG.cognitive_service.region,
+        ),
+    )
+
+    # Connect events
+    client.recognized.connect(lambda e: callback(e.result.text))
+    client.session_started.connect(lambda _: logger.debug("STT started"))
+    client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
+    client.canceled.connect(lambda event: logger.warning("STT cancelled: %s", event))
+
+    try:
+        # Start STT
+        client.start_continuous_recognition_async()
+        # Return
+        yield stream
+    finally:
+        # Stop STT
+        client.stop_continuous_recognition_async()

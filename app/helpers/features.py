@@ -1,8 +1,10 @@
+from contextlib import suppress
 from typing import TypeVar, cast
 
 from azure.appconfiguration.aio import AzureAppConfigurationClient
 from azure.core.exceptions import ResourceNotFoundError
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config import CONFIG
 from app.helpers.config_models.cache import MemoryModel
 from app.helpers.http import azure_transport
@@ -12,7 +14,6 @@ from app.persistence.icache import ICache
 from app.persistence.memory import MemoryCache
 
 _cache: ICache = MemoryCache(MemoryModel(max_size=100))
-_client: AzureAppConfigurationClient | None = None
 T = TypeVar("T", bool, int, float, str)
 
 
@@ -78,21 +79,19 @@ async def _get(key: str, type_res: type[T]) -> T | None:
     return _parse(value=setting.value, type_res=type_res)
 
 
+@async_lru_cache()
 async def _use_client() -> AzureAppConfigurationClient:
     """
     Generate the App Configuration client and close it after use.
     """
-    global _client  # noqa: PLW0603
-    if not _client:
-        _client = AzureAppConfigurationClient(
-            # Performance
-            transport=await azure_transport(),
-            # Deployment
-            base_url=CONFIG.app_configuration.endpoint,
-            # Authentication
-            credential=await credential(),
-        )
-    return _client
+    return AzureAppConfigurationClient(
+        # Performance
+        transport=await azure_transport(),
+        # Deployment
+        base_url=CONFIG.app_configuration.endpoint,
+        # Authentication
+        credential=await credential(),
+    )
 
 
 def _cache_key(key: str) -> str:
@@ -100,7 +99,7 @@ def _cache_key(key: str) -> str:
 
 
 def _parse(value: str, type_res: type[T]) -> T | None:
-    try:
+    with suppress(ValueError):
         if type_res is bool:
             return cast(T, value.lower() == "true")
         if type_res is int:
@@ -110,5 +109,3 @@ def _parse(value: str, type_res: type[T]) -> T | None:
         if type_res is str:
             return cast(T, str(value))
         raise ValueError(f"Unsupported type: {type_res}")
-    except ValueError:
-        pass
