@@ -244,7 +244,7 @@ class AiSearchSearch(ISearch):
             compressions=[
                 ScalarQuantizationCompression(
                     compression_name="compression-scalar",
-                    rescomonitorring_options=RescoringOptions(
+                    rescoring_options=RescoringOptions(
                         default_oversampling=10,
                         rescore_storage_method=VectorSearchCompressionRescoreStorageMethod.PRESERVE_ORIGINALS,
                     ),
