@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from uuid import UUID
 
+from aiojobs import Scheduler
+
 from app.helpers.monitoring import tracer
 from app.models.call import CallStateModel
 from app.models.readiness import ReadinessEnum
@@ -26,7 +28,11 @@ class IStore(ABC):
 
     @abstractmethod
     @tracer.start_as_current_span("store_call_transac")
-    def call_transac(self, call: CallStateModel) -> AbstractAsyncContextManager[None]:
+    def call_transac(
+        self,
+        call: CallStateModel,
+        scheduler: Scheduler,
+    ) -> AbstractAsyncContextManager[None]:
         pass
 
     @abstractmethod

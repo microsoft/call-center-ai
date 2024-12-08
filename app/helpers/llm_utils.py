@@ -5,11 +5,16 @@ See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd
 
 import asyncio
 import inspect
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from inspect import getmembers, isfunction
 from textwrap import dedent
 from typing import Annotated, Any, ForwardRef, TypeVar
 
+from aiojobs import Scheduler
+from azure.cognitiveservices.speech import (
+    SpeechSynthesizer,
+)
+from azure.communication.callautomation.aio import CallAutomationClient
 from jinja2 import Environment
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
@@ -39,12 +44,27 @@ class Parameters(BaseModel):
 
 class AbstractPlugin:
     call: CallStateModel
+    client: CallAutomationClient
+    post_callback: Callable[[CallStateModel], Awaitable[None]]
+    scheduler: Scheduler
+    tts_callback: Callable[[str], Awaitable[None]]
+    tts_client: SpeechSynthesizer
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         call: CallStateModel,
+        client: CallAutomationClient,
+        post_callback: Callable[[CallStateModel], Awaitable[None]],
+        scheduler: Scheduler,
+        tts_callback: Callable[[str], Awaitable[None]],
+        tts_client: SpeechSynthesizer,
     ):
         self.call = call
+        self.client = client
+        self.post_callback = post_callback
+        self.scheduler = scheduler
+        self.tts_callback = tts_callback
+        self.tts_client = tts_client
 
     async def to_openai(self) -> list[ChatCompletionToolParam]:
         return await asyncio.gather(

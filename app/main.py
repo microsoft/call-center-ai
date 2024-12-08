@@ -1,6 +1,6 @@
 import asyncio
 import json
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from http import HTTPStatus
@@ -11,6 +11,7 @@ from uuid import UUID
 
 import jwt
 import mistune
+from aiojobs import Scheduler
 from azure.communication.callautomation import (
     MediaStreamingAudioChannelType,
     MediaStreamingContentType,
@@ -29,6 +30,7 @@ from fastapi import (
     Request,
     Response,
     WebSocket,
+    WebSocketDisconnect,
 )
 from fastapi.exceptions import RequestValidationError, ValidationException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -42,17 +44,16 @@ from twilio.twiml.messaging_response import MessagingResponse
 from app.helpers.cache import async_lru_cache
 from app.helpers.call_events import (
     on_audio_connected,
+    on_automation_play_completed,
+    on_automation_recognize_error,
     on_call_connected,
     on_call_disconnected,
     on_end_call,
     on_ivr_recognized,
     on_new_call,
-    on_play_completed,
     on_play_error,
     on_play_started,
-    on_recognize_error,
     on_sms_received,
-    on_transfer_completed,
     on_transfer_error,
 )
 from app.helpers.call_utils import ContextEnum as CallContextEnum
@@ -89,7 +90,6 @@ _jinja.filters["markdown"] = lambda x: (
 )  # pyright: ignore
 
 # Azure Communication Services
-_automation_client: CallAutomationClient | None = None
 _source_caller = PhoneNumberIdentifier(CONFIG.communication_services.phone_number)
 logger.info("Using phone number %s", CONFIG.communication_services.phone_number)
 _communication_services_jwks_client = jwt.PyJWKClient(
@@ -491,10 +491,12 @@ async def sms_event(
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
     # Execute business logic
-    await on_sms_received(
-        call=call,
-        message=message,
-    )
+    async with Scheduler() as scheduler:
+        await on_sms_received(
+            call=call,
+            message=message,
+            scheduler=scheduler,
+        )
 
 
 async def _communicationservices_validate_jwt(
@@ -576,46 +578,79 @@ async def communicationservices_wss_post(
     # Client SDK
     automation_client = await _use_automation_client()
 
-    # Queue audio data
-    audio_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    # Queues
+    audio_in: asyncio.Queue[bytes] = asyncio.Queue()
+    audio_out: asyncio.Queue[bytes | bool] = asyncio.Queue()
 
     async def _consume_audio() -> None:
+        """
+        Consume audio data from the WebSocket.
+        """
         logger.debug("Audio data consumer started")
-        async for event in websocket.iter_json():
-            # DEBUG: Uncomment to see all events, but be careful, it will be verbose ^_^
-            # logger.debug("Audio event received %s", event)
+        with suppress(WebSocketDisconnect):
+            async for event in websocket.iter_json():
+                # TODO: Handle configuration event (audio format, sample rate, etc.)
+                # Skip non-audio events
+                if "kind" not in event or event["kind"] != "AudioData":
+                    continue
+                # Filter out silent audio
+                audio_data: dict[str, Any] = event.get("audioData", {})
+                audio_base64: str | None = audio_data.get("data", None)
+                audio_silent: bool | None = audio_data.get("silent", True)
+                if audio_silent or not audio_base64:
+                    continue
+                # Queue audio
+                await audio_in.put(b64decode(audio_base64))
 
-            # TODO: Handle configuration event (audio format, sample rate, etc.)
-            # Skip non-audio events
-            if "kind" not in event or event["kind"] != "AudioData":
-                continue
+    async def _send_audio() -> None:
+        """
+        Send audio data to the WebSocket
+        """
+        logger.debug("Audio data sender started")
+        with suppress(WebSocketDisconnect):
+            while True:
+                audio_data = await audio_out.get()
+                # Send audio
+                if isinstance(audio_data, bytes):
+                    await websocket.send_json(
+                        {
+                            "kind": "AudioData",
+                            "audioData": {
+                                "data": b64encode(audio_data).decode("utf-8"),
+                            },
+                        }
+                    )
+                # Stop audio
+                elif audio_data is False:
+                    await websocket.send_json(
+                        {
+                            "kind": "StopAudio",
+                            "stopAudio": {},
+                        }
+                    )
+                audio_out.task_done()
 
-            # Filter out silent audio
-            audio_data: dict[str, Any] = event.get("audioData", {})
-            audio_base64: str | None = audio_data.get("data", None)
-            audio_silent: bool | None = audio_data.get("silent", True)
-            if audio_silent or not audio_base64:
-                continue
-
-            # Queue audio
-            await audio_queue.put(b64decode(audio_base64))
-
-    await asyncio.gather(
-        # Consume audio from the WebSocket
-        _consume_audio(),
-        # Process audio
-        # TODO: Dynamically set the audio format
-        on_audio_connected(
-            audio_bits_per_sample=16,
-            audio_channels=1,
-            audio_sample_rate=16000,
-            audio_stream=audio_queue,
-            call=call,
-            client=automation_client,
-            post_callback=_trigger_post_event,
-            training_callback=_trigger_training_event,
-        ),
-    )
+    async with Scheduler() as scheduler:
+        await asyncio.gather(
+            # Consume audio from the WebSocket
+            _consume_audio(),
+            # Send audio to the WebSocket
+            _send_audio(),
+            # Process audio
+            # TODO: Dynamically set the audio format
+            on_audio_connected(
+                audio_bits_per_sample=16,
+                audio_channels=1,
+                audio_in=audio_in,
+                audio_out=audio_out,
+                audio_sample_rate=16000,
+                call=call,
+                client=automation_client,
+                post_callback=_trigger_post_event,
+                scheduler=scheduler,
+                training_callback=_trigger_training_event,
+            ),
+        )
 
 
 @api.post("/communicationservices/callback/{call_id}/{secret}")
@@ -642,22 +677,25 @@ async def communicationservices_callback_post(
         raise RequestValidationError(["Events must be a list"])
 
     # Process events in parallel
-    await asyncio.gather(
-        *[
-            _communicationservices_event_worker(
-                call_id=call_id,
-                event_dict=event,
-                secret=secret,
-            )
-            for event in events
-        ]
-    )
+    async with Scheduler() as scheduler:
+        await asyncio.gather(
+            *[
+                _communicationservices_event_worker(
+                    call_id=call_id,
+                    event_dict=event,
+                    secret=secret,
+                    scheduler=scheduler,
+                )
+                for event in events
+            ]
+        )
 
 
 # TODO: Refacto, too long (and remove PLR0912/PLR0915 ignore)
 async def _communicationservices_event_worker(
     call_id: UUID,
     event_dict: dict,
+    scheduler: Scheduler,
     secret: str,
 ) -> None:
     """
@@ -685,7 +723,10 @@ async def _communicationservices_event_worker(
 
     # Store connection ID
     connection_id = event.data["callConnectionId"]
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.voice_id = connection_id
 
     # Extract context
@@ -708,6 +749,8 @@ async def _communicationservices_event_worker(
             await on_call_connected(
                 call=call,
                 client=automation_client,
+                post_callback=_trigger_post_event,
+                scheduler=scheduler,
                 server_call_id=server_call_id,
             )
 
@@ -717,6 +760,7 @@ async def _communicationservices_event_worker(
                 call=call,
                 client=automation_client,
                 post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
         # Speech/IVR recognized
@@ -729,6 +773,8 @@ async def _communicationservices_event_worker(
                     call=call,
                     client=automation_client,
                     label=label_detected,
+                    post_callback=_trigger_post_event,
+                    scheduler=scheduler,
                 )
 
         # Speech/IVR failed
@@ -741,26 +787,29 @@ async def _communicationservices_event_worker(
                 error_code,
                 error_message,
             )
-            await on_recognize_error(
+            await on_automation_recognize_error(
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
                 post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
         # Media started
         case "Microsoft.Communication.PlayStarted":
             await on_play_started(
                 call=call,
+                scheduler=scheduler,
             )
 
         # Media played
         case "Microsoft.Communication.PlayCompleted":
-            await on_play_completed(
+            await on_automation_play_completed(
                 call=call,
                 client=automation_client,
                 contexts=operation_contexts,
                 post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
         # Media play failed
@@ -769,16 +818,16 @@ async def _communicationservices_event_worker(
             error_code: int = result_information["subCode"]
             await on_play_error(error_code)
 
-        case "Microsoft.Communication.CallTransferAccepted":  # Call transfer accepted
-            await on_transfer_completed()
-
-        case "Microsoft.Communication.CallTransferFailed":  # Call transfer failed
+        # Call transfer failed
+        case "Microsoft.Communication.CallTransferFailed":
             result_information = event.data["resultInformation"]
             sub_code: int = result_information["subCode"]
             await on_transfer_error(
                 call=call,
                 client=automation_client,
                 error_code=sub_code,
+                post_callback=_trigger_post_event,
+                scheduler=scheduler,
             )
 
         case _:
@@ -832,7 +881,11 @@ async def post_event(
     logger.debug("Post event received")
 
     # Execute business logic
-    await on_end_call(call)
+    async with Scheduler() as scheduler:
+        await on_end_call(
+            call=call,
+            scheduler=scheduler,
+        )
 
 
 async def _trigger_training_event(call: CallStateModel) -> None:
@@ -915,11 +968,11 @@ async def twilio_sms_post(
         # Enrich span
         span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
-        # Execute business logic
-        event_status = await on_sms_received(
-            call=call,
-            message=Body,
-        )
+        async with Scheduler() as scheduler:
+            # Execute business logic
+            event_status = await on_sms_received(
+                call=call, message=Body, scheduler=scheduler
+            )
 
         # Return error for unsuccessful event
         if not event_status:

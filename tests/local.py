@@ -1,19 +1,21 @@
 import asyncio
 
-import aiojobs
+from aiojobs import Scheduler
 
 from app.helpers.call_events import (
     on_call_connected,
     on_call_disconnected,
     on_end_call,
     on_ivr_recognized,
-    on_play_completed,
 )
 from app.helpers.call_llm import _out_answer
 from app.helpers.config import CONFIG
 from app.helpers.logging import logger
 from app.models.call import CallInitiateModel, CallStateModel
-from tests.conftest import CallAutomationClientMock
+from app.models.message import MessageModel, PersonaEnum as MessagePersonaEnum
+from tests.conftest import CallAutomationClientMock, SpeechSynthesizerMock
+
+_db = CONFIG.database.instance()
 
 
 async def main() -> None:
@@ -33,6 +35,9 @@ async def main() -> None:
         logger.info("🤖 Transfering")
 
     # Mocks
+    tts_client = SpeechSynthesizerMock(
+        play_media_callback=_play_media_callback,
+    )
     call = CallStateModel(
         initiate=CallInitiateModel(
             **CONFIG.conversation.initiate.model_dump(),
@@ -48,33 +53,54 @@ async def main() -> None:
     )
     call_client = automation_client.get_call_connection()
 
-    async def _post_callback(_call: CallStateModel) -> None:
-        await on_end_call(call=_call)
+    async with Scheduler() as scheduler:
 
-    async def _training_callback(_call: CallStateModel) -> None:
-        await _call.trainings(cache_only=False)
+        async def _post_callback(_call: CallStateModel) -> None:
+            await on_end_call(
+                call=_call,
+                scheduler=scheduler,
+            )
 
-    # Connect call
-    await on_call_connected(
-        call=call,
-        client=automation_client,
-        server_call_id="dummy",
-    )
+        async def _training_callback(_call: CallStateModel) -> None:
+            await _call.trainings(cache_only=False)
 
-    # First IVR
-    await on_ivr_recognized(
-        call=call,
-        client=automation_client,
-        label=call.lang.short_code,
-    )
+        # Connect call
+        await on_call_connected(
+            call=call,
+            client=automation_client,
+            post_callback=_post_callback,
+            scheduler=scheduler,
+            server_call_id="dummy",
+        )
 
-    # Simulate conversation with speech recognition
-    async with aiojobs.Scheduler() as scheduler:
+        # First IVR
+        await on_ivr_recognized(
+            call=call,
+            client=automation_client,
+            label=call.lang.short_code,
+            post_callback=_post_callback,
+            scheduler=scheduler,
+        )
+
         # Simulate conversation
         while continue_conversation:
-            message = input("Customer: ")
-            if message.strip().lower() == "exit":
+            # Get speech
+            speech = input("Customer: ")
+            if speech.strip().lower() == "exit":
                 break
+
+            # Add message to history
+            async with _db.call_transac(
+                call=call,
+                scheduler=scheduler,
+            ):
+                call.messages.append(
+                    MessageModel(
+                        content=speech,
+                        persona=MessagePersonaEnum.HUMAN,
+                    )
+                )
+
             # Respond
             await _out_answer(
                 call=call,
@@ -82,25 +108,21 @@ async def main() -> None:
                 post_callback=_post_callback,
                 scheduler=scheduler,
                 training_callback=_training_callback,
+                tts_client=tts_client,
             )
-            # Receip
-            await on_play_completed(
-                call=call,
-                client=automation_client,
-                contexts=call_client.last_contexts,
-                post_callback=_post_callback,
-            )
+
             # Reset contexts
             call_client.last_contexts.clear()
 
-    logger.info("Conversation ended, handling disconnection...")
+        logger.info("Conversation ended, handling disconnection...")
 
-    # Disconnect call
-    await on_call_disconnected(
-        call=call,
-        client=automation_client,
-        post_callback=_post_callback,
-    )
+        # Disconnect call
+        await on_call_disconnected(
+            call=call,
+            client=automation_client,
+            post_callback=_post_callback,
+            scheduler=scheduler,
+        )
 
     logger.info("Bye bye!")
 

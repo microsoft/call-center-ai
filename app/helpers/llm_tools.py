@@ -1,12 +1,13 @@
 import asyncio
-from collections.abc import Awaitable, Callable
 from html import escape
 from typing import Annotated, Literal, TypedDict
 
-from azure.communication.callautomation.aio import CallAutomationClient
 from pydantic import ValidationError
 
-from app.helpers.call_utils import ContextEnum as CallContextEnum, handle_play_text
+from app.helpers.call_utils import (
+    handle_realtime_tts,
+    handle_transfer,
+)
 from app.helpers.config import CONFIG
 from app.helpers.llm_utils import AbstractPlugin
 from app.helpers.logging import logger
@@ -29,22 +30,6 @@ class UpdateClaimDict(TypedDict):
 
 
 class DefaultPlugin(AbstractPlugin):
-    client: CallAutomationClient
-    post_callback: Callable[[CallStateModel], Awaitable[None]]
-    tts_callback: Callable[[str], Awaitable[None]]
-
-    def __init__(
-        self,
-        call: CallStateModel,
-        client: CallAutomationClient,
-        post_callback: Callable[[CallStateModel], Awaitable[None]],
-        tts_callback: Callable[[str], Awaitable[None]],
-    ):
-        super().__init__(call)
-        self.client = client
-        self.post_callback = post_callback
-        self.tts_callback = tts_callback
-
     async def end_call(self) -> str:
         """
         Use this if the customer said they want to end the call.
@@ -61,11 +46,14 @@ class DefaultPlugin(AbstractPlugin):
         - All participants are satisfied and agree to end the call
         - Customer said "bye bye"
         """
-        await handle_play_text(
+        from app.helpers.call_events import hangup_realtime_now
+
+        await hangup_realtime_now(
             call=self.call,
             client=self.client,
-            context=CallContextEnum.GOODBYE,
-            text=await CONFIG.prompts.tts.goodbye(self.call),
+            post_callback=self.post_callback,
+            scheduler=self.scheduler,
+            tts_client=self.tts_client,
         )
         return "Call ended"
 
@@ -296,11 +284,18 @@ class DefaultPlugin(AbstractPlugin):
         - No more information available and customer insists
         - Not satisfied with the answers
         """
-        await handle_play_text(
+        # Play TTS
+        await handle_realtime_tts(
+            call=self.call,
+            scheduler=self.scheduler,
+            text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
+            tts_client=self.tts_client,
+        )
+        # Transfer
+        await handle_transfer(
             call=self.call,
             client=self.client,
-            context=CallContextEnum.CONNECT_AGENT,
-            text=await CONFIG.prompts.tts.end_call_to_connect_agent(self.call),
+            target=self.call.initiate.agent_phone_number,
         )
         return "Transferring to human agent"
 
@@ -564,10 +559,11 @@ class DefaultPlugin(AbstractPlugin):
         - Customer made a mistake in the language selection
         - Trouble understanding the voice in the current language
         """
+        # Check if lang is available
         if not any(
             lang == available.short_code
             for available in self.call.initiate.lang.availables
-        ):  # Check if lang is available
+        ):
             return f"Language {lang} not available"
 
         # Update lang

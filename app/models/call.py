@@ -14,6 +14,7 @@ from app.helpers.config_models.conversation import (
 from app.helpers.monitoring import tracer
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
 from app.models.message import (
+    ActionEnum as MessageActionEnum,
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
     StyleEnum as MessageStyleEnum,
@@ -169,3 +170,16 @@ class CallStateModel(CallGetModel, extra="ignore"):
                 continue
             return message.style
         return MessageStyleEnum.NONE
+
+    def had_interaction(self) -> bool:
+        """
+        Check if the call had an interaction.
+
+        An interaction is defined as a call with a human message.
+        """
+        return not (
+            len(self.messages) >= 3  # noqa: PLR2004
+            and self.messages[-3].action == MessageActionEnum.CALL
+            and self.messages[-2].persona == MessagePersonaEnum.ASSISTANT
+            and self.messages[-1].action == MessageActionEnum.HANGUP
+        )
