@@ -4,7 +4,7 @@ from binascii import Error as BinasciiError
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-import aiojobs
+from aiojobs import Scheduler
 from azure.core.exceptions import ServiceRequestError
 from azure.storage.queue.aio import QueueClient, QueueServiceClient
 from pydantic import BaseModel
@@ -135,23 +135,30 @@ class AzureQueueStorage:
             self._name,
             func.__name__,
         )
-        async with aiojobs.Scheduler() as scheduler:
-            # Loop forever to receive messages
-            while messages := self.receive_messages(
-                max_messages=32,
-                visibility_timeout=32 * 5,  # 5 secs per message
-            ):
-                # Process messages
-                async for message in messages:
-                    await scheduler.spawn(
-                        self._process_message(
-                            arg=arg,
-                            func=func,
-                            message=message,
+        async with Scheduler() as scheduler:
+            try:
+                # Loop forever to receive messages
+                while messages := self.receive_messages(
+                    max_messages=32,
+                    visibility_timeout=32 * 5,  # 5 secs per message
+                ):
+                    # Process messages
+                    async for message in messages:
+                        await scheduler.spawn(
+                            self._process_message(
+                                arg=arg,
+                                func=func,
+                                message=message,
+                            )
                         )
-                    )
-                # Add a small delay to avoid high CPU usage
-                await asyncio.sleep(1)
+                    # Add a small delay to avoid high CPU usage
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                logger.debug(
+                    'Azure Queue Storage "%s" trigger task cancelled', self._name
+                )
+            finally:
+                await scheduler.close()
 
     async def _process_message(
         self,

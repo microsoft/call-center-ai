@@ -2,6 +2,10 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
+from aiojobs import Scheduler
+from azure.cognitiveservices.speech import (
+    SpeechSynthesizer,
+)
 from azure.communication.callautomation import (
     AzureBlobContainerRecordingStorage,
     DtmfTone,
@@ -21,10 +25,10 @@ from pydantic import ValidationError
 from app.helpers.call_llm import load_llm_chat
 from app.helpers.call_utils import (
     ContextEnum as CallContextEnum,
+    handle_automation_tts,
     handle_hangup,
-    handle_play_text,
+    handle_realtime_tts,
     handle_recognize_ivr,
-    handle_transfer,
     start_audio_streaming,
 )
 from app.helpers.config import CONFIG
@@ -66,6 +70,7 @@ async def on_new_call(
     streaming_options = MediaStreamingOptions(
         audio_channel_type=MediaStreamingAudioChannelType.UNMIXED,
         content_type=MediaStreamingContentType.AUDIO,
+        enable_bidirectional=True,
         start_media_streaming=False,
         transport_type=MediaStreamingTransportType.WEBSOCKET,
         transport_url=wss_url,
@@ -102,6 +107,8 @@ async def on_new_call(
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
     server_call_id: str,
 ) -> None:
     """
@@ -111,8 +118,26 @@ async def on_call_connected(
     """
     logger.info("Call connected, asking for language")
 
+    # Execute business logic
+    await asyncio.gather(
+        _handle_ivr_language(
+            call=call,
+            client=client,
+            post_callback=post_callback,
+            scheduler=scheduler,
+        ),  # First, every time a call is answered, confirm the language
+        _handle_recording(
+            call=call,
+            client=client,
+            server_call_id=server_call_id,
+        ),  # Second, start recording the call
+    )
+
     # Add define the call as in progress
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.in_progress = True
         call.recognition_retry = 0
         call.messages.append(
@@ -123,25 +148,13 @@ async def on_call_connected(
             )
         )
 
-    # Execute business logic
-    await asyncio.gather(
-        _handle_ivr_language(
-            call=call,
-            client=client,
-        ),  # First, every time a call is answered, confirm the language
-        _handle_recording(
-            call=call,
-            client=client,
-            server_call_id=server_call_id,
-        ),  # Third, start recording the call
-    )
-
 
 @tracer.start_as_current_span("on_call_disconnected")
 async def on_call_disconnected(
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
     """
     Callback for when the call is disconnected.
@@ -149,10 +162,11 @@ async def on_call_disconnected(
     Hangs up the call and stores the final message.
     """
     logger.info("Call disconnected")
-    await _handle_hangup(
+    await hangup_now(
         call=call,
         client=client,
         post_callback=post_callback,
+        scheduler=scheduler,
     )
 
 
@@ -160,111 +174,179 @@ async def on_call_disconnected(
 async def on_audio_connected(  # noqa: PLR0913
     audio_bits_per_sample: int,
     audio_channels: int,
+    audio_in: asyncio.Queue[bytes],
+    audio_out: asyncio.Queue[bytes | bool],
     audio_sample_rate: int,
-    audio_stream: asyncio.Queue[bytes],
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     training_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
     """
     Callback for when the audio stream is connected.
+
+    Starts the real-time conversation with the LLM.
     """
     await load_llm_chat(
         audio_bits_per_sample=audio_bits_per_sample,
         audio_channels=audio_channels,
+        audio_in=audio_in,
+        audio_out=audio_out,
         audio_sample_rate=audio_sample_rate,
-        audio_stream=audio_stream,
         automation_client=client,
         call=call,
         post_callback=post_callback,
+        scheduler=scheduler,
         training_callback=training_callback,
     )
 
 
-@tracer.start_as_current_span("on_recognize_timeout_error")
-async def on_recognize_error(
+@tracer.start_as_current_span("on_automation_recognize_error")
+async def on_automation_recognize_error(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: set[CallContextEnum] | None,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
-    # Retry IVR recognition
-    if contexts and CallContextEnum.IVR_LANG_SELECT in contexts:
-        # Enrich span
-        span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
+    """
+    Callback for when an automation recognition fails.
 
-        # Retry IVR recognition
-        if call.recognition_retry < await recognition_retry_max():
-            logger.info(
-                "Timeout, retrying language selection (%s/%s)",
-                call.recognition_retry,
-                await recognition_retry_max(),
-            )
-            await _handle_ivr_language(
-                call=call,
-                client=client,
-            )
-
-        # IVR retries are exhausted, end call
-        else:
-            logger.info("Timeout, ending call")
-            await _handle_goodbye(
-                call=call,
-                client=client,
-                post_callback=post_callback,
-            )
-
-        return
-
-    # Voice retries are exhausted, end call
-    if call.recognition_retry >= await recognition_retry_max():
-        logger.info("Timeout, ending call")
-        await _handle_goodbye(
+    If the call should continue, increments the recognition retry counter and plays a timeout prompt. Else, hangs up the call.
+    """
+    if not await _pre_recognize_error(
+        call=call,
+        scheduler=scheduler,
+    ):
+        # Play TTS
+        await handle_automation_tts(
             call=call,
             client=client,
+            context=CallContextEnum.GOODBYE,
             post_callback=post_callback,
+            scheduler=scheduler,
+            store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+            text=await CONFIG.prompts.tts.goodbye(call),
         )
         return
 
-    # Increment the recognition retry counter
-    async with _db.call_transac(call):
-        call.recognition_retry += 1
+    # There are no retries with Call Automation SDK out of IVR recognition, as voice in-call is managed with raw audio in the LLM stack
+    if not contexts or CallContextEnum.IVR_LANG_SELECT not in contexts:
+        logger.warning("Unknown context %s, no action taken", contexts)
 
-    # Play a timeout prompt
-    await handle_play_text(
+    # Enrich span
+    span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
+
+    # Retry IVR recognition
+    logger.info(
+        "Timeout, retrying language selection (%s/%s)",
+        call.recognition_retry,
+        await recognition_retry_max(),
+    )
+    await _handle_ivr_language(
         call=call,
         client=client,
-        style=MessageStyleEnum.NONE,
-        text=await CONFIG.prompts.tts.timeout_silence(call),
+        post_callback=post_callback,
+        scheduler=scheduler,
     )
 
 
-async def _handle_goodbye(
+@tracer.start_as_current_span("on_realtime_recognize_error")
+async def on_realtime_recognize_error(
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
+    tts_client: SpeechSynthesizer,
 ) -> None:
-    res = await handle_play_text(
-        call=call,
-        client=client,
-        context=CallContextEnum.GOODBYE,
-        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
-        text=await CONFIG.prompts.tts.goodbye(call),
-    )
+    """
+    Callback for when a real-time recognition fails.
 
-    if not res:
-        logger.info("Failed to play goodbye prompt, ending call now")
-        await _handle_hangup(
+    If the call should continue, increments the recognition retry counter and plays a timeout prompt. Else, hangs up the call.
+    """
+    if not await _pre_recognize_error(
+        call=call,
+        scheduler=scheduler,
+    ):
+        await hangup_realtime_now(
             call=call,
             client=client,
             post_callback=post_callback,
+            scheduler=scheduler,
+            tts_client=tts_client,
         )
+        return
+
+    # Play a timeout prompt
+    await handle_realtime_tts(
+        call=call,
+        scheduler=scheduler,
+        store=False,
+        text=await CONFIG.prompts.tts.timeout_silence(call),
+        tts_client=tts_client,
+    )
+
+
+async def hangup_realtime_now(
+    call: CallStateModel,
+    client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
+    tts_client: SpeechSynthesizer,
+) -> None:
+    """
+    Hangup the call and play a goodbye.
+    """
+    # Play TTS
+    await handle_realtime_tts(
+        call=call,
+        scheduler=scheduler,
+        store=False,  # Do not store timeout prompt as it perturbs the LLM and makes it hallucinate
+        text=await CONFIG.prompts.tts.goodbye(call),
+        tts_client=tts_client,
+    )
+    # TODO: Hack to avoid the call to close before TTS is played
+    await asyncio.sleep(10)
+    # Hangup
+    await hangup_now(
+        call=call,
+        client=client,
+        post_callback=post_callback,
+        scheduler=scheduler,
+    )
+
+
+async def _pre_recognize_error(
+    call: CallStateModel,
+    scheduler: Scheduler,
+) -> bool:
+    """
+    Handle pre-recognition errors.
+
+    Tests if the call should continue after a recognition error. If yes, increments the recognition retry counter.
+
+    Returns True if the call should continue, False if it should end.
+    """
+    # Voice retries are exhausted, end call
+    if call.recognition_retry >= await recognition_retry_max():
+        logger.info("Timeout, ending call")
+        return False
+
+    # Increment the recognition retry counter
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
+        call.recognition_retry += 1
+
+    return True
 
 
 @tracer.start_as_current_span("on_play_started")
 async def on_play_started(
     call: CallStateModel,
+    scheduler: Scheduler,
 ) -> None:
     """
     Callback for when a media play action starts.
@@ -277,16 +359,20 @@ async def on_play_started(
     span_attribute(CallAttributes.CALL_CHANNEL, "voice")
 
     # Update last interaction
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.last_interaction_at = datetime.now(UTC)
 
 
 @tracer.start_as_current_span("on_play_completed")
-async def on_play_completed(
+async def on_automation_play_completed(
     call: CallStateModel,
     client: CallAutomationClient,
     contexts: set[CallContextEnum] | None,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
     """
     Callback for when a media play action completes.
@@ -299,7 +385,10 @@ async def on_play_completed(
     span_attribute(CallAttributes.CALL_CHANNEL, "voice")
 
     # Update last interaction
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.last_interaction_at = datetime.now(UTC)
 
     # Skip if no context data
@@ -312,20 +401,20 @@ async def on_play_completed(
         or CallContextEnum.GOODBYE in contexts
     ):
         logger.info("Ending call")
-        await _handle_hangup(
+        await hangup_now(
             call=call,
             client=client,
             post_callback=post_callback,
+            scheduler=scheduler,
         )
         return
 
-    # Call transfer context
-    if CallContextEnum.CONNECT_AGENT in contexts:
-        logger.info("Initiating transfer call initiated")
-        await handle_transfer(
+    # Start real-time
+    if CallContextEnum.START_REALTIME in contexts:
+        logger.info("Starting real-time")
+        await start_audio_streaming(
             call=call,
             client=client,
-            target=call.initiate.agent_phone_number,
         )
         return
 
@@ -370,9 +459,13 @@ async def on_ivr_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
     label: str,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
     """
     Callback for when an IVR recognition is successful.
+
+    Updates the call language and starts the real-time conversation with the LLM.
     """
     logger.info("IVR recognized: %s", label)
 
@@ -391,42 +484,36 @@ async def on_ivr_recognized(
         return
 
     logger.info("Setting call language to %s", lang)
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.lang = lang.short_code
         call.recognition_retry = 0
 
-    if len(call.messages) <= 1:  # First call, or only the call action
-        await asyncio.gather(
-            handle_play_text(
-                call=call,
-                client=client,
-                text=await CONFIG.prompts.tts.hello(call),
-            ),  # First, greet the userwith the next message
-            start_audio_streaming(
-                call=call,
-                client=client,
-            ),  # Second, the conversation with the LLM should start
-        )  # All in parallel to lower the response latency
-
-    else:  # Returning call
-        await asyncio.gather(
-            handle_play_text(
-                call=call,
-                client=client,
-                style=MessageStyleEnum.CHEERFUL,
-                text=await CONFIG.prompts.tts.welcome_back(call),
-            ),  # First, welcome back the user
-            start_audio_streaming(
-                call=call,
-                client=client,
-            ),  # Second, the conversation with the LLM should start
+    # First call
+    if len(call.messages) <= 1:
+        # Greet the userwith the next message
+        await handle_automation_tts(
+            call=call,
+            client=client,
+            context=CallContextEnum.START_REALTIME,
+            post_callback=post_callback,
+            scheduler=scheduler,
+            text=await CONFIG.prompts.tts.hello(call),
         )
+        return
 
-
-@tracer.start_as_current_span("on_transfer_completed")
-async def on_transfer_completed() -> None:
-    logger.info("Call transfer accepted event")
-    # TODO: Is there anything to do here?
+    # Welcome back the user
+    await handle_automation_tts(
+        call=call,
+        client=client,
+        context=CallContextEnum.START_REALTIME,
+        post_callback=post_callback,
+        scheduler=scheduler,
+        style=MessageStyleEnum.CHEERFUL,
+        text=await CONFIG.prompts.tts.welcome_back(call),
+    )
 
 
 @tracer.start_as_current_span("on_transfer_error")
@@ -434,6 +521,8 @@ async def on_transfer_error(
     call: CallStateModel,
     client: CallAutomationClient,
     error_code: int,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
     """
     Callback for when a call transfer fails.
@@ -441,10 +530,12 @@ async def on_transfer_error(
     Logs the error and plays a TTS message to the user.
     """
     logger.info("Error during call transfer, subCode %s", error_code)
-    await handle_play_text(
+    await handle_automation_tts(
         call=call,
         client=client,
         context=CallContextEnum.TRANSFER_FAILED,
+        post_callback=post_callback,
+        scheduler=scheduler,
         text=await CONFIG.prompts.tts.calltransfer_failure(call),
     )
 
@@ -453,6 +544,7 @@ async def on_transfer_error(
 async def on_sms_received(
     call: CallStateModel,
     message: str,
+    scheduler: Scheduler,
 ) -> bool:
     """
     Callback for when an SMS is received.
@@ -466,7 +558,10 @@ async def on_sms_received(
     span_attribute(CallAttributes.CALL_MESSAGE, message)
 
     # Add the SMS to the call history
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.messages.append(
             MessageModel(
                 action=MessageActionEnum.SMS,
@@ -492,53 +587,72 @@ async def on_sms_received(
     return True
 
 
-async def _handle_hangup(
+async def hangup_now(
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
-    await handle_hangup(client=client, call=call)
+    """
+    Hangup the call and store the final message.
+    """
 
-    async with _db.call_transac(call):
-        call.in_progress = False
-        call.messages.append(
-            MessageModel(
-                action=MessageActionEnum.HANGUP,
-                content="",
-                persona=MessagePersonaEnum.HUMAN,
+    async def _store(call: CallStateModel) -> None:
+        async with _db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
+            call.in_progress = False
+            call.messages.append(
+                MessageModel(
+                    action=MessageActionEnum.HANGUP,
+                    content="",
+                    persona=MessagePersonaEnum.HUMAN,
+                )
             )
-        )
 
-    await post_callback(call)
+    await asyncio.gather(
+        handle_hangup(client=client, call=call),
+        _store(call),
+        post_callback(call),
+    )
 
 
 async def on_end_call(
     call: CallStateModel,
+    scheduler: Scheduler,
 ) -> None:
     """
     Callback for when a call ends.
 
     Generates post-call intelligence if the call had interactions.
     """
-    if (
-        len(call.messages) >= 3  # noqa: PLR2004
-        and call.messages[-3].action == MessageActionEnum.CALL
-        and call.messages[-2].persona == MessagePersonaEnum.ASSISTANT
-        and call.messages[-1].action == MessageActionEnum.HANGUP
-    ):
+    if not call.had_interaction():
         logger.info(
             "Call ended before any interaction, skipping post-call intelligence"
         )
         return
 
     await asyncio.gather(
-        _intelligence_next(call),
-        _intelligence_sms(call),
-        _intelligence_synthesis(call),
+        _intelligence_next(
+            call=call,
+            scheduler=scheduler,
+        ),
+        _intelligence_sms(
+            call=call,
+            scheduler=scheduler,
+        ),
+        _intelligence_synthesis(
+            call=call,
+            scheduler=scheduler,
+        ),
     )
 
 
-async def _intelligence_sms(call: CallStateModel) -> None:
+async def _intelligence_sms(
+    call: CallStateModel,
+    scheduler: Scheduler,
+) -> None:
     """
     Send an SMS report to the customer.
     """
@@ -575,7 +689,10 @@ async def _intelligence_sms(call: CallStateModel) -> None:
         success = True
 
     if success:
-        async with _db.call_transac(call):
+        async with _db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
             call.messages.append(
                 MessageModel(
                     action=MessageActionEnum.SMS,
@@ -585,7 +702,10 @@ async def _intelligence_sms(call: CallStateModel) -> None:
             )
 
 
-async def _intelligence_synthesis(call: CallStateModel) -> None:
+async def _intelligence_synthesis(
+    call: CallStateModel,
+    scheduler: Scheduler,
+) -> None:
     """
     Synthesize the call and store it to the model.
     """
@@ -612,11 +732,17 @@ async def _intelligence_synthesis(call: CallStateModel) -> None:
         return
 
     logger.info("Synthesis: %s", model)
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.synthesis = model
 
 
-async def _intelligence_next(call: CallStateModel) -> None:
+async def _intelligence_next(
+    call: CallStateModel,
+    scheduler: Scheduler,
+) -> None:
     """
     Generate next action for the call.
     """
@@ -643,13 +769,18 @@ async def _intelligence_next(call: CallStateModel) -> None:
         return
 
     logger.info("Next action: %s", model)
-    async with _db.call_transac(call):
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
         call.next = model
 
 
 async def _handle_ivr_language(
     call: CallStateModel,
     client: CallAutomationClient,
+    post_callback: Callable[[CallStateModel], Awaitable[None]],
+    scheduler: Scheduler,
 ) -> None:
     """
     Handle IVR language selection.
@@ -664,6 +795,8 @@ async def _handle_ivr_language(
             call=call,
             client=client,
             label=short_code,
+            post_callback=post_callback,
+            scheduler=scheduler,
         )
         return
 

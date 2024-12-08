@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager, suppress
 from typing import Any
 from uuid import UUID, uuid4
 
+from aiojobs import Scheduler
 from azure.cosmos import ConsistencyLevel
 from azure.cosmos.aio import ContainerProxy, CosmosClient
 from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
@@ -120,105 +121,114 @@ class CosmosDbStore(IStore):
         return call
 
     @asynccontextmanager
-    async def call_transac(self, call: CallStateModel) -> AsyncGenerator[None, None]:
+    async def call_transac(
+        self,
+        call: CallStateModel,
+        scheduler: Scheduler,
+    ) -> AsyncGenerator[None, None]:
         # Copy and yield the updated object
         init_data = call.model_copy().model_dump(mode="json", exclude_none=True)
         yield
 
-        # Compute the diff
-        call_data = call.model_dump(mode="json", exclude_none=True)
-        update_data: dict[str, Any | list[Any]] = {}
-        for field, new_value in call_data.items():
-            init_value = init_data.get(field)
-            if init_value != new_value:
-                if isinstance(new_value, list) and isinstance(init_value, list):
-                    update_data[field] = [
-                        item for item in new_value if item not in init_value
-                    ]
-                else:
-                    update_data[field] = new_value
+        async def _exec() -> None:
+            # Compute the diff
+            call_data = call.model_dump(mode="json", exclude_none=True)
+            update_data: dict[str, Any | list[Any]] = {}
+            for field, new_value in call_data.items():
+                init_value = init_data.get(field)
+                if init_value != new_value:
+                    if isinstance(new_value, list) and isinstance(init_value, list):
+                        update_data[field] = [
+                            item for item in new_value if item not in init_value
+                        ]
+                    else:
+                        update_data[field] = new_value
 
-        # Skip if no diff
-        if not update_data:
-            logger.debug("No update needed for call %s", call.call_id)
-            return
+            # Skip if no diff
+            if not update_data:
+                logger.debug("No update needed for call %s", call.call_id)
+                return
 
-        # Update
-        logger.debug(
-            "Updating call %s with %s",
-            call.call_id,
-            update_data,
-        )
-        refreshed_call_raw = None
-        try:
-            async with self._use_client() as db:
-                # See: https://learn.microsoft.com/en-us/azure/cosmos-db/partial-document-update#supported-operations
-                refreshed_call_raw = await db.patch_item(
-                    item=str(call.call_id),
-                    partition_key=call.initiate.phone_number,
-                    patch_operations=[
-                        # Replace fields
-                        *[
-                            {
-                                "op": "set",
-                                "path": f"/{field}",
-                                "value": value,
-                            }
-                            for field, value in update_data.items()
-                            if not isinstance(value, list)
-                        ],
-                        # Add to arrays
-                        *[
-                            {
-                                "op": "add",
-                                "path": f"/{field}/-",
-                                "value": value,
-                            }
-                            for field, values in update_data.items()
-                            if isinstance(values, list)
-                            for value in values
-                        ],
-                    ],
-                )
-        except CosmosHttpResponseError as e:
-            logger.error("Error accessing CosmosDB: %s", e)
-
-        # Skip if no refresh
-        if not refreshed_call_raw:
-            return
-
-        # Parse refreshed object
-        try:
-            refreshed_call = CallStateModel.model_validate(refreshed_call_raw)
-        except ValidationError:
-            logger.debug("Parsing error", exc_info=True)
-            return
-
-        # Refresh live object
-        for field in call.model_fields_set:
-            new_value = getattr(refreshed_call, field)
-            if getattr(call, field) == new_value:
-                continue
+            # Update
             logger.debug(
-                "Updating local field %s with %s from remote",
-                field,
-                new_value,
+                "Updating call %s with %s",
+                call.call_id,
+                update_data,
             )
-            setattr(call, field, new_value)
+            refreshed_call_raw = None
+            try:
+                async with self._use_client() as db:
+                    # See: https://learn.microsoft.com/en-us/azure/cosmos-db/partial-document-update#supported-operations
+                    refreshed_call_raw = await db.patch_item(
+                        item=str(call.call_id),
+                        partition_key=call.initiate.phone_number,
+                        patch_operations=[
+                            # Replace fields
+                            *[
+                                {
+                                    "op": "set",
+                                    "path": f"/{field}",
+                                    "value": value,
+                                }
+                                for field, value in update_data.items()
+                                if not isinstance(value, list)
+                            ],
+                            # Add to arrays
+                            *[
+                                {
+                                    "op": "add",
+                                    "path": f"/{field}/-",
+                                    "value": value,
+                                }
+                                for field, values in update_data.items()
+                                if isinstance(values, list)
+                                for value in values
+                            ],
+                        ],
+                    )
+            except CosmosHttpResponseError as e:
+                logger.error("Error accessing CosmosDB: %s", e)
 
-        # Update cache
-        cache_key_id = self._cache_key_call_id(refreshed_call.call_id)
-        await self._cache.set(
-            key=cache_key_id,
-            ttl_sec=await callback_timeout_hour(),
-            value=refreshed_call.model_dump_json(),
-        )  # Update for ID
-        cache_key_phone_number = self._cache_key_phone_number(
-            refreshed_call.initiate.phone_number
-        )
-        await self._cache.delete(
-            cache_key_phone_number
-        )  # Invalidate for phone number because we don't know if it's the same call
+            # Skip if no refresh
+            if not refreshed_call_raw:
+                return
+
+            # Parse refreshed object
+            try:
+                refreshed_call = CallStateModel.model_validate(refreshed_call_raw)
+            except ValidationError:
+                logger.debug("Parsing error", exc_info=True)
+                return
+
+            # Refresh live object
+            for field in call.model_fields_set:
+                new_value = getattr(refreshed_call, field)
+                if getattr(call, field) == new_value:
+                    continue
+                logger.debug(
+                    "Updating local field %s with %s from remote",
+                    field,
+                    new_value,
+                )
+                with suppress(ValidationError):
+                    setattr(call, field, new_value)
+
+            # Update cache
+            cache_key_id = self._cache_key_call_id(refreshed_call.call_id)
+            await self._cache.set(
+                key=cache_key_id,
+                ttl_sec=await callback_timeout_hour(),
+                value=refreshed_call.model_dump_json(),
+            )  # Update for ID
+            cache_key_phone_number = self._cache_key_phone_number(
+                refreshed_call.initiate.phone_number
+            )
+            await self._cache.delete(
+                cache_key_phone_number
+            )  # Invalidate for phone number because we don't know if it's the same call
+
+        # Queue the update
+        await scheduler.spawn(_exec())
 
     # TODO: Catch errors
     async def call_create(self, call: CallStateModel) -> CallStateModel:
