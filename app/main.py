@@ -226,7 +226,7 @@ async def health_readiness_get() -> JSONResponse:
             status_code = HTTPStatus.SERVICE_UNAVAILABLE
             break
     return JSONResponse(
-        content=readiness.model_dump_json(),
+        content=readiness.model_dump(mode="json"),
         status_code=status_code,
     )
 
