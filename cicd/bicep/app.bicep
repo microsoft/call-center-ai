@@ -181,7 +181,7 @@ var containerAppScaleRules = [
     azureQueue: {
       accountName: storageAccount.name
       identity: 'system'
-      queueLength: 1
+      queueLength: 5
       queueName: queue
     }
   }
