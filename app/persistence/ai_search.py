@@ -14,7 +14,6 @@ from azure.search.documents.indexes.models import (
     AzureOpenAIVectorizerParameters,
     HnswAlgorithmConfiguration,
     LexicalAnalyzerName,
-    RescoringOptions,
     ScalarQuantizationCompression,
     SearchableField,
     SearchField,
@@ -26,7 +25,6 @@ from azure.search.documents.indexes.models import (
     SemanticSearch,
     SimpleField,
     VectorSearch,
-    VectorSearchCompressionRescoreStorageMethod,
     VectorSearchProfile,
 )
 from azure.search.documents.models import (
@@ -47,6 +45,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config_models.ai_search import AiSearchModel
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
@@ -187,15 +186,13 @@ class AiSearchSearch(ISearch):
 
         return trainings or None
 
+    @async_lru_cache()
     async def _use_client(self) -> SearchClient:
         """
         Get the search client.
 
         If the index does not exist, it will be created.
         """
-        if self._client:
-            return self._client
-
         # Index configuration
         fields = [
             # Required field for indexing key
@@ -254,10 +251,6 @@ class AiSearchSearch(ISearch):
             compressions=[
                 ScalarQuantizationCompression(
                     compression_name="compression-scalar",
-                    rescoring_options=RescoringOptions(
-                        default_oversampling=10,
-                        rescore_storage_method=VectorSearchCompressionRescoreStorageMethod.PRESERVE_ORIGINALS,
-                    ),
                 ),
             ],
         )
@@ -306,7 +299,7 @@ class AiSearchSearch(ISearch):
                     raise e
 
         # Return client
-        self._client = SearchClient(
+        return SearchClient(
             # Deployment
             endpoint=self._config.endpoint,
             index_name=self._config.index,
@@ -315,4 +308,3 @@ class AiSearchSearch(ISearch):
             # Authentication
             credential=await credential(),
         )
-        return self._client
