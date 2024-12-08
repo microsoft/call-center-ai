@@ -32,21 +32,29 @@ class StyleEnum(str, Enum):
     """
 
     CHEERFUL = "cheerful"
-    NONE = "none"  # This is not a valid style, but we use it in the code to indicate no style
+    NONE = "none"
+    """This is not a valid style, but we use it in the code to indicate no style."""
     SAD = "sad"
 
 
 class ActionEnum(str, Enum):
     CALL = "call"
+    """User called the assistant."""
     HANGUP = "hangup"
+    """User hung up the call."""
     SMS = "sms"
+    """User sent an SMS."""
     TALK = "talk"
+    """User sent a message."""
 
 
 class PersonaEnum(str, Enum):
     ASSISTANT = "assistant"
+    """Represents an AI assistant."""
     HUMAN = "human"
+    """Represents a human user."""
     TOOL = "tool"
+    """Not used but deprecated, kept for backward compatibility."""
 
 
 class ToolModel(BaseModel):
@@ -54,6 +62,26 @@ class ToolModel(BaseModel):
     function_arguments: str = ""
     function_name: str = ""
     tool_id: str = ""
+
+    def __add__(self, other: object) -> "ToolModel":
+        if not isinstance(other, ChoiceDeltaToolCall):
+            return NotImplemented
+        if other.id:
+            self.tool_id = other.id
+        if other.function:
+            if other.function.name:
+                self.function_name = other.function.name
+            if other.function.arguments:
+                self.function_arguments += other.function.arguments
+        return self
+
+    def __hash__(self) -> int:
+        return self.tool_id.__hash__()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ToolModel):
+            return False
+        return self.tool_id == other.tool_id
 
     def to_openai(self) -> ChatCompletionMessageToolCallParam:
         return ChatCompletionMessageToolCallParam(
@@ -70,16 +98,6 @@ class ToolModel(BaseModel):
                 ),  # Sanitize with dashes then deduplicate dashes, backward compatibility with old models
             },
         )
-
-    def __add__(self, other: ChoiceDeltaToolCall) -> "ToolModel":
-        if other.id:
-            self.tool_id = other.id
-        if other.function:
-            if other.function.name:
-                self.function_name = other.function.name
-            if other.function.arguments:
-                self.function_arguments += other.function.arguments
-        return self
 
     async def execute_function(self, plugin: object) -> None:
         from app.helpers.logging import logger

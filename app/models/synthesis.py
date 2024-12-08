@@ -4,10 +4,14 @@ from pydantic import BaseModel, Field
 
 
 class SatisfactionEnum(str, Enum):
-    TERRIBLE = "terrible"  # 1
-    LOW = "low"  # 2
-    PARTIAL = "partial"  # 3
-    HIGH = "high"  # 4
+    TERRIBLE = "terrible"
+    """Satisfaction is very low (1/4)."""
+    LOW = "low"
+    """Satisfaction is low (2/4)."""
+    PARTIAL = "partial"
+    """Satisfaction is partial (3/4)."""
+    HIGH = "high"
+    """Satisfaction is high (4/4)."""
     UNKNOW = "unknow"
 
 

@@ -35,6 +35,7 @@ from azure.communication.callautomation.aio import (
 )
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config import CONFIG
 from app.helpers.identity import token
 from app.helpers.logging import logger
@@ -84,10 +85,14 @@ class ContextEnum(str, Enum):
     Used to track the operation context of a call in Azure Communication Services.
     """
 
-    GOODBYE = "goodbye"  # Hang up
-    IVR_LANG_SELECT = "ivr_lang_select"  # IVR language selection
-    START_REALTIME = "start_realtime"  # Start realtime call
-    TRANSFER_FAILED = "transfer_failed"  # Transfer failed
+    GOODBYE = "goodbye"
+    """Hang up"""
+    IVR_LANG_SELECT = "ivr_lang_select"
+    """IVR language selection"""
+    START_REALTIME = "start_realtime"
+    """Start realtime call"""
+    TRANSFER_FAILED = "transfer_failed"
+    """Transfer failed"""
 
 
 def tts_sentence_split(
@@ -141,11 +146,11 @@ async def handle_media(
     """
     with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.play_media(
-                operation_context=_context_serializer({context}),
-                play_source=FileSource(url=sound_url),
-            )
+        call_client = await _use_call_client(client, call.voice_id)
+        await call_client.play_media(
+            operation_context=_context_serializer({context}),
+            play_source=FileSource(url=sound_url),
+        )
 
 
 async def handle_automation_tts(  # noqa: PLR0913
@@ -170,19 +175,19 @@ async def handle_automation_tts(  # noqa: PLR0913
     # Play each chunk
     jobs: list[Job] = []
     chunks = _chunk_for_tts(text)
-    async with _use_call_client(client, call.voice_id) as call_client:
-        jobs += [
-            await scheduler.spawn(
-                _automation_play_text(
-                    call_client=call_client,
-                    call=call,
-                    context=context,
-                    style=style,
-                    text=chunk,
-                )
+    call_client = await _use_call_client(client, call.voice_id)
+    jobs += [
+        await scheduler.spawn(
+            _automation_play_text(
+                call_client=call_client,
+                call=call,
+                context=context,
+                style=style,
+                text=chunk,
             )
-            for chunk in chunks
-        ]
+        )
+        for chunk in chunks
+    ]
 
     # Wait for all jobs to finish and catch hangup
     for job in jobs:
@@ -379,20 +384,20 @@ async def handle_recognize_ivr(
     logger.info("Recognizing IVR: %s", text)
     try:
         assert call.voice_id, "Voice ID is required to control the call"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.start_recognizing_media(
-                choices=choices,
-                input_type=RecognizeInputType.CHOICES,
-                interrupt_prompt=True,
-                operation_context=_context_serializer({context}),
-                play_prompt=_ssml_from_text(
-                    call=call,
-                    style=MessageStyleEnum.NONE,
-                    text=text,
-                ),
-                speech_language=call.lang.short_code,
-                target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # pyright: ignore
-            )
+        call_client = await _use_call_client(client, call.voice_id)
+        await call_client.start_recognizing_media(
+            choices=choices,
+            input_type=RecognizeInputType.CHOICES,
+            interrupt_prompt=True,
+            operation_context=_context_serializer({context}),
+            play_prompt=_ssml_from_text(
+                call=call,
+                style=MessageStyleEnum.NONE,
+                text=text,
+            ),
+            speech_language=call.lang.short_code,
+            target_participant=PhoneNumberIdentifier(call.initiate.phone_number),  # pyright: ignore
+        )
     except ResourceNotFoundError:
         logger.debug("Call hung up before recognizing")
 
@@ -414,8 +419,8 @@ async def handle_hangup(
         _detect_hangup(),
     ):
         assert call.voice_id, "Voice ID is required to control the call"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.hang_up(is_for_everyone=True)
+        call_client = await _use_call_client(client, call.voice_id)
+        await call_client.hang_up(is_for_everyone=True)
 
 
 async def handle_transfer(
@@ -432,11 +437,11 @@ async def handle_transfer(
     logger.info("Transferring call: %s", target)
     with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.transfer_call_to_participant(
-                operation_context=_context_serializer({context}),
-                target_participant=PhoneNumberIdentifier(target),
-            )
+        call_client = await _use_call_client(client, call.voice_id)
+        await call_client.transfer_call_to_participant(
+            operation_context=_context_serializer({context}),
+            target_participant=PhoneNumberIdentifier(target),
+        )
 
 
 async def start_audio_streaming(
@@ -451,13 +456,13 @@ async def start_audio_streaming(
     logger.info("Starting audio streaming")
     with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            # TODO: Use the public API once the "await" have been fixed
-            # await call_client.start_media_streaming()
-            await call_client._call_media_client.start_media_streaming(
-                call_connection_id=call_client._call_connection_id,
-                start_media_streaming_request=StartMediaStreamingRequest(),
-            )
+        call_client = await _use_call_client(client, call.voice_id)
+        # TODO: Use the public API once the "await" have been fixed
+        # await call_client.start_media_streaming()
+        await call_client._call_media_client.start_media_streaming(
+            call_connection_id=call_client._call_connection_id,
+            start_media_streaming_request=StartMediaStreamingRequest(),
+        )
 
 
 async def stop_audio_streaming(
@@ -472,8 +477,8 @@ async def stop_audio_streaming(
     logger.info("Stopping audio streaming")
     with _detect_hangup():
         assert call.voice_id, "Voice ID is required to control the call"
-        async with _use_call_client(client, call.voice_id) as call_client:
-            await call_client.stop_media_streaming()
+        call_client = await _use_call_client(client, call.voice_id)
+        await call_client.stop_media_streaming()
 
 
 def _context_serializer(contexts: set[ContextEnum | None] | None) -> str | None:
@@ -505,15 +510,14 @@ def _detect_hangup() -> Generator[None, None, None]:
             raise e
 
 
-@asynccontextmanager
+@async_lru_cache()
 async def _use_call_client(
     client: CallAutomationClient, voice_id: str
-) -> AsyncGenerator[CallConnectionClient, None]:
+) -> CallConnectionClient:
     """
     Return the call client for a given call.
     """
-    # Client already been created in the call client, never close it from here
-    yield client.get_call_connection(call_connection_id=voice_id)
+    return client.get_call_connection(call_connection_id=voice_id)
 
 
 @asynccontextmanager

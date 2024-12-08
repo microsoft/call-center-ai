@@ -10,6 +10,7 @@ from azure.cosmos.aio import ContainerProxy, CosmosClient
 from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
 from pydantic import ValidationError
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config_models.database import CosmosDbModel
 from app.helpers.features import callback_timeout_hour
 from app.helpers.http import azure_transport
@@ -22,7 +23,6 @@ from app.persistence.istore import IStore
 
 
 class CosmosDbStore(IStore):
-    _client: CosmosClient | None = None
     _config: CosmosDbModel
 
     def __init__(self, cache: ICache, config: CosmosDbModel):
@@ -133,16 +133,11 @@ class CosmosDbStore(IStore):
         async def _exec() -> None:
             # Compute the diff
             call_data = call.model_dump(mode="json", exclude_none=True)
-            update_data: dict[str, Any | list[Any]] = {}
+            update_data: dict[str, Any] = {}
             for field, new_value in call_data.items():
                 init_value = init_data.get(field)
                 if init_value != new_value:
-                    if isinstance(new_value, list) and isinstance(init_value, list):
-                        update_data[field] = [
-                            item for item in new_value if item not in init_value
-                        ]
-                    else:
-                        update_data[field] = new_value
+                    update_data[field] = new_value
 
             # Skip if no diff
             if not update_data:
@@ -163,27 +158,12 @@ class CosmosDbStore(IStore):
                         item=str(call.call_id),
                         partition_key=call.initiate.phone_number,
                         patch_operations=[
-                            # Replace fields
-                            *[
-                                {
-                                    "op": "set",
-                                    "path": f"/{field}",
-                                    "value": value,
-                                }
-                                for field, value in update_data.items()
-                                if not isinstance(value, list)
-                            ],
-                            # Add to arrays
-                            *[
-                                {
-                                    "op": "add",
-                                    "path": f"/{field}/-",
-                                    "value": value,
-                                }
-                                for field, values in update_data.items()
-                                if isinstance(values, list)
-                                for value in values
-                            ],
+                            {
+                                "op": "set",
+                                "path": f"/{field}",
+                                "value": value,
+                            }
+                            for field, value in update_data.items()
                         ],
                     )
             except CosmosHttpResponseError as e:
@@ -241,12 +221,19 @@ class CosmosDbStore(IStore):
         # Persist
         try:
             async with self._use_client() as db:
-                raw = await db.create_item(body=data)
-                return CallStateModel.model_validate(raw)
+                await db.create_item(body=data)
         except CosmosHttpResponseError:
             logger.exception("Error accessing CosmosDB")
         except ValidationError:
             logger.debug("Parsing error", exc_info=True)
+
+        # Update cache
+        cache_key = self._cache_key_call_id(call.call_id)
+        await self._cache.set(
+            key=cache_key,
+            ttl_sec=await callback_timeout_hour(),
+            value=call.model_dump_json(),
+        )
 
         return call
 
@@ -372,27 +359,32 @@ class CosmosDbStore(IStore):
 
         return total
 
+    @async_lru_cache()
+    async def _use_service_client(self) -> CosmosClient:
+        """
+        Generate the Cosmos DB client.
+        """
+        return CosmosClient(
+            # Usage
+            consistency_level=ConsistencyLevel.Eventual,
+            # Reliability
+            connection_timeout=10,  # 10 secs
+            retry_backoff_factor=0.8,
+            retry_backoff_max=8,
+            retry_total=3,
+            # Performance
+            transport=await azure_transport(),
+            # Deployment
+            url=self._config.endpoint,
+            # Authentication
+            credential=await credential(),
+        )
+
     @asynccontextmanager
     async def _use_client(self) -> AsyncGenerator[ContainerProxy, None]:
         """
-        Generate the Cosmos DB client and close it after use.
+        Generate the container client.
         """
-        if not self._client:
-            self._client = CosmosClient(
-                # Usage
-                consistency_level=ConsistencyLevel.Eventual,
-                # Reliability
-                connection_timeout=10,  # 10 secs
-                retry_backoff_factor=0.8,
-                retry_backoff_max=8,
-                retry_total=3,
-                # Performance
-                transport=await azure_transport(),
-                # Deployment
-                url=self._config.endpoint,
-                # Authentication
-                credential=await credential(),
-            )
-        async with self._client as client:
+        async with await self._use_service_client() as client:
             database = client.get_database_client(self._config.database)
             yield database.get_container_client(self._config.container)

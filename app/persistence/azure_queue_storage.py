@@ -15,6 +15,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 from app.helpers.logging import logger
@@ -105,17 +106,27 @@ class AzureQueueStorage:
         except (UnicodeDecodeError, BinasciiError):
             return value
 
-    @asynccontextmanager
-    async def _use_client(self) -> AsyncGenerator[QueueClient, None]:
-        async with QueueServiceClient(
+    @async_lru_cache()
+    async def _use_service_client(self) -> QueueServiceClient:
+        """
+        Generate a new service client.
+        """
+        return QueueServiceClient(
             # Performance
             transport=await azure_transport(),
             # Deployment
             account_url=self._account_url,
             # Authentication
             credential=await credential(),
-        ) as service:
-            yield service.get_queue_client(
+        )
+
+    @asynccontextmanager
+    async def _use_client(self) -> AsyncGenerator[QueueClient, None]:
+        """
+        Generate a queue client.
+        """
+        async with await self._use_service_client() as client:
+            yield client.get_queue_client(
                 # Performance
                 transport=await azure_transport(),
                 # Deployment

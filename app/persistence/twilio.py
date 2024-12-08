@@ -1,6 +1,7 @@
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config_models.sms import TwilioModel
 from app.helpers.http import twilio_http
 from app.helpers.logging import logger
@@ -62,13 +63,12 @@ class TwilioSms(ISms):
             logger.exception("Error sending SMS to %s", phone_number)
         return success
 
+    @async_lru_cache()
     async def _use_client(self) -> Client:
-        if not self._client:
-            self._client = Client(
-                # Performance
-                http_client=await twilio_http(),
-                # Authentication
-                password=self._config.auth_token.get_secret_value(),
-                username=self._config.account_sid,
-            )
-        return self._client
+        return Client(
+            # Performance
+            http_client=await twilio_http(),
+            # Authentication
+            password=self._config.auth_token.get_secret_value(),
+            username=self._config.account_sid,
+        )

@@ -5,15 +5,18 @@ from typing import Any
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.identity import token
 
 
 class ModeEnum(str, Enum):
     AZURE_OPENAI = "azure_openai"
+    """Use Azure OpenAI."""
     OPENAI = "openai"
+    """Use OpenAI."""
 
 
-class AbstractPlatformModel(BaseModel):
+class AbstractPlatformModel(BaseModel, frozen=True):
     _client_kwargs: dict[str, Any] = {
         # Reliability
         "max_retries": 0,  # Retries are managed manually
@@ -33,41 +36,37 @@ class AbstractPlatformModel(BaseModel):
         pass
 
 
-class AzureOpenaiPlatformModel(AbstractPlatformModel):
-    _client: AsyncAzureOpenAI | None = None
+class AzureOpenaiPlatformModel(AbstractPlatformModel, frozen=True):
     api_version: str = "2024-06-01"
     deployment: str
 
+    @async_lru_cache()
     async def instance(self) -> tuple[AsyncAzureOpenAI, AbstractPlatformModel]:
-        if not self._client:
-            self._client = AsyncAzureOpenAI(
-                **self._client_kwargs,
-                # Deployment
-                api_version=self.api_version,
-                azure_deployment=self.deployment,
-                azure_endpoint=self.endpoint,
-                # Authentication
-                azure_ad_token_provider=await token(
-                    "https://cognitiveservices.azure.com/.default"
-                ),
-            )
-        return self._client, self
+        return AsyncAzureOpenAI(
+            **self._client_kwargs,
+            # Deployment
+            api_version=self.api_version,
+            azure_deployment=self.deployment,
+            azure_endpoint=self.endpoint,
+            # Authentication
+            azure_ad_token_provider=await token(
+                "https://cognitiveservices.azure.com/.default"
+            ),
+        ), self
 
 
-class OpenaiPlatformModel(AbstractPlatformModel):
-    _client: AsyncOpenAI | None = None
+class OpenaiPlatformModel(AbstractPlatformModel, frozen=True):
     api_key: SecretStr
 
+    @async_lru_cache()
     async def instance(self) -> tuple[AsyncOpenAI, AbstractPlatformModel]:
-        if not self._client:
-            self._client = AsyncOpenAI(
-                **self._client_kwargs,
-                # API root URL
-                base_url=self.endpoint,
-                # Authentication
-                api_key=self.api_key.get_secret_value(),
-            )
-        return self._client, self
+        return AsyncOpenAI(
+            **self._client_kwargs,
+            # API root URL
+            base_url=self.endpoint,
+            # Authentication
+            api_key=self.api_key.get_secret_value(),
+        ), self
 
 
 class SelectedPlatformModel(BaseModel):
