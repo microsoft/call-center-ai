@@ -82,6 +82,7 @@ dev = [
     "pytest-xdist[psutil]~=3.6",  # Pytest plugin for parallel testing
     "pytest~=8.3",  # Testing framework
     "ruff~=0.7",  # Linter
+    "pre-commit~=4.0.1" # Pre-commit hooks
 ]
 docs = [
     "mkdocs == 1.6.1",
