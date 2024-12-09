@@ -15,15 +15,12 @@ from openai.types.chat import (
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
 
-from app.helpers.config import CONFIG
 from app.helpers.llm_utils import AbstractPlugin
 from app.helpers.monitoring import tracer
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 _MESSAGE_ACTION_R = r"(?:action=*([a-z_]*))? *(.*)"
 _MESSAGE_STYLE_R = r"(?:style=*([a-z_]*))? *(.*)"
-
-_db = CONFIG.database.instance()
 
 
 class StyleEnum(str, Enum):
@@ -103,8 +100,12 @@ class ToolModel(BaseModel):
             },
         )
 
+    # TODO: Move this to AbstractPlugin to avoid doing live imports
     async def execute_function(self, plugin: AbstractPlugin) -> None:
+        from app.helpers.config import CONFIG
         from app.helpers.logging import logger
+
+        db = CONFIG.database.instance()
 
         json_str = self.function_arguments
         name = self.function_name
@@ -142,7 +143,7 @@ class ToolModel(BaseModel):
         ) as span:
             try:
                 # Persist the call if updating it
-                async with _db.call_transac(
+                async with db.call_transac(
                     call=plugin.call,
                     scheduler=plugin.scheduler,
                 ):
