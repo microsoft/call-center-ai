@@ -20,6 +20,7 @@ from app.models.message import (
 from app.models.reminder import ReminderModel
 from app.models.training import TrainingModel
 
+_db = CONFIG.database.instance()
 _search = CONFIG.ai_search.instance()
 _sms = CONFIG.sms.instance()
 
@@ -93,20 +94,22 @@ class DefaultPlugin(AbstractPlugin):
         # Launch post-call intelligence for the current call
         await self.post_callback(self.call)
         # Store the last message and use it at first message of the new claim
-        last_message = self.call.messages[-1]
-        call = CallStateModel(
-            initiate=self.call.initiate.model_copy(),
-            voice_id=self.call.voice_id,
+        self.call = await _db.call_create(
+            CallStateModel(
+                initiate=self.call.initiate.model_copy(),
+                voice_id=self.call.voice_id,
+                messages=[
+                    # Reinsert the call action
+                    MessageModel(
+                        action=MessageActionEnum.CALL,
+                        content="",
+                        persona=MessagePersonaEnum.HUMAN,
+                    ),
+                    # Reinsert the last two messages
+                    self.call.messages[-2],
+                ],
+            )
         )
-        call.messages += [
-            MessageModel(
-                action=MessageActionEnum.CALL,
-                content="",
-                persona=MessagePersonaEnum.HUMAN,
-            ),
-            last_message,
-        ]
-        self.call = call
         return "Claim, reminders and messages reset"
 
     async def new_or_updated_reminder(
