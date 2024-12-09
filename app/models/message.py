@@ -15,11 +15,15 @@ from openai.types.chat import (
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
 
+from app.helpers.config import CONFIG
+from app.helpers.llm_utils import AbstractPlugin
 from app.helpers.monitoring import tracer
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 _MESSAGE_ACTION_R = r"(?:action=*([a-z_]*))? *(.*)"
 _MESSAGE_STYLE_R = r"(?:style=*([a-z_]*))? *(.*)"
+
+_db = CONFIG.database.instance()
 
 
 class StyleEnum(str, Enum):
@@ -99,7 +103,7 @@ class ToolModel(BaseModel):
             },
         )
 
-    async def execute_function(self, plugin: object) -> None:
+    async def execute_function(self, plugin: AbstractPlugin) -> None:
         from app.helpers.logging import logger
 
         json_str = self.function_arguments
@@ -137,7 +141,13 @@ class ToolModel(BaseModel):
             },
         ) as span:
             try:
-                res = await getattr(plugin, name)(**args)
+                # Persist the call if updating it
+                async with _db.call_transac(
+                    call=plugin.call,
+                    scheduler=plugin.scheduler,
+                ):
+                    res = await getattr(plugin, name)(**args)
+                # Format pretty logs
                 res_log = f"{res[:20]}...{res[-20:]}"
                 logger.info("Executing function %s (%s): %s", name, args, res_log)
             except TypeError as e:
