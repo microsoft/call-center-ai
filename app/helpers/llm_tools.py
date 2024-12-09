@@ -90,9 +90,12 @@ class DefaultPlugin(AbstractPlugin):
         - Customer wants explicitely to create a new claim
         - Talking about a totally different subject
         """
+        # Customer confirmation
         await self.tts_callback(customer_response)
+
         # Launch post-call intelligence for the current call
         await self.post_callback(self.call)
+
         # Store the last message and use it at first message of the new claim
         self.call = await _db.call_create(
             CallStateModel(
@@ -105,8 +108,8 @@ class DefaultPlugin(AbstractPlugin):
                         content="",
                         persona=MessagePersonaEnum.HUMAN,
                     ),
-                    # Reinsert the last two messages
-                    self.call.messages[-2],
+                    # Reinsert the last message, using more will add the user message asking to create the new claim and the assistant can loop on it sometimes
+                    self.call.messages[-1],
                 ],
             )
         )
@@ -163,6 +166,7 @@ class DefaultPlugin(AbstractPlugin):
         - Call back for a follow-up
         - Wait for customer to send a document
         """
+        # Customer confirmation
         await self.tts_callback(customer_response)
 
         # Check if reminder already exists, if so update it
@@ -250,7 +254,9 @@ class DefaultPlugin(AbstractPlugin):
         - Store details about the conversation
         - Update the claim with a new phone number
         """
+        # Customer confirmation
         await self.tts_callback(customer_response)
+
         # Update all claim fields
         res = "# Updated fields"
         for field in updates:
@@ -260,6 +266,8 @@ class DefaultPlugin(AbstractPlugin):
     def _update_claim_field(self, update: UpdateClaimDict) -> str:
         field = update["field"]
         new_value = update["value"]
+
+        # Update field
         old_value = self.call.claim.get(field, None)
         try:
             self.call.claim[field] = new_value
@@ -340,7 +348,9 @@ class DefaultPlugin(AbstractPlugin):
         - Know the procedure to declare a stolen luxury watch
         - Understand the requirements to ask for a cyber attack insurance
         """
+        # Customer confirmation
         await self.tts_callback(customer_response)
+
         # Execute in parallel
         tasks = await asyncio.gather(
             *[
@@ -348,8 +358,10 @@ class DefaultPlugin(AbstractPlugin):
                 for query in queries
             ]
         )
+
         # Flatten, remove duplicates, and sort by score
         trainings = sorted(set(training for task in tasks for training in task or []))
+
         # Format documents for Content Safety scan compatibility
         # See: https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/content-filter?tabs=warning%2Cpython-new#embedding-documents-in-your-prompt
         trainings_str = "\n".join(
@@ -358,6 +370,7 @@ class DefaultPlugin(AbstractPlugin):
                 for training in trainings
             ]
         )
+
         # Format results
         res = "# Search results"
         res += f"\n{trainings_str}"
@@ -412,6 +425,7 @@ class DefaultPlugin(AbstractPlugin):
         - A neighbor is having a heart attack
         - Someons is stuck in a car accident
         """
+        # Customer confirmation
         await self.tts_callback(customer_response)
         # TODO: Implement notification to emergency services for production usage
         logger.info(
@@ -454,13 +468,18 @@ class DefaultPlugin(AbstractPlugin):
         - Confirm a detail like a reference number, if there is a misunderstanding
         - Send a confirmation, if the customer wants to have a written proof
         """
+        # Customer confirmation
         await self.tts_callback(customer_response)
+
+        # Send SMS
         success = await _sms.send(
             content=message,
             phone_number=self.call.initiate.phone_number,
         )
         if not success:
             return "Failed to send SMS"
+
+        # Add message to call
         self.call.messages.append(
             MessageModel(
                 action=MessageActionEnum.SMS,
@@ -505,11 +524,14 @@ class DefaultPlugin(AbstractPlugin):
         """
         # Clamp speed between min and max
         speed = max(0.75, min(speed, 1.25))
+
         # Update voice
         initial_speed = self.call.initiate.prosody_rate
         self.call.initiate.prosody_rate = speed
+
         # Customer confirmation (with new speed)
         await self.tts_callback(customer_response)
+
         # LLM confirmation
         return f"Voice speed set to {speed} (was {initial_speed})"
 
@@ -572,7 +594,9 @@ class DefaultPlugin(AbstractPlugin):
         # Update lang
         initial_lang = self.call.lang.short_code
         self.call.lang = lang
+
         # Customer confirmation (with new language)
         await self.tts_callback(customer_response)
+
         # LLM confirmation
         return f"Voice language set to {lang} (was {initial_lang})"
