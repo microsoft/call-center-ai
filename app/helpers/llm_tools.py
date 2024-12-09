@@ -105,8 +105,8 @@ class DefaultPlugin(AbstractPlugin):
                         content="",
                         persona=MessagePersonaEnum.HUMAN,
                     ),
-                    # Reinsert the last two messages
-                    self.call.messages[-2],
+                    # Reinsert the last message, using more will add the user message asking to create the new claim and the assistant can loop on it sometimes
+                    self.call.messages[-1],
                 ],
             )
         )
