@@ -411,7 +411,7 @@ async def handle_hangup(
 
     If the call is already hung up, the exception will be suppressed.
     """
-    logger.info("Hanging up: %s", call.initiate.phone_number)
+    logger.info("Hanging up")
     with (
         # Suppress hangup exception
         suppress(CallHangupException),
