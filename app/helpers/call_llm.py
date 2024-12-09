@@ -39,7 +39,7 @@ from app.helpers.llm_worker import (
     completion_stream,
 )
 from app.helpers.logging import logger
-from app.helpers.monitoring import CallAttributes, span_attribute, tracer
+from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
 from app.models.call import CallStateModel
 from app.models.message import (
     ActionEnum as MessageAction,
@@ -208,8 +208,8 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
     Returns the updated call model.
     """
     # Add span attributes
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
-    span_attribute(CallAttributes.CALL_MESSAGE, call.messages[-1].content)
+    span_attribute(SpanAttributes.CALL_CHANNEL, "voice")
+    span_attribute(SpanAttributes.CALL_MESSAGE, call.messages[-1].content)
 
     # Reset recognition retry counter
     async with _db.call_transac(
@@ -528,9 +528,16 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         return True, True, call  # Error, retry
 
     # Execute tools
-    tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
-    await asyncio.gather(*tool_tasks)
-    call = plugins.call  # Update call model if object reference changed
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
+        await asyncio.gather(
+            *[plugins.execute_tool(tool_call) for tool_call in tool_calls]
+        )
+
+    # Update call model if object reference changed
+    call = plugins.call
 
     # Store message
     async with _db.call_transac(

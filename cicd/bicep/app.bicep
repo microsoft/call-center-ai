@@ -708,9 +708,7 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   kind: 'GlobalDocumentDB'
   properties: {
     consistencyPolicy: {
-      defaultConsistencyLevel: 'BoundedStaleness' // ACID in a single-region, lag in the others
-      maxIntervalInSeconds: 600 // 5 mins lags at maximum
-      maxStalenessPrefix: 1000 // 1000 requests lags at max
+      defaultConsistencyLevel: 'Strong'
     }
     databaseAccountOfferType: 'Standard'
     disableLocalAuth: true

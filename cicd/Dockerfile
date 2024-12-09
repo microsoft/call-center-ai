@@ -24,4 +24,4 @@ USER appuser
 
 ENV PATH=/app/.venv/bin:$PATH
 
-CMD ["bash", "-c", "gunicorn app.main:api --bind 0.0.0.0:8080 --proxy-protocol --workers 4 --worker-class uvicorn.workers.UvicornWorker"]
+CMD ["bash", "-c", "gunicorn app.main:api --bind 0.0.0.0:8080 --graceful-timeout 60 --proxy-protocol --timeout 60 --worker-class uvicorn.workers.UvicornWorker --workers 4"]

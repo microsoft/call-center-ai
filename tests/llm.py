@@ -236,14 +236,14 @@ class ClaimRelevancyMetric(BaseMetric):
 
 
 @with_conversations
-@pytest.mark.asyncio(scope="session")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_llm(  # noqa: PLR0913
     call: CallStateModel,
     claim_tests_excl: list[str],
     deepeval_model: GPTModel,
     expected_output: str,
-    speeches: list[str],
     lang: str,
+    speeches: list[str],
 ) -> None:
     """
     Test the LLM with a mocked conversation against the expected output.
@@ -306,12 +306,11 @@ async def test_llm(  # noqa: PLR0913
         )
 
         # Simulate conversation with speech recognition
-        for speech in speeches:
-            # Add message to history
-            async with db.call_transac(
-                call=call,
-                scheduler=scheduler,
-            ):
+        async with db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
+            for speech in speeches:
                 call.messages.append(
                     MessageModel(
                         content=speech,

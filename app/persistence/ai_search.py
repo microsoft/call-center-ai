@@ -104,7 +104,7 @@ class AiSearchSearch(ISearch):
         text: str,
         cache_only: bool = False,
     ) -> list[TrainingModel] | None:
-        logger.debug('Searching training data for "%s"', text)
+        # logger.debug('Searching training data for "%s"', text)
         if not text:
             return None
 

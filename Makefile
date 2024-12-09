@@ -110,10 +110,12 @@ dev:
 	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) uv run gunicorn app.main:api \
 		--access-logfile - \
 		--bind 0.0.0.0:8080 \
+		--graceful-timeout 60 \
 		--proxy-protocol \
 		--reload \
 		--reload-extra-file .env \
 		--reload-extra-file config.yaml \
+		--timeout 60 \
 		--worker-class uvicorn.workers.UvicornWorker \
 		--workers 2
 

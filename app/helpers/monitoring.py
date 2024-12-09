@@ -44,14 +44,24 @@ def span_attribute(key: str, value: AttributeValue) -> None:
     span.set_attribute(key, value)
 
 
-class CallAttributes:
+class SpanAttributes:
     """
-    OpenTelemetry attributes for a call.
+    OpenTelemetry attributes.
 
     These attributes are used to track a call in the logs and metrics.
     """
 
     CALL_CHANNEL = "call.channel"
+    """Message channel (e.g. sms, ivr, ...)."""
     CALL_ID = "call.id"
+    """Technical call identifier."""
     CALL_MESSAGE = "call.message"
+    """Message content as a string."""
     CALL_PHONE_NUMBER = "call.phone_number"
+    """Phone number of the caller."""
+    TOOL_ARGS = "tool.args"
+    """Tool arguments being used."""
+    TOOL_NAME = "tool.name"
+    """Tool name being used."""
+    TOOL_RESULT = "tool.result"
+    """Tool result."""
