@@ -17,12 +17,14 @@ class CosmosDbModel(BaseModel, frozen=True):
             CosmosDbStore,
         )
 
-        return CosmosDbStore(CONFIG.cache.instance(), self)
+        return CosmosDbStore(
+            cache=CONFIG.cache.instance(),
+            config=self,
+        )
 
 
 class DatabaseModel(BaseModel):
     cosmos_db: CosmosDbModel
 
     def instance(self) -> IStore:
-        assert self.cosmos_db
         return self.cosmos_db.instance()
