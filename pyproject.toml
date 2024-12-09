@@ -65,6 +65,35 @@ dev = [
   "ruff~=0.7",  # Linter
 ]
 
+# uv configuration
+# uses also the depenencies in the [project.dependencies] section
+[tool.uv]
+managed = true
+default-groups = ["dev", "docs"]
+[dependency-groups]
+# if you add new dependencies here, make sure to add them to [tool.uv] default-groups up above
+dev = [
+    "deepeval~=0.21",  # LLM model evaluation
+    "deptry~=0.20",  # Dependency tree testing
+    "pyright~=1.1",  # Static type checker
+    "pytest-assume~=2.4",  # Pytest plugin for conditional tests
+    "pytest-asyncio~=0.24",  # Pytest plugin for async tests
+    "pytest-repeat~=0.9",  # Pytest plugin for repeating tests
+    "pytest-xdist[psutil]~=3.6",  # Pytest plugin for parallel testing
+    "pytest~=8.3",  # Testing framework
+    "ruff~=0.7",  # Linter
+]
+docs = [
+    "mkdocs == 1.6.1",
+    "mkdocs-material>=9.5.41",
+    "mkdocstrings>=0.26.2",
+    "mkdocs-mermaid2-plugin>=1.1.1",
+    "mkdocs-gen-files>=0.5.0",
+    "mkdocstrings-python",
+    "mkdocs-same-dir",
+    "mkdocs-exclude"
+]
+
 [tool.setuptools]
 py-modules = [
   "app",
