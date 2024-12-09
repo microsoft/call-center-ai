@@ -213,3 +213,23 @@ sync-local-config:
 			--output-format yaml \
 			--prettyPrint \
 		> config.yaml
+
+
+UV := "$$HOME/.local/bin/uv" # keep the quotes incase the path contains spaces
+pre-commit-install:
+	@echo "${YELLOW}=========> Installing pre-commit...${NC}"
+	$(UV) run pre-commit install
+pre-commit:
+	@echo "${YELLOW}=========> Running pre-commit...${NC}"
+	$(UV) run pre-commit run --all-files
+
+# This build the documentation based on current code 'src/' and 'docs/' directories
+# This is to run the documentation locally to see how it looks
+deploy-doc-local:
+	@echo "${YELLOW}Deploying documentation locally...${NC}"
+	@$(UV) run mkdocs build && $(UV) run mkdocs serve
+
+# Deploy it to the gh-pages branch in your GitHub repository (you need to setup the GitHub Pages in github settings to use the gh-pages branch)
+deploy-doc-gh:
+	@echo "${YELLOW}Deploying documentation in github actions..${NC}"
+	@$(UV) run mkdocs build && $(UV) run mkdocs gh-deploy

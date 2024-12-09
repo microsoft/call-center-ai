@@ -1,0 +1,60 @@
+site_name: Generative AI Project Template
+site_description: Documentation
+site_author: Amine Djeghri
+docs_dir: .
+# site_url: #TODO: Fill when deployment CI added
+#site_dir: public
+#repo_url:
+#edit_uri: blob/main/docs/
+
+
+theme:
+
+  name: "material" # https://squidfunk.github.io/mkdocs-material/getting-started/
+  language: en
+  features: # https://squidfunk.github.io/mkdocs-material/setup/
+    - search.suggest
+    - search.highlight
+    - search.share
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    #    - navigation.sections
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+plugins:
+  - mkdocstrings:
+      default_handler: python
+      import:
+        - https://docs.python-requests.org/en/master/objects.inv
+      load_external_modules: true
+      handlers:
+        python:
+          paths: [., source]
+  - gen-files:
+      scripts:
+        - scripts/gen_doc_stubs.py
+  - search
+  - same-dir
+  - exclude:
+      glob:
+        - node_modules/**
+        - .venv/**
