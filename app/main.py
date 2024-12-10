@@ -66,7 +66,9 @@ from app.models.call import CallGetModel, CallInitiateModel, CallStateModel
 from app.models.error import ErrorInnerModel, ErrorModel
 from app.models.next import ActionEnum as NextActionEnum
 from app.models.readiness import ReadinessCheckModel, ReadinessEnum, ReadinessModel
-from app.persistence.azure_queue_storage import Message as AzureQueueStorageMessage
+from app.persistence.azure_queue_storage import (
+    Message as AzureQueueStorageMessage,
+)
 
 # First log
 logger.info(
@@ -122,35 +124,33 @@ logger.info("Using callback URL %s", _COMMUNICATIONSERVICES_CALLABACK_TPL)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
-    call_task = asyncio.create_task(
-        _call_queue.trigger(
-            arg="call",
-            func=call_event,
+    queue_tasks = None
+
+    try:
+        queue_tasks = asyncio.gather(
+            _call_queue.trigger(
+                arg="call",
+                func=call_event,
+            ),
+            _post_queue.trigger(
+                arg="post",
+                func=post_event,
+            ),
+            _sms_queue.trigger(
+                arg="sms",
+                func=sms_event,
+            ),
+            _training_queue.trigger(
+                arg="training",
+                func=training_event,
+            ),
         )
-    )
-    post_task = asyncio.create_task(
-        _post_queue.trigger(
-            arg="post",
-            func=post_event,
-        )
-    )
-    sms_task = asyncio.create_task(
-        _sms_queue.trigger(
-            arg="sms",
-            func=sms_event,
-        )
-    )
-    training_task = asyncio.create_task(
-        _training_queue.trigger(
-            arg="training",
-            func=training_event,
-        )
-    )
-    yield
-    call_task.cancel()
-    post_task.cancel()
-    sms_task.cancel()
-    training_task.cancel()
+        yield
+
+    # Cancel tasks
+    finally:
+        if queue_tasks:
+            queue_tasks.cancel()
 
 
 # FastAPI
