@@ -57,7 +57,7 @@ from app.helpers.call_events import (
 )
 from app.helpers.call_utils import ContextEnum as CallContextEnum
 from app.helpers.config import CONFIG
-from app.helpers.http import azure_transport
+from app.helpers.http import aiohttp_session, azure_transport
 from app.helpers.logging import logger
 from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
@@ -151,6 +151,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     finally:
         if queue_tasks:
             queue_tasks.cancel()
+
+    # Close HTTP session
+    await (await aiohttp_session()).close()
 
 
 # FastAPI
