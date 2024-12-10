@@ -1,0 +1,15 @@
+conversation:
+  initiate:
+    agent_phone_number: "+33612345678" # Phone number the bot will transfer the call to if customer asks for a human agent
+    bot_company: Contoso
+    bot_name: Amélie
+    lang: {}
+
+communication_services:
+  phone_number: "+33612345678" # Phone number purshased from Communication Services
+
+sms: {}
+
+prompts:
+  llm: {}
+  tts: {}
