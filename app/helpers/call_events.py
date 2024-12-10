@@ -41,7 +41,6 @@ from app.models.message import (
     ActionEnum as MessageActionEnum,
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
-    StyleEnum as MessageStyleEnum,
     extract_message_style,
     remove_message_action,
 )
@@ -107,7 +106,6 @@ async def on_new_call(
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
     server_call_id: str,
 ) -> None:
@@ -123,7 +121,6 @@ async def on_call_connected(
         _handle_ivr_language(
             call=call,
             client=client,
-            post_callback=post_callback,
             scheduler=scheduler,
         ),  # First, every time a call is answered, confirm the language
         _handle_recording(
@@ -247,7 +244,6 @@ async def on_automation_recognize_error(
     await _handle_ivr_language(
         call=call,
         client=client,
-        post_callback=post_callback,
         scheduler=scheduler,
     )
 
@@ -409,15 +405,6 @@ async def on_automation_play_completed(
         )
         return
 
-    # Start real-time
-    if CallContextEnum.START_REALTIME in contexts:
-        logger.info("Starting real-time")
-        await start_audio_streaming(
-            call=call,
-            client=client,
-        )
-        return
-
     logger.warning("Unknown context %s", contexts)
 
 
@@ -459,7 +446,6 @@ async def on_ivr_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
     label: str,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
 ) -> None:
     """
@@ -491,28 +477,9 @@ async def on_ivr_recognized(
         call.lang = lang.short_code
         call.recognition_retry = 0
 
-    # First call
-    if len(call.messages) <= 1:
-        # Greet the userwith the next message
-        await handle_automation_tts(
-            call=call,
-            client=client,
-            context=CallContextEnum.START_REALTIME,
-            post_callback=post_callback,
-            scheduler=scheduler,
-            text=await CONFIG.prompts.tts.hello(call),
-        )
-        return
-
-    # Welcome back the user
-    await handle_automation_tts(
+    await start_audio_streaming(
         call=call,
         client=client,
-        context=CallContextEnum.START_REALTIME,
-        post_callback=post_callback,
-        scheduler=scheduler,
-        style=MessageStyleEnum.CHEERFUL,
-        text=await CONFIG.prompts.tts.welcome_back(call),
     )
 
 
@@ -779,7 +746,6 @@ async def _intelligence_next(
 async def _handle_ivr_language(
     call: CallStateModel,
     client: CallAutomationClient,
-    post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
 ) -> None:
     """
@@ -795,7 +761,6 @@ async def _handle_ivr_language(
             call=call,
             client=client,
             label=short_code,
-            post_callback=post_callback,
             scheduler=scheduler,
         )
         return

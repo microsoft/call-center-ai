@@ -69,8 +69,8 @@ async def load_llm_chat(  # noqa: PLR0913
     training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     # Init language recognition
-    stt_buffer: list[str] = []
-    stt_complete_gate = asyncio.Event()
+    stt_buffer: list[str] = []  # Temporary buffer for recognition
+    stt_complete_gate = asyncio.Event()  # Gate to wait for the recognition
 
     def _stt_callback(text: str) -> None:
         # Skip if no text
@@ -133,6 +133,27 @@ async def load_llm_chat(  # noqa: PLR0913
             # Clear the recognition buffer
             stt_buffer.clear()
 
+        async def _commit_answer(tool_blacklist: set[str] | None = None) -> None:
+            """
+            Process the response.
+            """
+            # Store recognition task
+            nonlocal last_response
+            last_response = await scheduler.spawn(
+                _continue_chat(
+                    call=call,
+                    client=automation_client,
+                    post_callback=post_callback,
+                    scheduler=scheduler,
+                    tool_blacklist=tool_blacklist,
+                    training_callback=training_callback,
+                    tts_client=tts_client,
+                )
+            )
+
+            # Wait for the response to be processed
+            await last_response.wait()
+
         async def _response_callback() -> None:
             # Wait for the complete recognition
             await stt_complete_gate.wait()
@@ -160,23 +181,26 @@ async def load_llm_chat(  # noqa: PLR0913
             # Clear the recognition buffer
             stt_buffer.clear()
 
-            # Store recognitio task
-            nonlocal last_response
-            last_response = await scheduler.spawn(
-                _out_answer(
-                    call=call,
-                    client=automation_client,
-                    post_callback=post_callback,
-                    scheduler=scheduler,
-                    training_callback=training_callback,
-                    tts_client=tts_client,
-                )
+            # Process the response
+            await _commit_answer()
+
+        # First call
+        if len(call.messages) <= 1:
+            # Welcome with a pre-recorded message
+            await handle_realtime_tts(
+                call=call,
+                tts_client=tts_client,
+                scheduler=scheduler,
+                text=await CONFIG.prompts.tts.hello(call),
+            )
+        # User is back
+        else:
+            # Welcome with the LLM, do not use the end call tool for the first message, LLM hallucinates it and this is extremely frustrating for the user
+            await _commit_answer(
+                {"end_call"},
             )
 
-            # Wait for the response to be processed
-            await last_response.wait()
-
-        await _in_audio(
+        await _process_chat_audio(
             bits_per_sample=audio_bits_per_sample,
             call=call,
             channels=audio_channels,
@@ -190,12 +214,13 @@ async def load_llm_chat(  # noqa: PLR0913
 
 
 # TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
-@tracer.start_as_current_span("call_load_out_answer")
-async def _out_answer(  # noqa: PLR0915, PLR0913
+@tracer.start_as_current_span("call_continue_chat")
+async def _continue_chat(  # noqa: PLR0915, PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
+    tool_blacklist: set[str] | None,
     training_callback: Callable[[CallStateModel], Awaitable[None]],
     tts_client: SpeechSynthesizer,
     _iterations_remaining: int = 3,
@@ -353,11 +378,12 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
         # Retry chat after an error
         else:
             logger.info("Retrying chat, %s remaining", _iterations_remaining - 1)
-            return await _out_answer(
+            return await _continue_chat(
                 call=call,
                 client=client,
                 post_callback=post_callback,
                 scheduler=scheduler,
+                tool_blacklist=tool_blacklist,
                 training_callback=training_callback,
                 tts_client=tts_client,
                 _iterations_remaining=_iterations_remaining - 1,
@@ -366,11 +392,12 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
     # Contiue chat
     elif continue_chat and _iterations_remaining > 0:
         logger.info("Continuing chat, %s remaining", _iterations_remaining - 1)
-        return await _out_answer(
+        return await _continue_chat(
             call=call,
             client=client,
             post_callback=post_callback,
             scheduler=scheduler,
+            tool_blacklist=tool_blacklist,
             training_callback=training_callback,
             tts_client=tts_client,
             _iterations_remaining=_iterations_remaining - 1,
@@ -383,12 +410,13 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
 
 
 # TODO: Refacto, this function is too long
-@tracer.start_as_current_span("call_execute_llm_chat")
-async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
+@tracer.start_as_current_span("call_generate_chat_completion")
+async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
+    tool_blacklist: set[str] | None,
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     tts_client: SpeechSynthesizer,
     use_tools: bool,
@@ -445,7 +473,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     if not use_tools:
         logger.warning("Tools disabled for this chat")
     else:
-        tools = await plugins.to_openai()
+        tools = await plugins.to_openai(tool_blacklist)
         # logger.debug("Tools: %s", tools)
 
     # Execute LLM inference
@@ -564,7 +592,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
 
 
 # TODO: Refacto and simplify
-async def _in_audio(  # noqa: PLR0913
+async def _process_chat_audio(  # noqa: PLR0913
     bits_per_sample: int,
     call: CallStateModel,
     channels: int,

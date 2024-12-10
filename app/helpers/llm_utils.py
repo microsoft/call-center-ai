@@ -71,12 +71,20 @@ class AbstractPlugin:
         self.tts_callback = tts_callback
         self.tts_client = tts_client
 
-    async def to_openai(self) -> list[ChatCompletionToolParam]:
+    async def to_openai(
+        self,
+        blacklist: set[str] | None,
+    ) -> list[ChatCompletionToolParam]:
+        """
+        Get the OpenAI SDK schema for all functions of the plugin, excluding the ones in the blacklist.
+        """
         return await asyncio.gather(
             *[
                 _function_schema(arg_type, call=self.call)
                 for name, arg_type in getmembers(self.__class__, isfunction)
-                if not name.startswith("_") and name != "to_openai"
+                if not name.startswith("_")
+                and name != "to_openai"
+                and name not in (blacklist or set())
             ]
         )
 

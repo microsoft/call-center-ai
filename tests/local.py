@@ -8,7 +8,7 @@ from app.helpers.call_events import (
     on_end_call,
     on_ivr_recognized,
 )
-from app.helpers.call_llm import _out_answer
+from app.helpers.call_llm import _continue_chat
 from app.helpers.config import CONFIG
 from app.helpers.logging import logger
 from app.models.call import CallInitiateModel, CallStateModel
@@ -68,7 +68,6 @@ async def main() -> None:
         await on_call_connected(
             call=call,
             client=automation_client,
-            post_callback=_post_callback,
             scheduler=scheduler,
             server_call_id="dummy",
         )
@@ -78,7 +77,6 @@ async def main() -> None:
             call=call,
             client=automation_client,
             label=call.lang.short_code,
-            post_callback=_post_callback,
             scheduler=scheduler,
         )
 
@@ -102,11 +100,12 @@ async def main() -> None:
                 )
 
             # Respond
-            await _out_answer(
+            await _continue_chat(
                 call=call,
                 client=automation_client,
                 post_callback=_post_callback,
                 scheduler=scheduler,
+                tool_blacklist=None,
                 training_callback=_training_callback,
                 tts_client=tts_client,
             )

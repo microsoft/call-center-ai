@@ -749,7 +749,6 @@ async def _communicationservices_event_worker(
                 await on_call_connected(
                     call=call,
                     client=automation_client,
-                    post_callback=_trigger_post_event,
                     scheduler=scheduler,
                     server_call_id=server_call_id,
                 )
@@ -773,7 +772,6 @@ async def _communicationservices_event_worker(
                         call=call,
                         client=automation_client,
                         label=label_detected,
-                        post_callback=_trigger_post_event,
                         scheduler=scheduler,
                     )
 

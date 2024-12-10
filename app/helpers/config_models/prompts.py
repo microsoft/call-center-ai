@@ -520,11 +520,6 @@ class TtsModel(BaseModel):
         "It seems quiet on your end. How can I assist you?",
         "I didn't catch that. How can I help?",
     ]
-    welcome_back_tpl: list[str] = [
-        "Hello, I'm {bot_name}, from {bot_company}!",
-        "Hi there, {bot_name} from {bot_company} here!",
-        "Hey, it's {bot_name} from {bot_company}!",
-    ]
     timeout_loading_tpl: list[str] = [
         "It's taking me longer than expected to reply. Thank you for your patience…",
         "I'm working on your request. Thanks for waiting!",
@@ -565,17 +560,6 @@ class TtsModel(BaseModel):
 
     async def timeout_silence(self, call: CallStateModel) -> str:
         return await self._translate(self.timeout_silence_tpl, call)
-
-    async def welcome_back(self, call: CallStateModel) -> str:
-        from app.helpers.features import callback_timeout_hour
-
-        return await self._translate(
-            self.welcome_back_tpl,
-            call,
-            bot_company=call.initiate.bot_company,
-            bot_name=call.initiate.bot_name,
-            conversation_timeout_hour=await callback_timeout_hour(),
-        )
 
     async def timeout_loading(self, call: CallStateModel) -> str:
         return await self._translate(self.timeout_loading_tpl, call)

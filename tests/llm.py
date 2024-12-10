@@ -26,7 +26,7 @@ from app.helpers.call_events import (
     on_ivr_recognized,
     on_play_started,
 )
-from app.helpers.call_llm import _out_answer
+from app.helpers.call_llm import _continue_chat
 from app.helpers.config import CONFIG
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
@@ -291,7 +291,6 @@ async def test_llm(  # noqa: PLR0913
         await on_call_connected(
             call=call,
             client=automation_client,
-            post_callback=_post_callback,
             scheduler=scheduler,
             server_call_id="dummy",
         )
@@ -301,7 +300,6 @@ async def test_llm(  # noqa: PLR0913
             call=call,
             client=automation_client,
             label=call.lang.short_code,
-            post_callback=_post_callback,
             scheduler=scheduler,
         )
 
@@ -319,11 +317,12 @@ async def test_llm(  # noqa: PLR0913
                 )
 
             # Respond
-            await _out_answer(
+            await _continue_chat(
                 call=call,
                 client=automation_client,
                 post_callback=_post_callback,
                 scheduler=scheduler,
+                tool_blacklist=None,
                 training_callback=_training_callback,
                 tts_client=tts_client,
             )

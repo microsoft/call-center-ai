@@ -89,8 +89,6 @@ class ContextEnum(str, Enum):
     """Hang up"""
     IVR_LANG_SELECT = "ivr_lang_select"
     """IVR language selection"""
-    START_REALTIME = "start_realtime"
-    """Start realtime call"""
     TRANSFER_FAILED = "transfer_failed"
     """Transfer failed"""
 
