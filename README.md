@@ -80,7 +80,7 @@ curl \
 
 ### Demo
 
-A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project. All the infrastructure is deployed on Azure, mostly in serverless mode. Provisionning of the LLM resources can be done to reduce the latency.
+A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project. Voice is hesitant on purpose to show the bot can handle it. All the infrastructure is deployed on Azure, mostly in serverless mode. Provisionning of the LLM resources can be done to reduce the latency.
 
 [![French demo](https://img.youtube.com/vi/8nSC8SzG6ys/maxresdefault.jpg)](https://youtube.com/watch?v=8nSC8SzG6ys)
 
