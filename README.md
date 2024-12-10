@@ -709,9 +709,88 @@ Feel free to raise an issue or propose a PR if you have any idea to optimize the
 
 ## Q&A
 
-### Why no LLM framework is used?
+### What will this cost?
 
-At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
+For a monthly usage of 1000 calls of 10 minutes each. Costs are estimated for 2024-12-10, in USD. Prices are subject to change.
+
+> [!NOTE]
+> For production usage, it is recommended to upgrade to SKUs with vNET integration and private endpoints. This can increase notably the costs.
+
+This totalizes $720.07 /month, $0.12 /hour, with the following breakdown:
+
+[Azure Communication Services](https://azure.microsoft.com/en-us/pricing/details/communication-services/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| West Europe | Audio Streaming | $0.004 /minute | $40 | |
+
+[Azure OpenAI](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| Sweden Central | GPT-4o mini global | $0.15 /1M input tokens | $35.25 | 8k tokens for conversation history, 3750 tokens for RAG, each participant talk every 15s |
+| Sweden Central | GPT-4o mini global | $0.60 /1M output tokens | $1.4 | 400 tokens for each response incl tools, each participant talk every 15s |
+| Sweden Central | GPT-4o global | $2.50 /1M input tokens | $10 | 4k tokens for each conversation, to get insights |
+| Sweden Central | GPT-4o global | $10 /1M output tokens | $10 | 1k tokens for each conversation, to get insights |
+| Sweden Central | text-embedding-3-large | $0.00013 /1k tokens | $2.08 | 1 search or 400 tokens for each message, each participant talk every 15s |
+
+[Azure Container Apps](https://azure.microsoft.com/en-us/pricing/details/container-apps/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| Sweden Central | Serverless vCPU | $0.000024 /sec | $128.56 | Avg of 2 replicas with 1 vCPU |
+| Sweden Central | Serverless memory (average of 2 replicas) | $0.000003 /sec | $32.14 | Avg of 2 replicas with 2GB |
+
+[Azure Cache for Redis](https://azure.microsoft.com/en-us/pricing/details/cache/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| Sweden Central | Standard C0 | $40.15 /month | $40.15 | Has 250MB of memory, should be upgraded for more intensive usage |
+
+[Azure AI Search](https://azure.microsoft.com/en-us/pricing/details/search/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| Sweden Central | Basic | $73.73 /month | $73.73 | Has 15GB of storage /index, should be upgraded for big datasets |
+
+[Azure AI Speech](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| West Europe | Speech-to-text real-time | $1 /hour | $83.33 | Each participant talk every 15s |
+| West Europe | Text-to-speech standard | $15 /1M characters | $69.23 | 300 tokens for each response, 1.3 tokens /word in English, each participant talk every 15s |
+
+[Azure Cosmos DB](https://azure.microsoft.com/en-us/pricing/details/cosmos-db/autoscale-provisioned/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| Sweden Central | Multi-region write RU/s /region | $11.68 /100 RU/s | $233.6 | Avg of 1k RU/s on 2 regions |
+| Sweden Central | Transactional storage | $0.25 /GB | $0.5 | 2GB of storage, should be upgraded if more history is needed |
+
+**Not included upper:**
+
+> [!NOTE]
+> Azure Monitor costs shouldn't be considered as optional as monitoring is a key part of maintaining a business-critical application and high-quality service for users.
+
+Optional costs totalizing $343.02 /month, with the following breakdown:
+
+[Azure Communication Services](https://azure.microsoft.com/en-us/pricing/details/communication-services/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| West Europe | Call recording | $0.002 /minute | $20 | |
+
+[Azure OpenAI](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| Sweden Central | text-embedding-3-large | $0.00013 /1k tokens | $0.52 | 10k PDF pages with 400 tokens each, for indexing |
+
+[Azure Monitor](https://azure.microsoft.com/en-us/pricing/details/monitor/):
+
+| Region | Metric | Cost | Total (monthly $) | Note |
+|-|-|-|-|-|
+| Sweden Central | Basic logs ingestion | $0.645 /GB | $322.5 | 500GB of logs with sampling enabled |
 
 ### What would it require to make it production ready?
 
@@ -744,6 +823,8 @@ Security:
 - [x] CI builds attestations
 - [x] CodeQL static code checks
 - [ ] GitOps for deployments
+- [ ] Private networking
+- [ ] Production SKUs allowing vNET integration
 - [ ] Red team exercises
 
 Responsible AI:
@@ -751,3 +832,7 @@ Responsible AI:
 - [x] Harmful content detection
 - [ ] Grounding detection with Content Safety
 - [ ] Social impact assessment
+
+### Why no LLM framework is used?
+
+At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
