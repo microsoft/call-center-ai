@@ -947,7 +947,8 @@ async def _communicationservices_urls(
 )
 @tracer.start_as_current_span("twilio_sms_post")
 async def twilio_sms_post(
-    Body: Annotated[str, Form()], From: Annotated[PhoneNumber, Form()]
+    Body: Annotated[str, Form()],
+    From: Annotated[PhoneNumber, Form()],
 ) -> Response:
     """
     Handle incoming SMS event from Twilio.

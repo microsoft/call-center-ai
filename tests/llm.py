@@ -242,8 +242,8 @@ async def test_llm(  # noqa: PLR0913
     claim_tests_excl: list[str],
     deepeval_model: GPTModel,
     expected_output: str,
-    speeches: list[str],
     lang: str,
+    speeches: list[str],
 ) -> None:
     """
     Test the LLM with a mocked conversation against the expected output.

@@ -20,7 +20,10 @@ from app.helpers.config_models.cache import ModeEnum as CacheModeEnum
 )
 @pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
-async def test_acid(random_text: str, cache_mode: CacheModeEnum) -> None:
+async def test_acid(
+    cache_mode: CacheModeEnum,
+    random_text: str,
+) -> None:
     """
     Test ACID properties of the cache backend.
 
