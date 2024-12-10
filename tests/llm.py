@@ -306,12 +306,11 @@ async def test_llm(  # noqa: PLR0913
         )
 
         # Simulate conversation with speech recognition
-        for speech in speeches:
-            # Add message to history
-            async with db.call_transac(
-                call=call,
-                scheduler=scheduler,
-            ):
+        async with db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
+            for speech in speeches:
                 call.messages.append(
                     MessageModel(
                         content=speech,
