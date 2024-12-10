@@ -789,7 +789,7 @@ Optional costs totalizing $343.02 /month, with the following breakdown:
 
 | Region | Metric | Cost | Total (monthly $) | Note |
 |-|-|-|-|-|
-| Sweden Central | Basic logs ingestion | $0.645 /GB | $322.5 | 500GB of logs with sampling enabled |
+| Sweden Central | Basic logs ingestion | $0.645 /GB | $322.5 | 500GB of logs [with sampling enabled](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration?tabs=python#enable-sampling) |
 
 ### What would it require to make it production ready?
 
