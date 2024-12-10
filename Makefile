@@ -77,10 +77,10 @@ test:
 	$(MAKE) test-unit
 
 test-static:
-	@echo "➡️ Test code smells (Ruff)..."
+	@echo "➡️ Test Python code style..."
 	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
 
-	@echo "➡️ Test types (Pyright)..."
+	@echo "➡️ Test Python type hints..."
 	uv run pyright .
 
 test-unit:
