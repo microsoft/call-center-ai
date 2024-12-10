@@ -566,19 +566,19 @@ Task can be customized for each call, by adding the `task` field in the `POST /c
 
 ### Customize the conversation
 
-Conversation options are represented as features. They can be configured from App Configuration, without the need to redeploy or restart the application. Once a feature is updated, a delay of 60 seconds is needed to make the change effective.
+Conversation options are represented as features. They can be configured from App Configuration, without the need to redeploy or restart the application. Once a feature is updated, a delay of 60 secs is needed to make the change effective.
 
 | Name | Description | Type | Default |
 |-|-|-|-|
-| `answer_hard_timeout_sec` | The hard timeout for the bot answer in seconds. | `int` | 180 |
-| `answer_soft_timeout_sec` | The soft timeout for the bot answer in seconds. | `int` | 30 |
+| `answer_hard_timeout_sec` | The hard timeout for the bot answer in secs. | `int` | 180 |
+| `answer_soft_timeout_sec` | The soft timeout for the bot answer in secs. | `int` | 30 |
 | `callback_timeout_hour` | The timeout for a callback in hours. | `int` | 3 |
-| `phone_silence_timeout_sec` | The timeout for phone silence in seconds. | `int` | 20 |
+| `phone_silence_timeout_sec` | The timeout for phone silence in secs. | `int` | 20 |
 | `recognition_retry_max` | The maximum number of retries for voice recognition. | `int` | 2 |
 | `recording_enabled` | Whether call recording is enabled. | `bool` | false |
 | `slow_llm_for_chat` | Whether to use the slow LLM for chat. | `bool` | false |
-| `vad_cutoff_timeout_ms` | The cutoff timeout for voice activity detection in seconds. | `int` | 600 |
-| `vad_silence_timeout_ms` | The timeout for phone silence in seconds. | `int` | 400 |
+| `vad_cutoff_timeout_ms` | The cutoff timeout for voice activity detection in secs. | `int` | 600 |
+| `vad_silence_timeout_ms` | The timeout for phone silence in secs. | `int` | 400 |
 
 ### Use an OpenAI compatible model for the LLM
 

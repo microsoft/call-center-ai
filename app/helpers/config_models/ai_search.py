@@ -24,4 +24,7 @@ class AiSearchModel(BaseModel, frozen=True):
             AiSearchSearch,
         )
 
-        return AiSearchSearch(CONFIG.cache.instance(), self)
+        return AiSearchSearch(
+            cache=CONFIG.cache.instance(),
+            config=self,
+        )

@@ -65,6 +65,8 @@ class TwilioSms(ISms):
 
     @async_lru_cache()
     async def _use_client(self) -> Client:
+        logger.debug("Using Twilio client for %s", self._config.account_sid)
+
         return Client(
             # Performance
             http_client=await twilio_http(),

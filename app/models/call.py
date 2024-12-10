@@ -34,11 +34,11 @@ class CallGetModel(BaseModel):
     call_id: UUID = Field(default_factory=uuid4, frozen=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), frozen=True)
     # Editable fields
+    in_progress: bool = False
+    initiate: CallInitiateModel = Field(frozen=True)
     claim: dict[
         str, Any
     ] = {}  # Place after "initiate" as it depends on it for validation
-    in_progress: bool = False
-    initiate: CallInitiateModel = Field(frozen=True)
     messages: list[MessageModel] = []
     next: NextModel | None = None
     reminders: list[ReminderModel] = []

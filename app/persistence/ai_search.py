@@ -66,11 +66,6 @@ class AiSearchSearch(ISearch):
 
     def __init__(self, cache: ICache, config: AiSearchModel):
         super().__init__(cache)
-        logger.info("Using AI Search %s with index %s", config.endpoint, config.index)
-        logger.info(
-            "Note: At ~300 chars /doc, each LLM call will use approx %d tokens (without tools)",
-            300 * config.top_n_documents * config.expansion_n_messages / 4,
-        )
         self._config = config
 
     async def readiness(self) -> ReadinessEnum:
@@ -104,7 +99,7 @@ class AiSearchSearch(ISearch):
         text: str,
         cache_only: bool = False,
     ) -> list[TrainingModel] | None:
-        logger.debug('Searching training data for "%s"', text)
+        # logger.debug('Searching training data for "%s"', text)
         if not text:
             return None
 
@@ -193,6 +188,12 @@ class AiSearchSearch(ISearch):
 
         If the index does not exist, it will be created.
         """
+        logger.debug("Using AI Search client for %s", self._config.index)
+        logger.debug(
+            "Note: At ~300 chars /doc, each LLM call will use approx %d tokens (without tools)",
+            300 * self._config.top_n_documents * self._config.expansion_n_messages / 4,
+        )
+
         # Index configuration
         fields = [
             # Required field for indexing key

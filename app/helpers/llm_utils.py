@@ -5,7 +5,9 @@ See: https://github.com/microsoft/autogen/blob/2750391f847b7168d842dfcb815ac37bd
 
 import asyncio
 import inspect
+import json
 from collections.abc import Awaitable, Callable
+from functools import cache
 from inspect import getmembers, isfunction
 from textwrap import dedent
 from typing import Annotated, Any, ForwardRef, TypeVar
@@ -16,6 +18,7 @@ from azure.cognitiveservices.speech import (
 )
 from azure.communication.callautomation.aio import CallAutomationClient
 from jinja2 import Environment
+from json_repair import repair_json
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, TypeAdapter
@@ -23,7 +26,9 @@ from pydantic._internal._typing_extra import eval_type_lenient
 from pydantic.json_schema import JsonSchemaValue
 
 from app.helpers.logging import logger
+from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
 from app.models.call import CallStateModel
+from app.models.message import ToolModel
 
 T = TypeVar("T")
 _jinja = Environment(
@@ -66,14 +71,104 @@ class AbstractPlugin:
         self.tts_callback = tts_callback
         self.tts_client = tts_client
 
-    async def to_openai(self) -> list[ChatCompletionToolParam]:
+    async def to_openai(
+        self,
+        blacklist: set[str] | None,
+    ) -> list[ChatCompletionToolParam]:
+        """
+        Get the OpenAI SDK schema for all functions of the plugin, excluding the ones in the blacklist.
+        """
         return await asyncio.gather(
             *[
                 _function_schema(arg_type, call=self.call)
                 for name, arg_type in getmembers(self.__class__, isfunction)
-                if not name.startswith("_") and name != "to_openai"
+                if not name.startswith("_")
+                and name != "to_openai"
+                and name not in (blacklist or set())
             ]
         )
+
+    @tracer.start_as_current_span("plugin_execute_tool")
+    async def execute_tool(self, tool: ToolModel) -> None:
+        functions = self._available_functions()
+        json_str = tool.function_arguments
+        name = tool.function_name
+
+        # Confirm the function name exists, this is a security measure to prevent arbitrary code execution, plus, Pydantic validator is not used on purpose to comply with older tools plugins
+        if name not in functions:
+            res = f"Invalid function names {name}, available are {functions}."
+            logger.warning(res)
+            # Update tool
+            tool.content = res
+            # Enrich span
+            span_attribute(SpanAttributes.TOOL_RESULT, tool.content)
+            return
+
+        # Try to fix JSON args to catch LLM hallucinations
+        # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
+        args: dict[str, Any] | Any = repair_json(
+            json_str=json_str,
+            return_objects=True,
+        )  # pyright: ignore
+
+        # Confirm the args are a dictionary
+        if not isinstance(args, dict):
+            logger.warning(
+                "Error decoding JSON args for function %s: %s...%s",
+                name,
+                json_str[:20],
+                json_str[-20:],
+            )
+            # Update tool
+            tool.content = (
+                f"Bad arguments, available are {functions}. Please try again."
+            )
+            # Enrich span
+            span_attribute(SpanAttributes.TOOL_RESULT, tool.content)
+            return
+
+        # Enrich span
+        span_attribute(SpanAttributes.TOOL_ARGS, json.dumps(args))
+        span_attribute(SpanAttributes.TOOL_NAME, name)
+
+        # Execute the function
+        try:
+            res = await getattr(self, name)(**args)
+            res_log = f"{res[:20]}...{res[-20:]}"
+            logger.info("Executed function %s (%s): %s", name, args, res_log)
+
+        # Catch wrong arguments
+        except TypeError as e:
+            logger.warning(
+                "Wrong arguments for function %s: %s. Error: %s",
+                name,
+                args,
+                e,
+            )
+            res = "Wrong arguments, please fix them and try again."
+            res_log = res
+
+        # Catch execution errors
+        except Exception as e:
+            logger.exception(
+                "Error executing function %s with args %s",
+                tool.function_name,
+                args,
+            )
+            res = f"Error: {e}."
+            res_log = res
+
+        # Update tool
+        tool.content = res
+        # Enrich span
+        span_attribute(SpanAttributes.TOOL_RESULT, tool.content)
+
+    @cache
+    def _available_functions(self) -> list[str]:
+        """
+        List all available functions of the plugin, including the inherited ones.
+        """
+        return [name for name, _ in getmembers(self.__class__, isfunction)]
 
 
 async def _function_schema(

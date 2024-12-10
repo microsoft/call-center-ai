@@ -57,6 +57,8 @@ class CommunicationServicesSms(ISms):
 
     @async_lru_cache()
     async def _use_client(self) -> SmsClient:
+        logger.debug("Using SMS client for %s", self._config.endpoint)
+
         return SmsClient(
             # Deployment
             endpoint=self._config.endpoint,

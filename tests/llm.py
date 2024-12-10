@@ -26,7 +26,7 @@ from app.helpers.call_events import (
     on_ivr_recognized,
     on_play_started,
 )
-from app.helpers.call_llm import _out_answer
+from app.helpers.call_llm import _continue_chat
 from app.helpers.config import CONFIG
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
@@ -236,14 +236,14 @@ class ClaimRelevancyMetric(BaseMetric):
 
 
 @with_conversations
-@pytest.mark.asyncio(scope="session")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_llm(  # noqa: PLR0913
     call: CallStateModel,
     claim_tests_excl: list[str],
     deepeval_model: GPTModel,
     expected_output: str,
-    speeches: list[str],
     lang: str,
+    speeches: list[str],
 ) -> None:
     """
     Test the LLM with a mocked conversation against the expected output.
@@ -291,7 +291,6 @@ async def test_llm(  # noqa: PLR0913
         await on_call_connected(
             call=call,
             client=automation_client,
-            post_callback=_post_callback,
             scheduler=scheduler,
             server_call_id="dummy",
         )
@@ -301,17 +300,15 @@ async def test_llm(  # noqa: PLR0913
             call=call,
             client=automation_client,
             label=call.lang.short_code,
-            post_callback=_post_callback,
             scheduler=scheduler,
         )
 
         # Simulate conversation with speech recognition
-        for speech in speeches:
-            # Add message to history
-            async with db.call_transac(
-                call=call,
-                scheduler=scheduler,
-            ):
+        async with db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
+            for speech in speeches:
                 call.messages.append(
                     MessageModel(
                         content=speech,
@@ -320,11 +317,12 @@ async def test_llm(  # noqa: PLR0913
                 )
 
             # Respond
-            await _out_answer(
+            await _continue_chat(
                 call=call,
                 client=automation_client,
                 post_callback=_post_callback,
                 scheduler=scheduler,
+                tool_blacklist=None,
                 training_callback=_training_callback,
                 tts_client=tts_client,
             )

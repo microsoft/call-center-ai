@@ -39,7 +39,7 @@ from app.helpers.llm_worker import (
     completion_stream,
 )
 from app.helpers.logging import logger
-from app.helpers.monitoring import CallAttributes, span_attribute, tracer
+from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
 from app.models.call import CallStateModel
 from app.models.message import (
     ActionEnum as MessageAction,
@@ -69,10 +69,13 @@ async def load_llm_chat(  # noqa: PLR0913
     training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     # Init language recognition
-    stt_buffer: list[str] = []
-    stt_complete_gate = asyncio.Event()
+    stt_buffer: list[str] = []  # Temporary buffer for recognition
+    stt_complete_gate = asyncio.Event()  # Gate to wait for the recognition
 
     def _stt_callback(text: str) -> None:
+        """
+        Store the recognition in the buffer.
+        """
         # Skip if no text
         if not text:
             return
@@ -100,6 +103,9 @@ async def load_llm_chat(  # noqa: PLR0913
         last_response: Job | None = None
 
         async def _timeout_callback() -> None:
+            """
+            Triggered when the phone silence timeout is reached.
+            """
             from app.helpers.call_events import on_realtime_recognize_error
 
             logger.info("Phone silence timeout triggered")
@@ -116,6 +122,9 @@ async def load_llm_chat(  # noqa: PLR0913
             )
 
         async def _clear_audio_callback() -> None:
+            """
+            Triggered when the audio buffer needs to be cleared.
+            """
             # Stop TTS, clear the buffer and send a stop signal
             tts_client.stop_speaking_async()
             while not audio_out.empty():
@@ -133,7 +142,31 @@ async def load_llm_chat(  # noqa: PLR0913
             # Clear the recognition buffer
             stt_buffer.clear()
 
+        async def _commit_answer(tool_blacklist: set[str] | None = None) -> None:
+            """
+            Process the response.
+            """
+            # Store recognition task
+            nonlocal last_response
+            last_response = await scheduler.spawn(
+                _continue_chat(
+                    call=call,
+                    client=automation_client,
+                    post_callback=post_callback,
+                    scheduler=scheduler,
+                    tool_blacklist=tool_blacklist,
+                    training_callback=training_callback,
+                    tts_client=tts_client,
+                )
+            )
+
+            # Wait for the response to be processed
+            await last_response.wait()
+
         async def _response_callback() -> None:
+            """
+            Triggered when the audio buffer needs to be processed.
+            """
             # Wait for the complete recognition
             await stt_complete_gate.wait()
 
@@ -160,23 +193,26 @@ async def load_llm_chat(  # noqa: PLR0913
             # Clear the recognition buffer
             stt_buffer.clear()
 
-            # Store recognitio task
-            nonlocal last_response
-            last_response = await scheduler.spawn(
-                _out_answer(
-                    call=call,
-                    client=automation_client,
-                    post_callback=post_callback,
-                    scheduler=scheduler,
-                    training_callback=training_callback,
-                    tts_client=tts_client,
-                )
+            # Process the response
+            await _commit_answer()
+
+        # First call
+        if len(call.messages) <= 1:
+            # Welcome with a pre-recorded message
+            await handle_realtime_tts(
+                call=call,
+                tts_client=tts_client,
+                scheduler=scheduler,
+                text=await CONFIG.prompts.tts.hello(call),
+            )
+        # User is back
+        else:
+            # Welcome with the LLM, do not use the end call tool for the first message, LLM hallucinates it and this is extremely frustrating for the user
+            await _commit_answer(
+                {"end_call"},
             )
 
-            # Wait for the response to be processed
-            await last_response.wait()
-
-        await _in_audio(
+        await _process_chat_audio(
             bits_per_sample=audio_bits_per_sample,
             call=call,
             channels=audio_channels,
@@ -190,12 +226,13 @@ async def load_llm_chat(  # noqa: PLR0913
 
 
 # TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
-@tracer.start_as_current_span("call_load_out_answer")
-async def _out_answer(  # noqa: PLR0915, PLR0913
+@tracer.start_as_current_span("call_continue_chat")
+async def _continue_chat(  # noqa: PLR0915, PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
+    tool_blacklist: set[str] | None,
     training_callback: Callable[[CallStateModel], Awaitable[None]],
     tts_client: SpeechSynthesizer,
     _iterations_remaining: int = 3,
@@ -208,8 +245,8 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
     Returns the updated call model.
     """
     # Add span attributes
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
-    span_attribute(CallAttributes.CALL_MESSAGE, call.messages[-1].content)
+    span_attribute(SpanAttributes.CALL_CHANNEL, "voice")
+    span_attribute(SpanAttributes.CALL_MESSAGE, call.messages[-1].content)
 
     # Reset recognition retry counter
     async with _db.call_transac(
@@ -230,23 +267,22 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
         if play_loading_sound:
             play_loading_sound = False
         # Play the TTS
-        await scheduler.spawn(
-            handle_realtime_tts(
-                call=call,
-                scheduler=scheduler,
-                style=style,
-                text=text,
-                tts_client=tts_client,
-            )
+        await handle_realtime_tts(
+            call=call,
+            scheduler=scheduler,
+            style=style,
+            text=text,
+            tts_client=tts_client,
         )
 
     # Chat
     chat_task = asyncio.create_task(
-        _execute_llm_chat(
+        _generate_chat_completion(
             call=call,
             client=client,
             post_callback=post_callback,
             scheduler=scheduler,
+            tool_blacklist=tool_blacklist,
             tts_callback=_tts_callback,
             tts_client=tts_client,
             use_tools=_iterations_remaining > 0,
@@ -312,14 +348,12 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
                     )
                     soft_timeout_triggered = True
                     # Never store the error message in the call history, it has caused hallucinations in the LLM
-                    await scheduler.spawn(
-                        handle_realtime_tts(
-                            call=call,
-                            scheduler=scheduler,
-                            store=False,
-                            text=await CONFIG.prompts.tts.timeout_loading(call),
-                            tts_client=tts_client,
-                        )
+                    await handle_realtime_tts(
+                        call=call,
+                        scheduler=scheduler,
+                        store=False,
+                        text=await CONFIG.prompts.tts.timeout_loading(call),
+                        tts_client=tts_client,
                     )
 
                 # Do not play timeout prompt plus loading, it can be frustrating for the user
@@ -353,11 +387,12 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
         # Retry chat after an error
         else:
             logger.info("Retrying chat, %s remaining", _iterations_remaining - 1)
-            return await _out_answer(
+            return await _continue_chat(
                 call=call,
                 client=client,
                 post_callback=post_callback,
                 scheduler=scheduler,
+                tool_blacklist=tool_blacklist,
                 training_callback=training_callback,
                 tts_client=tts_client,
                 _iterations_remaining=_iterations_remaining - 1,
@@ -366,11 +401,12 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
     # Contiue chat
     elif continue_chat and _iterations_remaining > 0:
         logger.info("Continuing chat, %s remaining", _iterations_remaining - 1)
-        return await _out_answer(
+        return await _continue_chat(
             call=call,
             client=client,
             post_callback=post_callback,
             scheduler=scheduler,
+            tool_blacklist=tool_blacklist,
             training_callback=training_callback,
             tts_client=tts_client,
             _iterations_remaining=_iterations_remaining - 1,
@@ -383,12 +419,13 @@ async def _out_answer(  # noqa: PLR0915, PLR0913
 
 
 # TODO: Refacto, this function is too long
-@tracer.start_as_current_span("call_execute_llm_chat")
-async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
+@tracer.start_as_current_span("call_generate_chat_completion")
+async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
+    tool_blacklist: set[str] | None,
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     tts_client: SpeechSynthesizer,
     use_tools: bool,
@@ -445,7 +482,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     if not use_tools:
         logger.warning("Tools disabled for this chat")
     else:
-        tools = await plugins.to_openai()
+        tools = await plugins.to_openai(tool_blacklist)
         # logger.debug("Tools: %s", tools)
 
     # Execute LLM inference
@@ -510,8 +547,8 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         remove_message_action(content_full)
     )
 
-    logger.debug("Chat response: %s", content_full)
-    logger.debug("Tool calls: %s", tool_calls)
+    logger.debug("Completion response: %s", content_full)
+    logger.debug("Completion tools: %s", tool_calls)
 
     # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
     # TODO: Tries to detect this error earlier
@@ -528,9 +565,16 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         return True, True, call  # Error, retry
 
     # Execute tools
-    tool_tasks = [tool_call.execute_function(plugins) for tool_call in tool_calls]
-    await asyncio.gather(*tool_tasks)
-    call = plugins.call  # Update call model if object reference changed
+    async with _db.call_transac(
+        call=call,
+        scheduler=scheduler,
+    ):
+        await asyncio.gather(
+            *[plugins.execute_tool(tool_call) for tool_call in tool_calls]
+        )
+
+    # Update call model if object reference changed
+    call = plugins.call
 
     # Store message
     async with _db.call_transac(
@@ -557,7 +601,7 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
 
 
 # TODO: Refacto and simplify
-async def _in_audio(  # noqa: PLR0913
+async def _process_chat_audio(  # noqa: PLR0913
     bits_per_sample: int,
     call: CallStateModel,
     channels: int,
@@ -704,14 +748,12 @@ def _tts_callback(
             return
 
         # Play the TTS
-        await scheduler.spawn(
-            handle_realtime_tts(
-                call=call,
-                scheduler=scheduler,
-                style=style,
-                text=text,
-                tts_client=tts_client,
-            )
+        await handle_realtime_tts(
+            call=call,
+            scheduler=scheduler,
+            style=style,
+            text=text,
+            tts_client=tts_client,
         )
 
     return wrapper

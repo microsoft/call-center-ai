@@ -89,8 +89,6 @@ class ContextEnum(str, Enum):
     """Hang up"""
     IVR_LANG_SELECT = "ivr_lang_select"
     """IVR language selection"""
-    START_REALTIME = "start_realtime"
-    """Start realtime call"""
     TRANSFER_FAILED = "transfer_failed"
     """Transfer failed"""
 
@@ -259,6 +257,7 @@ async def handle_realtime_tts(  # noqa: PLR0913
     # Play each chunk
     chunks = _chunk_for_tts(text)
     for chunk in chunks:
+        logger.info("Playing TTS: %s", text)
         tts_client.speak_ssml_async(
             _ssml_from_text(
                 call=call,
@@ -411,7 +410,7 @@ async def handle_hangup(
 
     If the call is already hung up, the exception will be suppressed.
     """
-    logger.info("Hanging up: %s", call.initiate.phone_number)
+    logger.info("Hanging up")
     with (
         # Suppress hangup exception
         suppress(CallHangupException),
@@ -517,6 +516,8 @@ async def _use_call_client(
     """
     Return the call client for a given call.
     """
+    logger.debug("Using Call client for %s", voice_id)
+
     return client.get_call_connection(call_connection_id=voice_id)
 
 
