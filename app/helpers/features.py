@@ -84,6 +84,10 @@ async def _use_client() -> AzureAppConfigurationClient:
     """
     Generate the App Configuration client and close it after use.
     """
+    logger.debug(
+        "Using App Configuration client for %s", CONFIG.app_configuration.endpoint
+    )
+
     return AzureAppConfigurationClient(
         # Performance
         transport=await azure_transport(),

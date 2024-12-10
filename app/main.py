@@ -1086,6 +1086,10 @@ async def _use_automation_client() -> CallAutomationClient:
 
     Returns a `CallAutomationClient` instance.
     """
+    logger.debug(
+        "Using Automation Client for %s", CONFIG.communication_services.endpoint
+    )
+
     return CallAutomationClient(
         # Deployment
         endpoint=CONFIG.communication_services.endpoint,

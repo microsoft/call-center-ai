@@ -38,7 +38,6 @@ class AzureQueueStorage:
         account_url: str,
         name: str,
     ) -> None:
-        logger.info('Azure Queue Storage "%s" is configured', name)
         self._account_url = account_url
         self._name = name
 
@@ -106,33 +105,6 @@ class AzureQueueStorage:
         except (UnicodeDecodeError, BinasciiError):
             return value
 
-    @async_lru_cache()
-    async def _use_service_client(self) -> QueueServiceClient:
-        """
-        Generate a new service client.
-        """
-        return QueueServiceClient(
-            # Performance
-            transport=await azure_transport(),
-            # Deployment
-            account_url=self._account_url,
-            # Authentication
-            credential=await credential(),
-        )
-
-    @asynccontextmanager
-    async def _use_client(self) -> AsyncGenerator[QueueClient, None]:
-        """
-        Generate a queue client.
-        """
-        async with await self._use_service_client() as client:
-            yield client.get_queue_client(
-                # Performance
-                transport=await azure_transport(),
-                # Deployment
-                queue=self._name,
-            )
-
     async def trigger(
         self,
         arg: str,
@@ -186,3 +158,32 @@ class AzureQueueStorage:
         await func(**kwargs)
         # Then, delete message
         await self.delete_message(message)
+
+    @async_lru_cache()
+    async def _use_service_client(self) -> QueueServiceClient:
+        """
+        Generate a new service client.
+        """
+        logger.debug("Using Queue Service client for %s", self._account_url)
+
+        return QueueServiceClient(
+            # Performance
+            transport=await azure_transport(),
+            # Deployment
+            account_url=self._account_url,
+            # Authentication
+            credential=await credential(),
+        )
+
+    @asynccontextmanager
+    async def _use_client(self) -> AsyncGenerator[QueueClient, None]:
+        """
+        Generate a queue client.
+        """
+        async with await self._use_service_client() as client:
+            yield client.get_queue_client(
+                # Performance
+                transport=await azure_transport(),
+                # Deployment
+                queue=self._name,
+            )

@@ -517,6 +517,8 @@ async def _use_call_client(
     """
     Return the call client for a given call.
     """
+    logger.debug("Using Call client for %s", voice_id)
+
     return client.get_call_connection(call_connection_id=voice_id)
 
 

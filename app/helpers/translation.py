@@ -66,6 +66,8 @@ async def _use_client() -> TextTranslationClient:
     """
     Generate the Translation client and close it after use.
     """
+    logger.debug("Using Translation client for %s", CONFIG.ai_translation.endpoint)
+
     return TextTranslationClient(
         # Performance
         transport=await azure_transport(),
