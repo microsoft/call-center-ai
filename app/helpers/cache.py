@@ -1,3 +1,4 @@
+import asyncio
 import functools
 from collections import OrderedDict
 from collections.abc import Awaitable
@@ -15,8 +16,12 @@ def async_lru_cache(maxsize: int = 128):
 
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Awaitable:
-            # Create a cache key from args and kwargs, using frozenset for kwargs to ensure hashability
-            key = (args, frozenset(kwargs.items()))
+            # Create a cache key from event loop, args and kwargs, using frozenset for kwargs to ensure hashability
+            key = (
+                asyncio.get_event_loop(),
+                args,
+                frozenset(kwargs.items()),
+            )
 
             if key in cache:
                 # Move the recently accessed key to the end (most recently used)
