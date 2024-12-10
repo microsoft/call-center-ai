@@ -1,4 +1,5 @@
 import pytest
+from aiojobs import Scheduler
 from pytest_assume.plugin import assume
 
 from app.helpers.config import CONFIG
@@ -55,3 +56,51 @@ async def test_acid(call: CallStateModel) -> None:
             or []
         )
     )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
+async def test_transaction(
+    call: CallStateModel,
+    random_text: str,
+) -> None:
+    """
+    Test transactional properties of the database backend.
+    """
+    db = CONFIG.database.instance()
+
+    # Check not exists
+    assume(not await db.call_get(call.call_id))
+
+    # Insert call
+    await db.call_create(call)
+
+    async with Scheduler() as scheduler:
+        # Check first change
+        async with db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
+            # Apply change
+            call.voice_id = random_text
+        # Check change
+        assume(call.voice_id == random_text)
+
+        # Check second change
+        async with db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
+            # Still the same
+            assume(call.voice_id == random_text)
+            # Apply change
+            call.in_progress = True
+        # Check change
+        assume(call.in_progress)
+
+        # Check first string change
+        assume(call.voice_id == random_text)
+
+    # Check point read
+    new_call = await db.call_get(call.call_id)
+    assume(new_call and new_call.voice_id == random_text and new_call.in_progress)
