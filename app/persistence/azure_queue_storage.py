@@ -4,7 +4,6 @@ from binascii import Error as BinasciiError
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from aiojobs import Scheduler
 from azure.core.exceptions import ServiceRequestError
 from azure.storage.queue.aio import QueueClient, QueueServiceClient
 from pydantic import BaseModel
@@ -15,7 +14,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import async_lru_cache, get_scheduler
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 from app.helpers.logging import logger
@@ -118,7 +117,7 @@ class AzureQueueStorage:
             self._name,
             func.__name__,
         )
-        async with Scheduler() as scheduler:
+        async with get_scheduler() as scheduler:
             try:
                 # Loop forever to receive messages
                 while messages := self.receive_messages(

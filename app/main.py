@@ -11,7 +11,6 @@ from uuid import UUID
 
 import jwt
 import mistune
-from aiojobs import Scheduler
 from azure.communication.callautomation import (
     MediaStreamingAudioChannelType,
     MediaStreamingContentType,
@@ -41,7 +40,7 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import async_lru_cache, get_scheduler
 from app.helpers.call_events import (
     on_audio_connected,
     on_automation_play_completed,
@@ -490,8 +489,8 @@ async def sms_event(
     # Enrich span
     span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
-    # Execute business logic
-    async with Scheduler() as scheduler:
+    async with get_scheduler() as scheduler:
+        # Execute business logic
         await on_sms_received(
             call=call,
             message=message,
@@ -630,7 +629,7 @@ async def communicationservices_wss_post(
                     )
                 audio_out.task_done()
 
-    async with Scheduler() as scheduler:
+    async with get_scheduler() as scheduler:
         await asyncio.gather(
             # Consume audio from the WebSocket
             _consume_audio(),
@@ -677,25 +676,22 @@ async def communicationservices_callback_post(
         raise RequestValidationError(["Events must be a list"])
 
     # Process events in parallel
-    async with Scheduler() as scheduler:
-        await asyncio.gather(
-            *[
-                _communicationservices_event_worker(
-                    call_id=call_id,
-                    event_dict=event,
-                    secret=secret,
-                    scheduler=scheduler,
-                )
-                for event in events
-            ]
-        )
+    await asyncio.gather(
+        *[
+            _communicationservices_event_worker(
+                call_id=call_id,
+                event_dict=event,
+                secret=secret,
+            )
+            for event in events
+        ]
+    )
 
 
 # TODO: Refacto, too long (and remove PLR0912/PLR0915 ignore)
 async def _communicationservices_event_worker(
     call_id: UUID,
     event_dict: dict,
-    scheduler: Scheduler,
     secret: str,
 ) -> None:
     """
@@ -721,118 +717,119 @@ async def _communicationservices_event_worker(
     event = CloudEvent.from_dict(event_dict)
     assert isinstance(event.data, dict)
 
-    # Store connection ID
-    connection_id = event.data["callConnectionId"]
-    async with _db.call_transac(
-        call=call,
-        scheduler=scheduler,
-    ):
-        call.voice_id = connection_id
+    async with get_scheduler() as scheduler:
+        # Store connection ID
+        connection_id = event.data["callConnectionId"]
+        async with _db.call_transac(
+            call=call,
+            scheduler=scheduler,
+        ):
+            call.voice_id = connection_id
 
-    # Extract context
-    event_type = event.type
+        # Extract context
+        event_type = event.type
 
-    # Extract event context
-    operation_context = event.data.get("operationContext", None)
-    operation_contexts = _str_to_contexts(operation_context)
+        # Extract event context
+        operation_context = event.data.get("operationContext", None)
+        operation_contexts = _str_to_contexts(operation_context)
 
-    # Client SDK
-    automation_client = await _use_automation_client()
+        # Client SDK
+        automation_client = await _use_automation_client()
 
-    # Log
-    logger.debug("Call event received %s", event_type)
+        # Log
+        logger.debug("Call event received %s", event_type)
 
-    match event_type:
-        # Call answered
-        case "Microsoft.Communication.CallConnected":
-            server_call_id = event.data["serverCallId"]
-            await on_call_connected(
-                call=call,
-                client=automation_client,
-                post_callback=_trigger_post_event,
-                scheduler=scheduler,
-                server_call_id=server_call_id,
-            )
-
-        # Call hung up
-        case "Microsoft.Communication.CallDisconnected":
-            await on_call_disconnected(
-                call=call,
-                client=automation_client,
-                post_callback=_trigger_post_event,
-                scheduler=scheduler,
-            )
-
-        # Speech/IVR recognized
-        case "Microsoft.Communication.RecognizeCompleted":
-            recognition_result: str = event.data["recognitionType"]
-            # Handle IVR
-            if recognition_result == "choices":
-                label_detected: str = event.data["choiceResult"]["label"]
-                await on_ivr_recognized(
+        match event_type:
+            # Call answered
+            case "Microsoft.Communication.CallConnected":
+                server_call_id = event.data["serverCallId"]
+                await on_call_connected(
                     call=call,
                     client=automation_client,
-                    label=label_detected,
+                    post_callback=_trigger_post_event,
+                    scheduler=scheduler,
+                    server_call_id=server_call_id,
+                )
+
+            # Call hung up
+            case "Microsoft.Communication.CallDisconnected":
+                await on_call_disconnected(
+                    call=call,
+                    client=automation_client,
                     post_callback=_trigger_post_event,
                     scheduler=scheduler,
                 )
 
-        # Speech/IVR failed
-        case "Microsoft.Communication.RecognizeFailed":
-            result_information = event.data["resultInformation"]
-            error_code: int = result_information["subCode"]
-            error_message: str = result_information["message"]
-            logger.debug(
-                "Speech recognition failed with error code %s: %s",
-                error_code,
-                error_message,
-            )
-            await on_automation_recognize_error(
-                call=call,
-                client=automation_client,
-                contexts=operation_contexts,
-                post_callback=_trigger_post_event,
-                scheduler=scheduler,
-            )
+            # Speech/IVR recognized
+            case "Microsoft.Communication.RecognizeCompleted":
+                recognition_result: str = event.data["recognitionType"]
+                # Handle IVR
+                if recognition_result == "choices":
+                    label_detected: str = event.data["choiceResult"]["label"]
+                    await on_ivr_recognized(
+                        call=call,
+                        client=automation_client,
+                        label=label_detected,
+                        post_callback=_trigger_post_event,
+                        scheduler=scheduler,
+                    )
 
-        # Media started
-        case "Microsoft.Communication.PlayStarted":
-            await on_play_started(
-                call=call,
-                scheduler=scheduler,
-            )
+            # Speech/IVR failed
+            case "Microsoft.Communication.RecognizeFailed":
+                result_information = event.data["resultInformation"]
+                error_code: int = result_information["subCode"]
+                error_message: str = result_information["message"]
+                logger.debug(
+                    "Speech recognition failed with error code %s: %s",
+                    error_code,
+                    error_message,
+                )
+                await on_automation_recognize_error(
+                    call=call,
+                    client=automation_client,
+                    contexts=operation_contexts,
+                    post_callback=_trigger_post_event,
+                    scheduler=scheduler,
+                )
 
-        # Media played
-        case "Microsoft.Communication.PlayCompleted":
-            await on_automation_play_completed(
-                call=call,
-                client=automation_client,
-                contexts=operation_contexts,
-                post_callback=_trigger_post_event,
-                scheduler=scheduler,
-            )
+            # Media started
+            case "Microsoft.Communication.PlayStarted":
+                await on_play_started(
+                    call=call,
+                    scheduler=scheduler,
+                )
 
-        # Media play failed
-        case "Microsoft.Communication.PlayFailed":
-            result_information = event.data["resultInformation"]
-            error_code: int = result_information["subCode"]
-            await on_play_error(error_code)
+            # Media played
+            case "Microsoft.Communication.PlayCompleted":
+                await on_automation_play_completed(
+                    call=call,
+                    client=automation_client,
+                    contexts=operation_contexts,
+                    post_callback=_trigger_post_event,
+                    scheduler=scheduler,
+                )
 
-        # Call transfer failed
-        case "Microsoft.Communication.CallTransferFailed":
-            result_information = event.data["resultInformation"]
-            sub_code: int = result_information["subCode"]
-            await on_transfer_error(
-                call=call,
-                client=automation_client,
-                error_code=sub_code,
-                post_callback=_trigger_post_event,
-                scheduler=scheduler,
-            )
+            # Media play failed
+            case "Microsoft.Communication.PlayFailed":
+                result_information = event.data["resultInformation"]
+                error_code: int = result_information["subCode"]
+                await on_play_error(error_code)
 
-        case _:
-            logger.warning("Event %s not supported", event_type)
-            logger.debug("Event data %s", event.data)
+            # Call transfer failed
+            case "Microsoft.Communication.CallTransferFailed":
+                result_information = event.data["resultInformation"]
+                sub_code: int = result_information["subCode"]
+                await on_transfer_error(
+                    call=call,
+                    client=automation_client,
+                    error_code=sub_code,
+                    post_callback=_trigger_post_event,
+                    scheduler=scheduler,
+                )
+
+            case _:
+                logger.warning("Event %s not supported", event_type)
+                logger.debug("Event data %s", event.data)
 
 
 @tracer.start_as_current_span("training_event")
@@ -880,8 +877,8 @@ async def post_event(
 
     logger.debug("Post event received")
 
-    # Execute business logic
-    async with Scheduler() as scheduler:
+    async with get_scheduler() as scheduler:
+        # Execute business logic
         await on_end_call(
             call=call,
             scheduler=scheduler,
@@ -969,10 +966,12 @@ async def twilio_sms_post(
         # Enrich span
         span_attribute(CallAttributes.CALL_ID, str(call.call_id))
 
-        async with Scheduler() as scheduler:
+        async with get_scheduler() as scheduler:
             # Execute business logic
             event_status = await on_sms_received(
-                call=call, message=Body, scheduler=scheduler
+                call=call,
+                message=Body,
+                scheduler=scheduler,
             )
 
         # Return error for unsuccessful event

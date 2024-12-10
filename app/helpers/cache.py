@@ -1,7 +1,23 @@
 import asyncio
 import functools
 from collections import OrderedDict
-from collections.abc import Awaitable
+from collections.abc import AsyncGenerator, Awaitable
+from contextlib import asynccontextmanager
+
+from aiojobs import Scheduler
+
+
+@asynccontextmanager
+async def get_scheduler() -> AsyncGenerator[Scheduler, None]:
+    """
+    Get the scheduler for async background tasks.
+
+    Scheduler should be used for each request to avoid conflicts. It is closed automatically, waiting 45 secs for tasks to finish.
+    """
+    async with Scheduler(
+        close_timeout=45,  # Default request timeout is 60 secs, should be enough
+    ) as scheduler:
+        yield scheduler
 
 
 def async_lru_cache(maxsize: int = 128):
