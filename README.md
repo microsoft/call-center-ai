@@ -709,10 +709,6 @@ Feel free to raise an issue or propose a PR if you have any idea to optimize the
 
 ## Q&A
 
-### Why no LLM framework is used?
-
-At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
-
 ### What would it require to make it production ready?
 
 Quality:
@@ -751,3 +747,7 @@ Responsible AI:
 - [x] Harmful content detection
 - [ ] Grounding detection with Content Safety
 - [ ] Social impact assessment
+
+### Why no LLM framework is used?
+
+At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
