@@ -73,6 +73,9 @@ async def load_llm_chat(  # noqa: PLR0913
     stt_complete_gate = asyncio.Event()  # Gate to wait for the recognition
 
     def _stt_callback(text: str) -> None:
+        """
+        Store the recognition in the buffer.
+        """
         # Skip if no text
         if not text:
             return
@@ -100,6 +103,9 @@ async def load_llm_chat(  # noqa: PLR0913
         last_response: Job | None = None
 
         async def _timeout_callback() -> None:
+            """
+            Triggered when the phone silence timeout is reached.
+            """
             from app.helpers.call_events import on_realtime_recognize_error
 
             logger.info("Phone silence timeout triggered")
@@ -116,6 +122,9 @@ async def load_llm_chat(  # noqa: PLR0913
             )
 
         async def _clear_audio_callback() -> None:
+            """
+            Triggered when the audio buffer needs to be cleared.
+            """
             # Stop TTS, clear the buffer and send a stop signal
             tts_client.stop_speaking_async()
             while not audio_out.empty():
@@ -155,6 +164,9 @@ async def load_llm_chat(  # noqa: PLR0913
             await last_response.wait()
 
         async def _response_callback() -> None:
+            """
+            Triggered when the audio buffer needs to be processed.
+            """
             # Wait for the complete recognition
             await stt_complete_gate.wait()
 
