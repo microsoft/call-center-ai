@@ -296,11 +296,14 @@ az login
 
 #### 3. Run deployment automation
 
+> [!TIP]
+> Specify the release version under the `image_version` parameter (default is `main`). For example, `image_version=16.0.0` or `image_version=sha-7ca2c0c`. This will ensure any future project breaking changes won't affect your deployment.
+
 ```zsh
 make deploy name=my-rg-name
 ```
 
-- Wait for the deployment to finish
+Wait for the deployment to finish.
 
 #### 4. Get the logs
 
