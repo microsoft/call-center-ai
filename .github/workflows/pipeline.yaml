@@ -112,6 +112,9 @@ jobs:
           python-version: "3.12"
           version: "0.5.x"
 
+      - name: Set up Azure CLI
+        run: curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
       # - name: Login to Azure
       #   uses: Azure/login@v2.2.0
       #   with:
@@ -133,6 +136,9 @@ jobs:
 
       - name: Set up dependencies
         run: make install-deps
+
+      - name: Set up local config
+        run: mv config-remote-example.yaml config.yaml
 
       # - name: Configure environment variables
       #   run: echo "${{ secrets.DOTENV_UNIT_TESTS }}" > .env

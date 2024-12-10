@@ -262,30 +262,7 @@ A pre-built container image is available on GitHub Actions, it will be used to d
 
 #### 1. Create the light config file
 
-Local config file is named `config.yaml`. It will be used by install scripts (incl. Makefile and Bicep) to configure the Azure resources.
-
-Fill the file with the following content (must be customized for your need):
-
-```yaml
-# config.yaml
-conversation:
-  initiate:
-    # Phone number the bot will transfer the call to if customer asks for a human agent
-    agent_phone_number: "+33612345678"
-    bot_company: Contoso
-    bot_name: Amélie
-    lang: {}
-
-communication_services:
-  # Phone number purshased from Communication Services
-  phone_number: "+33612345678"
-
-sms: {}
-
-prompts:
-  llm: {}
-  tts: {}
-```
+Fill the template from the example at [`config-remote-example.yaml`](./config-remote-example.yaml). The file should be placed at the root of the project under the name `config.yaml`. It will be used by install scripts (incl. Makefile and Bicep) to configure the Azure resources.
 
 #### 2. Connect to your Azure environment
 
@@ -334,65 +311,7 @@ If the application is already deployed on Azure, you can run `make name=my-rg-na
 > AZURE_TENANT_ID=xxx
 > ```
 
-If the solution is not running online, configure the local config file, named `config.yaml`:
-
-```yaml
-# config.yaml
-resources:
-  public_url: https://xxx.blob.core.windows.net/public
-
-conversation:
-  initiate:
-    agent_phone_number: "+33612345678"
-    bot_company: Contoso
-    bot_name: Robert
-
-communication_services:
-  access_key: xxx
-  call_queue_name: call-33612345678
-  endpoint: https://xxx.france.communication.azure.com
-  phone_number: "+33612345678"
-  post_queue_name: post-33612345678
-  recording_container_url: https://xxx.blob.core.windows.net/recordings
-  resource_id: xxx
-  sms_queue_name: sms-33612345678
-
-# Must be of type "AI services multi-service account"
-cognitive_service:
-  endpoint: https://xxx.cognitiveservices.azure.com
-  region: swedencentral
-  resource_id: xxx
-
-llm:
-  fast:
-    mode: azure_openai
-    azure_openai:
-      context: 16385
-      deployment: gpt-4o-mini-2024-07-18
-      endpoint: https://xxx.openai.azure.com
-      model: gpt-4o-mini
-      streaming: true
-  slow:
-    mode: azure_openai
-    azure_openai:
-      context: 128000
-      deployment: gpt-4o-2024-08-06
-      endpoint: https://xxx.openai.azure.com
-      model: gpt-4o
-      streaming: true
-
-ai_search:
-  embedding_deployment: text-embedding-3-large-1
-  embedding_dimensions: 3072
-  embedding_endpoint: https://xxx.openai.azure.com
-  embedding_model: text-embedding-3-large
-  endpoint: https://xxx.search.windows.net
-  index: trainings
-
-ai_translation:
-  access_key: xxx
-  endpoint: https://xxx.cognitiveservices.azure.com
-```
+If the solution is not running online, fill the template from the example at [`config-local-example.yaml`](./config-local-example.yaml). The file should be placed at the root of the project under the name `config.yaml`.
 
 #### 3. Run the deployment automation
 
@@ -789,7 +708,7 @@ Optional costs totalizing $343.02 /month, with the following breakdown:
 
 | Region | Metric | Cost | Total (monthly $) | Note |
 |-|-|-|-|-|
-| Sweden Central | Basic logs ingestion | $0.645 /GB | $322.5 | 500GB of logs with sampling enabled |
+| Sweden Central | Basic logs ingestion | $0.645 /GB | $322.5 | 500GB of logs [with sampling enabled](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration?tabs=python#enable-sampling) |
 
 ### What would it require to make it production ready?
 

@@ -77,11 +77,14 @@ test:
 	$(MAKE) test-unit
 
 test-static:
-	@echo "➡️ Test code smells (Ruff)..."
+	@echo "➡️ Test Python code style..."
 	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
 
-	@echo "➡️ Test types (Pyright)..."
+	@echo "➡️ Test Python type hints..."
 	uv run pyright .
+
+	@echo "➡️ Test Bicep code style..."
+	az bicep lint --file cicd/bicep/main.bicep
 
 test-unit:
 	@echo "➡️ Unit tests (Pytest)..."
@@ -90,10 +93,7 @@ test-unit:
 		tests/*.py
 
 lint:
-	@echo "➡️ Fix with formatter..."
-	uv run ruff format
-
-	@echo "➡️ Lint with linter..."
+	@echo "➡️ Fix Python code style..."
 	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
 
 tunnel:

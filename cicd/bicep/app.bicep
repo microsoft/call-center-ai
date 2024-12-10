@@ -219,6 +219,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-02-02-preview' = {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
               value: applicationInsights.properties.ConnectionString
             }
+            {
+              name: 'OTEL_TRACES_SAMPLER_ARG'
+              value: '0.2' // 20% sampling
+            }
           ]
           resources: {
             cpu: 1

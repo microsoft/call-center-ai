@@ -1,0 +1,53 @@
+resources:
+  public_url: https://xxx.blob.core.windows.net/public
+
+conversation:
+  initiate:
+    agent_phone_number: "+33612345678" # Phone number the bot will transfer the call to if customer asks for a human agent
+    bot_company: Contoso
+    bot_name: Robert
+
+communication_services:
+  access_key: xxx
+  call_queue_name: call-33612345678
+  endpoint: https://xxx.france.communication.azure.com
+  phone_number: "+33612345678" # Phone number purshased from Communication Services
+  post_queue_name: post-33612345678
+  recording_container_url: https://xxx.blob.core.windows.net/recordings
+  resource_id: xxx
+  sms_queue_name: sms-33612345678
+
+cognitive_service:
+  endpoint: https://xxx.cognitiveservices.azure.com # Must be of type "AI services multi-service account"
+  region: swedencentral
+  resource_id: xxx
+
+llm:
+  fast:
+    mode: azure_openai
+    azure_openai:
+      context: 16385
+      deployment: gpt-4o-mini-2024-07-18
+      endpoint: https://xxx.openai.azure.com
+      model: gpt-4o-mini
+      streaming: true
+  slow:
+    mode: azure_openai
+    azure_openai:
+      context: 128000
+      deployment: gpt-4o-2024-08-06
+      endpoint: https://xxx.openai.azure.com
+      model: gpt-4o
+      streaming: true
+
+ai_search:
+  embedding_deployment: text-embedding-3-large-1
+  embedding_dimensions: 3072
+  embedding_endpoint: https://xxx.openai.azure.com
+  embedding_model: text-embedding-3-large
+  endpoint: https://xxx.search.windows.net
+  index: trainings
+
+ai_translation:
+  access_key: xxx
+  endpoint: https://xxx.cognitiveservices.azure.com
