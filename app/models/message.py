@@ -15,7 +15,6 @@ from openai.types.chat import (
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
 
-from app.helpers.llm_utils import AbstractPlugin
 from app.helpers.monitoring import tracer
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
@@ -99,85 +98,6 @@ class ToolModel(BaseModel):
                 ),  # Sanitize with dashes then deduplicate dashes, backward compatibility with old models
             },
         )
-
-    # TODO: Move this to AbstractPlugin to avoid doing live imports
-    async def execute_function(self, plugin: AbstractPlugin) -> None:
-        from app.helpers.config import CONFIG
-        from app.helpers.logging import logger
-
-        db = CONFIG.database.instance()
-
-        json_str = self.function_arguments
-        name = self.function_name
-
-        # Confirm the function name exists, this is a security measure to prevent arbitrary code execution, plus, Pydantic validator is not used on purpose to comply with older tools plugins
-        if name not in ToolModel._available_function_names():
-            res = f"Invalid function names {name}, available are {ToolModel._available_function_names()}."
-            logger.warning(res)
-            self.content = res
-            return
-
-        # Try to fix JSON args to catch LLM hallucinations
-        # See: https://community.openai.com/t/gpt-4-1106-preview-messes-up-function-call-parameters-encoding/478500
-        args: dict[str, Any] | Any = repair_json(
-            json_str=json_str,
-            return_objects=True,
-        )  # pyright: ignore
-
-        if not isinstance(args, dict):
-            logger.warning(
-                "Error decoding JSON args for function %s: %s...%s",
-                name,
-                self.function_arguments[:20],
-                self.function_arguments[-20:],
-            )
-            self.content = f"Bad arguments, available are {ToolModel._available_function_names()}. Please try again."
-            return
-
-        with tracer.start_as_current_span(
-            name="message_execute_function",
-            attributes={
-                "args": json.dumps(args),
-                "name": name,
-            },
-        ) as span:
-            try:
-                # Persist the call if updating it
-                async with db.call_transac(
-                    call=plugin.call,
-                    scheduler=plugin.scheduler,
-                ):
-                    res = await getattr(plugin, name)(**args)
-                # Format pretty logs
-                res_log = f"{res[:20]}...{res[-20:]}"
-                logger.info("Executing function %s (%s): %s", name, args, res_log)
-            except TypeError as e:
-                logger.warning(
-                    "Wrong arguments for function %s: %s. Error: %s",
-                    name,
-                    args,
-                    e,
-                )
-                res = "Wrong arguments, please fix them and try again."
-                res_log = res
-            except Exception as e:
-                logger.exception(
-                    "Error executing function %s with args %s",
-                    self.function_name,
-                    args,
-                )
-                res = f"Error: {e}."
-                res_log = res
-            span.set_attribute("result", res_log)
-            self.content = res
-
-    @staticmethod
-    def _available_function_names() -> list[str]:
-        from app.helpers.llm_tools import (
-            DefaultPlugin,
-        )
-
-        return [name for name, _ in getmembers(DefaultPlugin, isfunction)]
 
 
 class MessageModel(BaseModel):
