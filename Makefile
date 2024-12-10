@@ -83,6 +83,9 @@ test-static:
 	@echo "➡️ Test Python type hints..."
 	uv run pyright .
 
+	@echo "➡️ Test Bicep code style..."
+	az bicep lint --file cicd/bicep/main.bicep
+
 test-unit:
 	@echo "➡️ Unit tests (Pytest)..."
 	PUBLIC_DOMAIN=dummy uv run pytest \
