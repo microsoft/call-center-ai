@@ -510,8 +510,8 @@ async def _execute_llm_chat(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         remove_message_action(content_full)
     )
 
-    logger.debug("Chat response: %s", content_full)
-    logger.debug("Tool calls: %s", tool_calls)
+    logger.debug("Completion response: %s", content_full)
+    logger.debug("Completion tools: %s", tool_calls)
 
     # OpenAI GPT-4 Turbo sometimes return wrong tools schema, in that case, retry within limits
     # TODO: Tries to detect this error earlier

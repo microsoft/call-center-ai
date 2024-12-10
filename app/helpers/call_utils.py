@@ -259,6 +259,7 @@ async def handle_realtime_tts(  # noqa: PLR0913
     # Play each chunk
     chunks = _chunk_for_tts(text)
     for chunk in chunks:
+        logger.info("Playing TTS: %s", text)
         tts_client.speak_ssml_async(
             _ssml_from_text(
                 call=call,
