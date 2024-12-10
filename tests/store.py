@@ -6,7 +6,7 @@ from app.helpers.config import CONFIG
 from app.models.call import CallStateModel
 
 
-@pytest.mark.asyncio(scope="session")
+@pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.repeat(10)  # Catch multi-threading and concurrency issues
 async def test_acid(call: CallStateModel) -> None:
     """

@@ -236,7 +236,7 @@ class ClaimRelevancyMetric(BaseMetric):
 
 
 @with_conversations
-@pytest.mark.asyncio(scope="session")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_llm(  # noqa: PLR0913
     call: CallStateModel,
     claim_tests_excl: list[str],
