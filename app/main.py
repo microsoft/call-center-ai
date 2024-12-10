@@ -432,7 +432,7 @@ async def call_event(
     event_type = event.event_type
     if not event_type == SystemEventNames.AcsIncomingCallEventName:
         logger.warning("Event %s not supported", event_type)
-        logger.debug("Event data %s", event.data)
+        # logger.debug("Event data %s", event.data)
         return
 
     # Parse phone number
@@ -832,7 +832,7 @@ async def _communicationservices_event_worker(
 
             case _:
                 logger.warning("Event %s not supported", event_type)
-                logger.debug("Event data %s", event.data)
+                # logger.debug("Event data %s", event.data)
 
 
 @tracer.start_as_current_span("training_event")
