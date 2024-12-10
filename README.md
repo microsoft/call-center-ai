@@ -80,9 +80,9 @@ curl \
 
 ### Demo
 
-A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project.
+A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project. All the infrastructure is deployed on Azure, mostly in serverless mode. Provisionning of the LLM resources can be done to reduce the latency.
 
-[![French demo](https://img.youtube.com/vi/WvEVN5v8jW4/maxresdefault.jpg)](https://youtube.com/watch?v=WvEVN5v8jW4)
+[![French demo](https://img.youtube.com/vi/8nSC8SzG6ys/maxresdefault.jpg)](https://youtube.com/watch?v=8nSC8SzG6ys)
 
 Main interactions shown in the demo:
 
@@ -95,49 +95,48 @@ Extract of the data stored during the call:
 ```json
 {
   "claim": {
-    "incident_datetime": "2024-10-08T02:00:00",
-    "incident_description": "La trottinette électrique fait des bruits bizarres et émet de la fumée blanche.",
-    "incident_location": "46 rue du Charles de Gaulle",
-    "injuries": "Douleur au genou suite à une chute.",
-    "involved_parties": "Lesne",
-    "policy_number": "B02131325XPGOLMP"
+    "incident_description": "Collision avec un autre véhicule, voiture dans le fossé, pas de blessés",
+    "incident_location": "Nationale 17",
+    "involved_parties": "Dujardin, Madame Lesné",
+    "policy_number": "DEC1748"
   },
   "messages": [
     {
-      "created_at": "2024-10-08T11:23:41.824758Z",
-      "action": "call",
-      "content": "",
+      "created_at": "2024-12-10T15:51:04.566727Z",
+      "action": "talk",
+      "content": "Non, je pense que c'est pas mal. Vous avez répondu à mes questions et là j'attends la dépaneuse. Merci beaucoup.",
       "persona": "human",
       "style": "none",
       "tool_calls": []
     },
     {
-      "created_at": "2024-10-08T11:23:55.421654Z",
+      "created_at": "2024-12-10T15:51:06.040451Z",
       "action": "talk",
-      "content": "Bonjour, je m'appelle Amélie, de Contoso Assurance ! Comment puis-je vous aider aujourd'hui ?",
+      "content": "Je suis ravi d'avoir pu vous aider! Si vous avez besoin de quoi que ce soit d'autre, n'hésitez pas à nous contacter. Je vous souhaite une bonne journée et j'espère que tout se passera bien avec la dépanneuse. Au revoir!",
       "persona": "assistant",
-      "style": "cheerful",
-      "tool_calls": []
-    },
-    {
-      "created_at": "2024-10-08T11:24:19.972737Z",
-      "action": "talk",
-      "content": "Oui bien sûr. Bonjour, je vous appelle parce que j'ai un problème avec ma trottinette électrique. Elle marche plus depuis ce matin, elle fait des bruits bizarres et il y a une fumée blanche qui sort de la trottinette.",
-      "persona": "human",
       "style": "none",
       "tool_calls": []
     }
   ],
   "next": {
     "action": "case_closed",
-    "justification": "The customer provided all necessary information for the claim, and they expressed satisfaction with the assistance received. No further action is required at this time."
+    "justification": "The customer has provided all necessary information for the insurance claim, and a reminder has been set for a follow-up call. The customer is satisfied with the assistance provided and is waiting for the tow truck. The case can be closed for now."
   },
+  "reminders": [
+    {
+      "created_at": "2024-12-10T15:50:09.507903Z",
+      "description": "Rappeler le client pour faire le point sur l'accident et l'avancement du dossier.",
+      "due_date_time": "2024-12-11T14:30:00",
+      "owner": "assistant",
+      "title": "Rappel client sur l'accident"
+    }
+  ],
   "synthesis": {
-    "long": "You reported an issue with your electric scooter, which started making strange noises and emitting white smoke. This incident occurred at 2:00 AM while you were riding it, leading to a fall and resulting in knee pain. The location of the incident was noted, and your policy details were confirmed. I have documented all the necessary information to file your claim. Please take care of your knee, and feel free to reach out if you need further assistance.",
+    "long": "During our call, you reported an accident involving your vehicle on the Nationale 17. You mentioned that there were no injuries, but both your car and the other vehicle ended up in a ditch. The other party involved is named Dujardin, and your vehicle is a 4x4 Ford. I have updated your claim with these details, including the license plates: yours is U837GE and the other vehicle's is GA837IA. A reminder has been set for a follow-up call tomorrow at 14:30 to discuss the progress of your claim. If you need further assistance, please feel free to reach out.",
     "satisfaction": "high",
-    "short": "the breakdown of your scooter",
-    "improvement_suggestions": "Ensure that the assistant provides clear next steps and offers to schedule follow-up calls proactively to enhance customer support."
-  },
+    "short": "the accident on Nationale 17",
+    "improvement_suggestions": "To improve the customer experience, it would be beneficial to ensure that the call connection is stable to avoid interruptions. Additionally, providing a clear step-by-step guide on what information is needed for the claim could help streamline the process and reduce any confusion for the customer."
+  }
   ...
 }
 ```
