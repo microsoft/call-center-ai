@@ -35,7 +35,7 @@ from app.helpers.config import CONFIG
 from app.helpers.features import recognition_retry_max, recording_enabled
 from app.helpers.llm_worker import completion_sync
 from app.helpers.logging import logger
-from app.helpers.monitoring import CallAttributes, span_attribute, tracer
+from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
 from app.models.call import CallStateModel
 from app.models.message import (
     ActionEnum as MessageActionEnum,
@@ -236,7 +236,7 @@ async def on_automation_recognize_error(
         logger.warning("Unknown context %s, no action taken", contexts)
 
     # Enrich span
-    span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
+    span_attribute(SpanAttributes.CALL_CHANNEL, "ivr")
 
     # Retry IVR recognition
     logger.info(
@@ -356,7 +356,7 @@ async def on_play_started(
     logger.debug("Play started")
 
     # Enrich span
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
+    span_attribute(SpanAttributes.CALL_CHANNEL, "voice")
 
     # Update last interaction
     async with _db.call_transac(
@@ -382,7 +382,7 @@ async def on_automation_play_completed(
     logger.debug("Play completed")
 
     # Enrich span
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
+    span_attribute(SpanAttributes.CALL_CHANNEL, "voice")
 
     # Update last interaction
     async with _db.call_transac(
@@ -431,7 +431,7 @@ async def on_play_error(error_code: int) -> None:
     logger.debug("Play failed")
 
     # Enrich span
-    span_attribute(CallAttributes.CALL_CHANNEL, "voice")
+    span_attribute(SpanAttributes.CALL_CHANNEL, "voice")
 
     # Suppress known errors
     # See: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/how-tos/call-automation/play-action.md
@@ -470,8 +470,8 @@ async def on_ivr_recognized(
     logger.info("IVR recognized: %s", label)
 
     # Enrich span
-    span_attribute(CallAttributes.CALL_CHANNEL, "ivr")
-    span_attribute(CallAttributes.CALL_MESSAGE, label)
+    span_attribute(SpanAttributes.CALL_CHANNEL, "ivr")
+    span_attribute(SpanAttributes.CALL_MESSAGE, label)
 
     # Parse language from label
     try:
@@ -554,8 +554,8 @@ async def on_sms_received(
     logger.info("SMS received from %s: %s", call.initiate.phone_number, message)
 
     # Enrich span
-    span_attribute(CallAttributes.CALL_CHANNEL, "sms")
-    span_attribute(CallAttributes.CALL_MESSAGE, message)
+    span_attribute(SpanAttributes.CALL_CHANNEL, "sms")
+    span_attribute(SpanAttributes.CALL_MESSAGE, message)
 
     # Add the SMS to the call history
     async with _db.call_transac(
