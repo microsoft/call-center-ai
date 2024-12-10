@@ -90,10 +90,7 @@ test-unit:
 		tests/*.py
 
 lint:
-	@echo "➡️ Fix with formatter..."
-	uv run ruff format
-
-	@echo "➡️ Lint with linter..."
+	@echo "➡️ Fix Python code style..."
 	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
 
 tunnel:
