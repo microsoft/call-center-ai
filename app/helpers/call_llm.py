@@ -267,23 +267,22 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
         if play_loading_sound:
             play_loading_sound = False
         # Play the TTS
-        await scheduler.spawn(
-            handle_realtime_tts(
-                call=call,
-                scheduler=scheduler,
-                style=style,
-                text=text,
-                tts_client=tts_client,
-            )
+        await handle_realtime_tts(
+            call=call,
+            scheduler=scheduler,
+            style=style,
+            text=text,
+            tts_client=tts_client,
         )
 
     # Chat
     chat_task = asyncio.create_task(
-        _execute_llm_chat(
+        _generate_chat_completion(
             call=call,
             client=client,
             post_callback=post_callback,
             scheduler=scheduler,
+            tool_blacklist=tool_blacklist,
             tts_callback=_tts_callback,
             tts_client=tts_client,
             use_tools=_iterations_remaining > 0,
@@ -349,14 +348,12 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
                     )
                     soft_timeout_triggered = True
                     # Never store the error message in the call history, it has caused hallucinations in the LLM
-                    await scheduler.spawn(
-                        handle_realtime_tts(
-                            call=call,
-                            scheduler=scheduler,
-                            store=False,
-                            text=await CONFIG.prompts.tts.timeout_loading(call),
-                            tts_client=tts_client,
-                        )
+                    await handle_realtime_tts(
+                        call=call,
+                        scheduler=scheduler,
+                        store=False,
+                        text=await CONFIG.prompts.tts.timeout_loading(call),
+                        tts_client=tts_client,
                     )
 
                 # Do not play timeout prompt plus loading, it can be frustrating for the user
@@ -751,14 +748,12 @@ def _tts_callback(
             return
 
         # Play the TTS
-        await scheduler.spawn(
-            handle_realtime_tts(
-                call=call,
-                scheduler=scheduler,
-                style=style,
-                text=text,
-                tts_client=tts_client,
-            )
+        await handle_realtime_tts(
+            call=call,
+            scheduler=scheduler,
+            style=style,
+            text=text,
+            tts_client=tts_client,
         )
 
     return wrapper
