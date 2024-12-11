@@ -229,7 +229,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             await _stop_callback()
 
             # Add it to the call history and update last interaction
-            logger.info("Voice stored: %s", stt_buffer)
+            logger.info("Voice stored: %s", stt_text)
             async with _db.call_transac(
                 call=call,
                 scheduler=scheduler,
