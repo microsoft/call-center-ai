@@ -644,15 +644,18 @@ class EchoCancellationStream:
     _packet_size: int
     _reference_queue: asyncio.Queue[bytes] = asyncio.Queue()
     _sample_rate: int
+    _scheduler: Scheduler
 
     def __init__(
         self,
         sample_rate: int,
+        scheduler: Scheduler,
         max_delay_ms: int = 200,
         packet_duration_ms: int = 20,
     ):
         self._packet_duration_ms = packet_duration_ms
         self._sample_rate = sample_rate
+        self._scheduler = scheduler
 
         max_delay_samples = int(max_delay_ms / 1000 * self._sample_rate)
         self._bot_voice_buffer = np.zeros(max_delay_samples, dtype=np.float32)
@@ -703,7 +706,7 @@ class EchoCancellationStream:
         # Calculate Root Mean Square (RMS)
         rms = np.sqrt(np.mean(voice**2))
         # Get VAD threshold, divide by 10 to more usability from user side, as RMS is in range 0-1 and a detection of 0.1 is a good maximum threshold
-        threshold = await vad_threshold() / 10
+        threshold = await vad_threshold(self._scheduler) / 10
         return rms >= threshold
 
     async def _process_one(self, input_pcm: bytes) -> None:

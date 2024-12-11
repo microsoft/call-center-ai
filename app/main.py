@@ -285,7 +285,11 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
 
     Returns a single call with a web interface.
     """
-    call = await _db.call_get(call_id)
+    async with get_scheduler() as scheduler:
+        call = await _db.call_get(
+            call_id=call_id,
+            scheduler=scheduler,
+        )
     if not call:
         return HTMLResponse(
             content=f"Call {call_id} not found",
@@ -345,21 +349,29 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
 
     Returns a single call object `CallGetModel`, in JSON format.
     """
-    # First, try to get by call ID
-    with suppress(ValueError):
-        call_id = UUID(call_id_or_phone_number)
-        call = await _db.call_get(call_id)
-        if call:
-            return TypeAdapter(CallGetModel).dump_python(call)
+    async with get_scheduler() as scheduler:
+        # First, try to get by call ID
+        with suppress(ValueError):
+            call_id = UUID(call_id_or_phone_number)
+            call = await _db.call_get(
+                call_id=call_id,
+                scheduler=scheduler,
+            )
+            if call:
+                return TypeAdapter(CallGetModel).dump_python(call)
 
-    # Second, try to get by phone number
-    phone_number = PhoneNumber(call_id_or_phone_number)
-    call = await _db.call_search_one(phone_number=phone_number)
-    if not call:
-        raise HTTPException(
-            detail=f"Call {call_id_or_phone_number} not found",
-            status_code=HTTPStatus.NOT_FOUND,
+        # Second, try to get by phone number
+        phone_number = PhoneNumber(call_id_or_phone_number)
+        call = await _db.call_search_one(
+            phone_number=phone_number,
+            scheduler=scheduler,
         )
+        if not call:
+            raise HTTPException(
+                detail=f"Call {call_id_or_phone_number} not found",
+                status_code=HTTPStatus.NOT_FOUND,
+            )
+
     return TypeAdapter(CallGetModel).dump_python(call)
 
 
@@ -483,11 +495,15 @@ async def sms_event(
     # Enrich span
     span_attribute(SpanAttributes.CALL_PHONE_NUMBER, phone_number)
 
-    # Get call
-    call = await _db.call_search_one(phone_number)
-    if not call:
-        logger.warning("Call for phone number %s not found", phone_number)
-        return
+    async with get_scheduler() as scheduler:
+        # Get call
+        call = await _db.call_search_one(
+            phone_number=phone_number,
+            scheduler=scheduler,
+        )
+        if not call:
+            logger.warning("Call for phone number %s not found", phone_number)
+            return
 
     # Enrich span
     span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
@@ -540,13 +556,17 @@ async def _communicationservices_validate_call_id(
     # Enrich span
     span_attribute(SpanAttributes.CALL_ID, str(call_id))
 
-    # Validate call
-    call = await _db.call_get(call_id)
-    if not call:
-        raise HTTPException(
-            detail=f"Call {call_id} not found",
-            status_code=HTTPStatus.NOT_FOUND,
+    async with get_scheduler() as scheduler:
+        # Validate call
+        call = await _db.call_get(
+            call_id=call_id,
+            scheduler=scheduler,
         )
+        if not call:
+            raise HTTPException(
+                detail=f"Call {call_id} not found",
+                status_code=HTTPStatus.NOT_FOUND,
+            )
 
     # Validate secret
     if call.callback_secret != secret:
@@ -865,20 +885,22 @@ async def post_event(
 
     Queue message is the UUID of a call. The event will load asynchroniously the `on_end_call` workflow.
     """
-    # Validate call
-    call = await _db.call_get(UUID(post.content))
-    if not call:
-        logger.warning("Call %s not found", post.content)
-        return
-
-    # Enrich span
-    span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
-    span_attribute(SpanAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
-
-    logger.debug("Post event received")
-
     async with get_scheduler() as scheduler:
+        # Validate call
+        call = await _db.call_get(
+            call_id=UUID(post.content),
+            scheduler=scheduler,
+        )
+        if not call:
+            logger.warning("Call %s not found", post.content)
+            return
+
+        # Enrich span
+        span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
+        span_attribute(SpanAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+
         # Execute business logic
+        logger.debug("Post event received")
         await on_end_call(
             call=call,
             scheduler=scheduler,
@@ -909,20 +931,25 @@ async def _communicationservices_urls(
 
     Returnes a tuple of the callback URL, the WebSocket URL, and the call object.
     """
-    # Get call
-    call = await _db.call_search_one(phone_number)
-
-    # Create new call if initiate is different
-    if not call or (initiate and call.initiate != initiate):
-        call = await _db.call_create(
-            CallStateModel(
-                initiate=initiate
-                or CallInitiateModel(
-                    **CONFIG.conversation.initiate.model_dump(),
-                    phone_number=phone_number,
-                )
-            )
+    async with get_scheduler() as scheduler:
+        # Get call
+        call = await _db.call_search_one(
+            phone_number=phone_number,
+            scheduler=scheduler,
         )
+
+        # Create new call if initiate is different
+        if not call or (initiate and call.initiate != initiate):
+            call = await _db.call_create(
+                call=CallStateModel(
+                    initiate=initiate
+                    or CallInitiateModel(
+                        **CONFIG.conversation.initiate.model_dump(),
+                        phone_number=phone_number,
+                    )
+                ),
+                scheduler=scheduler,
+            )
 
     # Format URLs
     wss_url = _COMMUNICATIONSERVICES_WSS_TPL.format(
@@ -957,16 +984,22 @@ async def twilio_sms_post(
     # Enrich span
     span_attribute(SpanAttributes.CALL_PHONE_NUMBER, From)
 
-    # Get call
-    call = await _db.call_search_one(From)
+    async with get_scheduler() as scheduler:
+        # Get call
+        call = await _db.call_search_one(
+            phone_number=From,
+            scheduler=scheduler,
+        )
 
-    if not call:
-        logger.warning("Call for phone number %s not found", From)
-    else:
-        # Enrich span
-        span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
+        # Call not found
+        if not call:
+            logger.warning("Call for phone number %s not found", From)
 
-        async with get_scheduler() as scheduler:
+        # Call found
+        else:
+            # Enrich span
+            span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
+
             # Execute business logic
             event_status = await on_sms_received(
                 call=call,
@@ -974,12 +1007,12 @@ async def twilio_sms_post(
                 scheduler=scheduler,
             )
 
-        # Return error for unsuccessful event
-        if not event_status:
-            raise HTTPException(
-                detail="SMS event failed",
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            )
+            # Return error for unsuccessful event
+            if not event_status:
+                raise HTTPException(
+                    detail="SMS event failed",
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
 
     # Default response
     return Response(

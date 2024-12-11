@@ -1,5 +1,6 @@
 from typing import TypeVar, cast
 
+from aiojobs import Scheduler
 from azure.appconfiguration.aio import AzureAppConfigurationClient
 from azure.core.exceptions import ResourceNotFoundError
 
@@ -15,82 +16,92 @@ _cache = MemoryCache(MemoryModel())
 T = TypeVar("T", bool, int, float, str)
 
 
-async def answer_hard_timeout_sec() -> int:
+async def answer_hard_timeout_sec(scheduler: Scheduler) -> int:
     return await _default(
         default=180,
         key="answer_hard_timeout_sec",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def answer_soft_timeout_sec() -> int:
+async def answer_soft_timeout_sec(scheduler: Scheduler) -> int:
     return await _default(
         default=120,
         key="answer_soft_timeout_sec",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def callback_timeout_hour() -> int:
+async def callback_timeout_hour(scheduler: Scheduler) -> int:
     return await _default(
         default=24,
         key="callback_timeout_hour",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def phone_silence_timeout_sec() -> int:
+async def phone_silence_timeout_sec(scheduler: Scheduler) -> int:
     return await _default(
         default=20,
         key="phone_silence_timeout_sec",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def vad_threshold() -> float:
+async def vad_threshold(scheduler: Scheduler) -> float:
     return await _default(
         default=0.5,
         key="vad_threshold",
+        scheduler=scheduler,
         type_res=float,
     )
 
 
-async def vad_silence_timeout_ms() -> int:
+async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
     return await _default(
         default=500,
         key="vad_silence_timeout_ms",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def vad_cutoff_timeout_ms() -> int:
+async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
     return await _default(
         default=150,
         key="vad_cutoff_timeout_ms",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def recording_enabled() -> bool:
+async def recording_enabled(scheduler: Scheduler) -> bool:
     return await _default(
         default=False,
         key="recording_enabled",
+        scheduler=scheduler,
         type_res=bool,
     )
 
 
-async def slow_llm_for_chat() -> bool:
+async def slow_llm_for_chat(scheduler: Scheduler) -> bool:
     return await _default(
         default=True,
         key="slow_llm_for_chat",
+        scheduler=scheduler,
         type_res=bool,
     )
 
 
-async def recognition_retry_max() -> int:
+async def recognition_retry_max(scheduler: Scheduler) -> int:
     return await _default(
         default=3,
         key="recognition_retry_max",
+        scheduler=scheduler,
         type_res=int,
     )
 
@@ -98,20 +109,29 @@ async def recognition_retry_max() -> int:
 async def _default(
     default: T,
     key: str,
+    scheduler: Scheduler,
     type_res: type[T],
 ) -> T:
     """
     Get a setting from the App Configuration service with a default value.
     """
-    res = await _get(key=key, type_res=type_res)
+    # Get the setting
+    res = await _get(
+        key=key,
+        scheduler=scheduler,
+        type_res=type_res,
+    )
     if res:
         return res
-    logger.warning("Setting %s not found, using default: %s", key, default)
+
+    # Return default
+    logger.info("Feature %s not found, using default: %s", key, default)
     return default
 
 
 async def _get(
     key: str,
+    scheduler: Scheduler,
     type_res: type[T],
 ) -> T | None:
     """
@@ -126,6 +146,15 @@ async def _get(
             value=cached.decode(),
         )
 
+    # Defer the update
+    await scheduler.spawn(_refresh(cache_key, key))
+    return
+
+
+async def _refresh(
+    cache_key: str,
+    key: str,
+) -> T | None:
     # Try live
     try:
         async with await _use_client() as client:
@@ -143,12 +172,6 @@ async def _get(
     await _cache.set(
         key=cache_key,
         ttl_sec=CONFIG.app_configuration.ttl_sec,
-        value=res,
-    )
-
-    # Return the type
-    return _parse(
-        type_res=type_res,
         value=res,
     )
 
