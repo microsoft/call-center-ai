@@ -500,6 +500,7 @@ Conversation options are represented as features. They can be configured from Ap
 | `slow_llm_for_chat` | Whether to use the slow LLM for chat. | `bool` | false |
 | `vad_cutoff_timeout_ms` | The cutoff timeout for voice activity detection in secs. | `int` | 600 |
 | `vad_silence_timeout_ms` | The timeout for phone silence in secs. | `int` | 400 |
+| `vad_threshold` | The threshold for voice activity detection. | `float` | 0.5 |
 
 ### Use an OpenAI compatible model for the LLM
 

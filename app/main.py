@@ -612,6 +612,7 @@ async def communicationservices_wss_post(
         with suppress(WebSocketDisconnect):
             while True:
                 audio_data = await audio_out.get()
+                audio_out.task_done()
                 # Send audio
                 if isinstance(audio_data, bytes):
                     await websocket.send_json(
@@ -630,7 +631,6 @@ async def communicationservices_wss_post(
                             "stopAudio": {},
                         }
                     )
-                audio_out.task_done()
 
     async with get_scheduler() as scheduler:
         await asyncio.gather(
@@ -641,8 +641,6 @@ async def communicationservices_wss_post(
             # Process audio
             # TODO: Dynamically set the audio format
             on_audio_connected(
-                audio_bits_per_sample=16,
-                audio_channels=1,
                 audio_in=audio_in,
                 audio_out=audio_out,
                 audio_sample_rate=16000,

@@ -1,11 +1,7 @@
-import json
 import re
 from datetime import UTC, datetime
 from enum import Enum
-from inspect import getmembers, isfunction
-from typing import Any
 
-from json_repair import repair_json
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -14,8 +10,6 @@ from openai.types.chat import (
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
-
-from app.helpers.monitoring import tracer
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 _MESSAGE_ACTION_R = r"(?:action=*([a-z_]*))? *(.*)"
@@ -169,9 +163,11 @@ class MessageModel(BaseModel):
         return res
 
 
-def remove_message_action(text: str) -> str:
+def _filter_action(text: str) -> str:
     """
-    Remove action from content. AI often adds it by mistake event if explicitly asked not to.
+    Remove action from content.
+
+    AI often adds it by mistake event if explicitly asked not to.
 
     Example:
     - Input: "action=talk Hello!"
@@ -188,6 +184,19 @@ def remove_message_action(text: str) -> str:
         return text
 
 
+def _filter_content(text: str) -> str:
+    """
+    Remove content from text.
+
+    AI often adds it by mistake event if explicitly asked not to.
+
+    Example:
+    - Input: "content=Hello!"
+    - Output: "Hello!"
+    """
+    return text.replace("content=", "")
+
+
 def extract_message_style(text: str) -> tuple[StyleEnum, str]:
     """
     Detect the style of a message and extract it from the text.
@@ -196,6 +205,11 @@ def extract_message_style(text: str) -> tuple[StyleEnum, str]:
     - Input: "style=cheerful Hello!"
     - Output: (StyleEnum.CHEERFUL, "Hello!")
     """
+    # Apply hallucination filters
+    text = _filter_action(text)
+    text = _filter_content(text)
+
+    # Extract style
     default_style = StyleEnum.NONE
     res = re.match(_MESSAGE_STYLE_R, text)
     if not res:
@@ -205,6 +219,7 @@ def extract_message_style(text: str) -> tuple[StyleEnum, str]:
             StyleEnum(res.group(1)),  # style
             (res.group(2) or ""),  # content
         )
+
     # Regex failed, return original text
     except ValueError:
         return default_style, text

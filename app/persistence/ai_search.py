@@ -165,7 +165,8 @@ class AiSearchSearch(ISearch):
         except ResourceNotFoundError:
             logger.warning('AI Search index "%s" not found', self._config.index)
         except HttpResponseError as e:
-            if "too many requests" in e.message.lower():
+            message = e.message.lower()
+            if "too many requests" in message or "exceed the limits" in message:
                 raise TooManyRequests()
             logger.error("Error requesting AI Search: %s", e)
         except ServiceRequestError as e:

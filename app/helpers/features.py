@@ -18,42 +18,103 @@ T = TypeVar("T", bool, int, float, str)
 
 
 async def answer_hard_timeout_sec() -> int:
-    return await _get(key="answer_hard_timeout_sec", type_res=int) or 180
+    return await _default(
+        default=180,
+        key="answer_hard_timeout_sec",
+        type_res=int,
+    )
 
 
 async def answer_soft_timeout_sec() -> int:
-    return await _get(key="answer_soft_timeout_sec", type_res=int) or 120
+    return await _default(
+        default=120,
+        key="answer_soft_timeout_sec",
+        type_res=int,
+    )
 
 
 async def callback_timeout_hour() -> int:
-    return await _get(key="callback_timeout_hour", type_res=int) or 24
+    return await _default(
+        default=24,
+        key="callback_timeout_hour",
+        type_res=int,
+    )
 
 
 async def phone_silence_timeout_sec() -> int:
-    return await _get(key="phone_silence_timeout_sec", type_res=int) or 20
+    return await _default(
+        default=20,
+        key="phone_silence_timeout_sec",
+        type_res=int,
+    )
+
+
+async def vad_threshold() -> float:
+    return await _default(
+        default=0.5,
+        key="vad_threshold",
+        type_res=float,
+    )
 
 
 async def vad_silence_timeout_ms() -> int:
-    return await _get(key="vad_silence_timeout_ms", type_res=int) or 400
+    return await _default(
+        default=400,
+        key="vad_silence_timeout_ms",
+        type_res=int,
+    )
 
 
 async def vad_cutoff_timeout_ms() -> int:
-    return await _get(key="vad_cutoff_timeout_ms", type_res=int) or 600
+    return await _default(
+        default=600,
+        key="vad_cutoff_timeout_ms",
+        type_res=int,
+    )
 
 
 async def recording_enabled() -> bool:
-    return await _get(key="recording_enabled", type_res=bool) or False
+    return await _default(
+        default=False,
+        key="recording_enabled",
+        type_res=bool,
+    )
 
 
 async def slow_llm_for_chat() -> bool:
-    return await _get(key="slow_llm_for_chat", type_res=bool) or True
+    return await _default(
+        default=True,
+        key="slow_llm_for_chat",
+        type_res=bool,
+    )
 
 
 async def recognition_retry_max() -> int:
-    return await _get(key="recognition_retry_max", type_res=int) or 3
+    return await _default(
+        default=3,
+        key="recognition_retry_max",
+        type_res=int,
+    )
 
 
-async def _get(key: str, type_res: type[T]) -> T | None:
+async def _default(
+    default: T,
+    key: str,
+    type_res: type[T],
+) -> T:
+    """
+    Get a setting from the App Configuration service with a default value.
+    """
+    return (await _get(key=key, type_res=type_res)) or default
+
+
+async def _get(
+    key: str,
+    type_res: type[T],
+) -> T | None:
+    """
+    Get a setting from the App Configuration service.
+    """
     # Try cache
     cache_key = _cache_key(key)
     cached = await _cache.get(cache_key)
@@ -99,10 +160,18 @@ async def _use_client() -> AzureAppConfigurationClient:
 
 
 def _cache_key(key: str) -> str:
+    """
+    Generate a cache key for a setting.
+    """
     return f"{__name__}-{key}"
 
 
 def _parse(value: str, type_res: type[T]) -> T | None:
+    """
+    Parse a setting value to a type.
+
+    Supported types: bool, int, float, str.
+    """
     with suppress(ValueError):
         if type_res is bool:
             return cast(T, value.lower() == "true")

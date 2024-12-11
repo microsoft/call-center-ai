@@ -42,7 +42,6 @@ from app.models.message import (
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
     extract_message_style,
-    remove_message_action,
 )
 from app.models.next import NextModel
 from app.models.synthesis import SynthesisModel
@@ -169,8 +168,6 @@ async def on_call_disconnected(
 
 @tracer.start_as_current_span("on_audio_connected")
 async def on_audio_connected(  # noqa: PLR0913
-    audio_bits_per_sample: int,
-    audio_channels: int,
     audio_in: asyncio.Queue[bytes],
     audio_out: asyncio.Queue[bytes | bool],
     audio_sample_rate: int,
@@ -186,8 +183,6 @@ async def on_audio_connected(  # noqa: PLR0913
     Starts the real-time conversation with the LLM.
     """
     await load_llm_chat(
-        audio_bits_per_sample=audio_bits_per_sample,
-        audio_channels=audio_channels,
         audio_in=audio_in,
         audio_out=audio_out,
         audio_sample_rate=audio_sample_rate,
@@ -636,7 +631,7 @@ async def _intelligence_sms(
     )
 
     # Delete action and style from the message as they are in the history and LLM hallucinates them
-    _, content = extract_message_style(remove_message_action(content or ""))
+    _, content = extract_message_style(content or "")
 
     if not content:
         logger.warning("Error generating SMS report")
