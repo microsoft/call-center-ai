@@ -729,9 +729,8 @@ async def _process_audio_for_vad(  # noqa: PLR0913
         # Wait before clearing the TTS queue
         await asyncio.sleep(timeout_ms / 1000)
 
-        logger.debug("Canceling TTS after %i ms", timeout_ms)
-
         # Clear the queue
+        logger.info("Stoping TTS after %i ms", timeout_ms)
         await stop_callback()
 
     while True:
