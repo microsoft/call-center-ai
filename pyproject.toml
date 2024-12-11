@@ -26,6 +26,7 @@ dependencies = [
   "jinja2~=3.1",  # Template engine, used for prompts and web views
   "json-repair~=0.30",  # Repair JSON files from LLM
   "mistune~=3.0",  # Markdown parser for web views
+  "noisereduce~=3.0", # Noise reduction
   "openai~=1.52",  # OpenAI client
   "opentelemetry-instrumentation-aiohttp-client~=0.0a0",  # OpenTelemetry instrumentation for aiohttp client
   "opentelemetry-instrumentation-httpx~=0.0a0",  # OpenTelemetry instrumentation for HTTPX
@@ -36,7 +37,6 @@ dependencies = [
   "pydantic-extra-types~=2.9",  # Extra types for Pydantic
   "pydantic-settings~=2.6",  # Application configuration management with Pydantic
   "pydantic[email]~=2.9",  # Data serialization and validation, plus email validation
-  "pydub~=0.25",  # Audio processing with FFmpeg
   "pyjwt~=2.9",  # Secure inbound calls from Communication Services
   "python-dotenv~=1.0",  # Load environment variables from .env file
   "python-multipart==0.*",  # Form parsing
@@ -49,7 +49,6 @@ dependencies = [
   "twilio~=9.3",  # Twilio SDK, used for SMS
   "typing-extensions~=4.12",  # Typing extensions for Python 3.6+
   "uvicorn[standard]~=0.32",  # Application middleware
-  "webrtcvad~=2.0",  # Voice activity detection
 ]
 
 [project.optional-dependencies]

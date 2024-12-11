@@ -909,6 +909,7 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
     slow_llm_for_chat: false
     vad_cutoff_timeout_ms: 600
     vad_silence_timeout_ms: 400
+    vad_threshold: '0.5'
   }): {
     parent: configStore
     name: item.key

@@ -5,11 +5,13 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from enum import Enum
 
+import numpy as np
 from aiojobs import Job, Scheduler
 from azure.cognitiveservices.speech import (
     AudioConfig,
     SpeechConfig,
     SpeechRecognizer,
+    SpeechSynthesisOutputFormat,
     SpeechSynthesizer,
 )
 from azure.cognitiveservices.speech.audio import (
@@ -34,9 +36,11 @@ from azure.communication.callautomation.aio import (
     CallConnectionClient,
 )
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
+from noisereduce import reduce_noise
 
 from app.helpers.cache import async_lru_cache
 from app.helpers.config import CONFIG
+from app.helpers.features import vad_threshold
 from app.helpers.identity import token
 from app.helpers.logging import logger
 from app.models.call import CallStateModel
@@ -70,12 +74,23 @@ class TtsCallback(PushAudioOutputStreamCallback):
     Callback for Azure Speech Synthesizer to push audio data to a queue.
     """
 
-    def __init__(self, queue: asyncio.Queue[bytes | bool]):
+    def __init__(self, queue: asyncio.Queue[bytes]):
         self.queue = queue
 
     def write(self, audio_buffer: memoryview) -> int:
+        """
+        Write audio data to the queue.
+        """
         self.queue.put_nowait(audio_buffer.tobytes())
         return audio_buffer.nbytes
+
+    def close(self) -> None:
+        """
+        Close the callback.
+        """
+        while not self.queue.empty():
+            self.queue.get_nowait()
+            self.queue.task_done()
 
 
 class ContextEnum(str, Enum):
@@ -523,11 +538,15 @@ async def _use_call_client(
 
 @asynccontextmanager
 async def use_tts_client(
-    audio: asyncio.Queue[bytes | bool],
     call: CallStateModel,
+    out: asyncio.Queue[bytes],
 ) -> AsyncGenerator[SpeechSynthesizer, None]:
     """
     Use a text-to-speech client for a call.
+
+    Output format is in PCM 16-bit, 16 kHz, 1 channel.
+
+    Yields a client to push audio data to the queue. Once the context is exited, the client will stop.
     """
     # Get AAD token
     aad_token = await (await token("https://cognitiveservices.azure.com/.default"))()
@@ -536,19 +555,21 @@ async def use_tts_client(
     # TODO: Use v2 endpoint (https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-lower-speech-synthesis-latency?pivots=programming-language-python#how-to-use-text-streaming) but seems compatible with AAD auth? Found nothing in the docs (https://github.com/Azure-Samples/cognitive-services-speech-sdk/blob/e392c9ca09d44ebd65081e7cb44593a2b16cd5a7/samples/python/web/avatar/app.py#L137).
     config = SpeechConfig(
         endpoint=f"wss://{CONFIG.cognitive_service.region}.tts.speech.microsoft.com/cognitiveservices/websocket/v1",
+        speech_recognition_language=call.lang.short_code,
     )
     config.authorization_token = (
         f"aad#{CONFIG.cognitive_service.resource_id}#{aad_token}"
     )
     config.speech_synthesis_voice_name = call.lang.voice
+    config.set_speech_synthesis_output_format(
+        SpeechSynthesisOutputFormat.Raw16Khz16BitMonoPcm
+    )
     if call.lang.custom_voice_endpoint_id:
         config.endpoint_id = call.lang.custom_voice_endpoint_id
     # TODO: How to close the client?
     client = SpeechSynthesizer(
         speech_config=config,
-        audio_config=AudioOutputConfig(
-            stream=PushAudioOutputStream(TtsCallback(audio))
-        ),
+        audio_config=AudioOutputConfig(stream=PushAudioOutputStream(TtsCallback(out))),
     )
 
     # Connect events
@@ -561,14 +582,15 @@ async def use_tts_client(
 
 @asynccontextmanager
 async def use_stt_client(
-    audio_bits_per_sample: int,
-    audio_channels: int,
     audio_sample_rate: int,
     call: CallStateModel,
-    callback: Callable[[str], None],
+    complete_callback: Callable[[str], None],
+    partial_callback: Callable[[str], None],
 ) -> AsyncGenerator[PushAudioInputStream, None]:
     """
     Use a speech-to-text client for a call.
+
+    Input format is in PCM 16-bit, 16 kHz, 1 channel.
 
     Yields a stream to push audio data to the client. Once the context is exited, the client will stop.
     """
@@ -577,9 +599,10 @@ async def use_stt_client(
 
     # Create client
     stream = PushAudioInputStream(
+        # PCM 16-bit, 1 channel
         stream_format=AudioStreamFormat(
-            bits_per_sample=audio_bits_per_sample,
-            channels=audio_channels,
+            bits_per_sample=16,
+            channels=1,
             samples_per_second=audio_sample_rate,
         ),
     )
@@ -592,11 +615,18 @@ async def use_stt_client(
         ),
     )
 
-    # Connect events
-    client.recognized.connect(lambda e: callback(e.result.text))
+    # TSS events
+    client.recognized.connect(
+        lambda e: complete_callback(e.result.text) if e.result.text else None
+    )
+    client.recognizing.connect(
+        lambda e: partial_callback(e.result.text) if e.result.text else None
+    )
+
+    # Debugging events
+    client.canceled.connect(lambda event: logger.warning("STT cancelled: %s", event))
     client.session_started.connect(lambda _: logger.debug("STT started"))
     client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
-    client.canceled.connect(lambda event: logger.warning("STT cancelled: %s", event))
 
     try:
         # Start STT
@@ -606,3 +636,184 @@ async def use_stt_client(
     finally:
         # Stop STT
         client.stop_continuous_recognition_async()
+
+
+class EchoCancellationStream:
+    """
+    Real-time audio stream with echo cancellation.
+
+    Input and output formats are in PCM 16-bit, 16 kHz, 1 channel.
+    """
+
+    _chunk_size: int
+    _input_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    _output_queue: asyncio.Queue[tuple[bytes, bool]] = asyncio.Queue()
+    _packet_duration_ms: int
+    _packet_size: int
+    _reference_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    _sample_rate: int
+
+    def __init__(
+        self,
+        sample_rate: int,
+        max_delay_ms: int = 200,
+        packet_duration_ms: int = 20,
+    ):
+        self._packet_duration_ms = packet_duration_ms
+        self._sample_rate = sample_rate
+
+        max_delay_samples = int(max_delay_ms / 1000 * self._sample_rate)
+        self._bot_voice_buffer = np.zeros(max_delay_samples, dtype=np.float32)
+
+        self._chunk_size = int(self._sample_rate * self._packet_duration_ms / 1000)
+        self._packet_size = self._chunk_size * 2  # Each sample is 2 bytes (PCM 16-bit)
+
+    def _pcm_to_float(self, pcm: bytes) -> np.ndarray:
+        """
+        Convert PCM 16-bit to float (-1.0 to 1.0).
+        """
+        return (
+            np.frombuffer(
+                buffer=pcm,
+                dtype=np.int16,
+            ).astype(np.float32)
+            / 32768.0
+        )
+
+    def _float_to_pcm(self, floats: np.ndarray) -> bytes:
+        """
+        Convert float (-1.0 to 1.0) to PCM 16-bit.
+        """
+        pcm = (floats * 32767).clip(-32768, 32767).astype(np.int16)
+        return pcm.tobytes()
+
+    def _update_input_buffer(self, voice: np.ndarray) -> None:
+        """
+        Update the rolling buffer for the input voice.
+        """
+        buffer_length = len(self._bot_voice_buffer)
+        reference_length = len(voice)
+
+        if reference_length >= buffer_length:
+            # If the reference is longer than the buffer, keep the most recent samples
+            self._bot_voice_buffer = voice[-buffer_length:]
+        else:
+            # Append new samples and keep the buffer size fixed
+            self._bot_voice_buffer = np.roll(self._bot_voice_buffer, -reference_length)
+            self._bot_voice_buffer[-reference_length:] = voice
+
+    async def _rms_speech_detection(self, voice: np.ndarray) -> bool:
+        """
+        Simple speech detection based on RMS (acoustic pressure).
+
+        Returns True if speech is detected, False otherwise.
+        """
+        # Calculate Root Mean Square (RMS)
+        rms = np.sqrt(np.mean(voice**2))
+        # Get VAD threshold, divide by 10 to more usability from user side, as RMS is in range 0-1 and a detection of 0.1 is a good maximum threshold
+        threshold = await vad_threshold() / 10
+        return rms >= threshold
+
+    async def _process_one(self, input_pcm: bytes) -> None:
+        """
+        Process one audio chunk with echo cancellation.
+        """
+        # Use silence as the reference if none is available
+        if self._reference_queue.empty():
+            reference_pcm = b"\x00" * self._packet_size
+        else:
+            reference_pcm = await self._reference_queue.get()
+            self._reference_queue.task_done()
+
+        # Convert PCM to float for processing
+        input_signal = self._pcm_to_float(input_pcm)
+        reference_signal = self._pcm_to_float(reference_pcm)
+
+        # Update the input buffer with the reference signal
+        self._update_input_buffer(reference_signal)
+
+        # Apply noise reduction
+        reduced_signal = reduce_noise(
+            # Input signal
+            clip_noise_stationary=False,
+            sr=self._sample_rate,
+            y=input_signal,
+            # Performance
+            n_fft=self._chunk_size,
+            # Since the reference signal is already noise-reduced, we can assume it's stationary
+            stationary=True,
+            y_noise=self._bot_voice_buffer,
+            # Output quality
+            prop_decrease=0.75,  # Reduce noise by 75%
+        )
+
+        # Perform VAD test
+        input_speaking = await self._rms_speech_detection(reduced_signal)
+
+        # Convert processed float signal back to PCM
+        processed_pcm = self._float_to_pcm(reduced_signal)
+
+        # Add processed PCM and metadata to the output queue
+        await self._output_queue.put((processed_pcm, input_speaking))
+
+    async def process_stream(self) -> None:
+        """
+        Process the audio stream in real-time.
+        """
+        async with Scheduler(
+            limit=5,  # Allow 5 concurrent tasks
+        ) as scheduler:
+            while True:
+                # Fetch input audio
+                input_pcm = await self._input_queue.get()
+                self._input_queue.task_done()
+
+                # Queue the processing
+                await scheduler.spawn(
+                    asyncio.wait_for(
+                        self._process_one(input_pcm),
+                        timeout=self._packet_duration_ms
+                        / 1000
+                        * 5,  # Allow temporary high latency
+                    )
+                )
+
+    async def push_input(self, audio_data: bytes) -> None:
+        """
+        Push PCM input audio into the input queue.
+        """
+        if len(audio_data) != self._packet_size:
+            raise ValueError(
+                f"Expected packet size {self._packet_size} bytes, got {len(audio_data)} bytes."
+            )
+        await self._input_queue.put(audio_data)
+
+    async def push_reference(self, audio_data: bytes) -> None:
+        """
+        Push PCM reference audio into the reference queue.
+
+        The reference audio is used for echo cancellation.
+        """
+        # Extract packets and pad them if necessary
+        buffer_pointer = 0
+        while buffer_pointer < len(audio_data):
+            chunk = audio_data[: self._packet_size].ljust(self._packet_size, b"\x00")
+            await self._reference_queue.put(chunk)
+            buffer_pointer += self._packet_size
+
+    async def pull_audio(self) -> tuple[bytes, bool]:
+        """
+        Pull processed PCM audio and metadata from the output queue.
+
+        Returns a tuple with the echo-cancelled PCM audio and a boolean flag indicating if the user was speaking.
+        """
+        # return await self._output_queue.get()
+        try:
+            return await asyncio.wait_for(
+                fut=self._output_queue.get(),
+                timeout=self._packet_duration_ms
+                / 1000
+                * 1.5,  # Allow temporary small latency
+            )
+        except TimeoutError:
+            return b"\x00" * self._packet_size, False  # Silence PCM chunk and no speech
