@@ -42,7 +42,6 @@ from app.models.message import (
     MessageModel,
     PersonaEnum as MessagePersonaEnum,
     extract_message_style,
-    remove_message_action,
 )
 from app.models.next import NextModel
 from app.models.synthesis import SynthesisModel
@@ -636,7 +635,7 @@ async def _intelligence_sms(
     )
 
     # Delete action and style from the message as they are in the history and LLM hallucinates them
-    _, content = extract_message_style(remove_message_action(content or ""))
+    _, content = extract_message_style(content or "")
 
     if not content:
         logger.warning("Error generating SMS report")

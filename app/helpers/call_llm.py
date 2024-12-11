@@ -48,7 +48,6 @@ from app.models.message import (
     StyleEnum as MessageStyleEnum,
     ToolModel as MessageToolModel,
     extract_message_style,
-    remove_message_action,
 )
 
 _db = CONFIG.database.instance()
@@ -454,7 +453,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
 
     async def _content_callback(buffer: str) -> None:
         # Remove tool calls from buffer content and detect style
-        style, local_content = extract_message_style(remove_message_action(buffer))
+        style, local_content = extract_message_style(buffer)
         await tts_callback(local_content, style)
 
     # Build RAG
@@ -543,9 +542,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     tool_calls = [tool_call for _, tool_call in tool_calls_buffer.items()]
 
     # Delete action and style from the message as they are in the history and LLM hallucinates them
-    last_style, content_full = extract_message_style(
-        remove_message_action(content_full)
-    )
+    last_style, content_full = extract_message_style(content_full)
 
     logger.debug("Completion response: %s", content_full)
     logger.debug("Completion tools: %s", tool_calls)
