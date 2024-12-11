@@ -1,4 +1,3 @@
-from contextlib import suppress
 from typing import TypeVar, cast
 
 from azure.appconfiguration.aio import AzureAppConfigurationClient
@@ -172,13 +171,16 @@ def _parse(value: str, type_res: type[T]) -> T | None:
 
     Supported types: bool, int, float, str.
     """
-    with suppress(ValueError):
-        if type_res is bool:
-            return cast(T, value.lower() == "true")
-        if type_res is int:
-            return cast(T, int(value))
-        if type_res is float:
-            return cast(T, float(value))
-        if type_res is str:
-            return cast(T, str(value))
-        raise ValueError(f"Unsupported type: {type_res}")
+    # Try parse
+    if type_res is bool:
+        return cast(T, value.lower() == "true")
+    if type_res is int:
+        return cast(T, int(value))
+    if type_res is float:
+        return cast(T, float(value))
+    if type_res is str:
+        return cast(T, str(value))
+
+    # Unsupported type
+    logger.error("Unsupported feature type: %s", type_res)
+    return
