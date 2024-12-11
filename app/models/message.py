@@ -1,11 +1,7 @@
-import json
 import re
 from datetime import UTC, datetime
 from enum import Enum
-from inspect import getmembers, isfunction
-from typing import Any
 
-from json_repair import repair_json
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -14,8 +10,6 @@ from openai.types.chat import (
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
-
-from app.helpers.monitoring import tracer
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
 _MESSAGE_ACTION_R = r"(?:action=*([a-z_]*))? *(.*)"
