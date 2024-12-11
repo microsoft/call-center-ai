@@ -98,8 +98,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
         # Init buffer if empty
         if not stt_buffer:
             stt_buffer.append("")
-        # Append the recognition
-        stt_buffer[-1] += text
+        # Replace the partial recognition
+        stt_buffer[-1] = text
         logger.debug("Partial recognition: %s", stt_buffer)
 
     def _complete_stt_callback(text: str) -> None:
