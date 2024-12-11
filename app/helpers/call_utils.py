@@ -643,7 +643,7 @@ class EchoCancellationStream:
         self,
         sample_rate: int,
         scheduler: Scheduler,
-        max_delay_ms: int = 200,
+        max_delay_ms: int = 300,
         packet_duration_ms: int = 20,
     ):
         self._packet_duration_ms = packet_duration_ms
