@@ -59,7 +59,7 @@ async def vad_threshold() -> float:
 
 async def vad_silence_timeout_ms() -> int:
     return await _default(
-        default=400,
+        default=500,
         key="vad_silence_timeout_ms",
         type_res=int,
     )
@@ -67,7 +67,7 @@ async def vad_silence_timeout_ms() -> int:
 
 async def vad_cutoff_timeout_ms() -> int:
     return await _default(
-        default=600,
+        default=300,
         key="vad_cutoff_timeout_ms",
         type_res=int,
     )

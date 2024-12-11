@@ -84,14 +84,6 @@ class TtsCallback(PushAudioOutputStreamCallback):
         self.queue.put_nowait(audio_buffer.tobytes())
         return audio_buffer.nbytes
 
-    def close(self) -> None:
-        """
-        Close the callback.
-        """
-        while not self.queue.empty():
-            self.queue.get_nowait()
-            self.queue.task_done()
-
 
 class ContextEnum(str, Enum):
     """
@@ -735,16 +727,14 @@ class EchoCancellationStream:
         # Apply noise reduction
         reduced_signal = reduce_noise(
             # Input signal
-            clip_noise_stationary=False,
             sr=self._sample_rate,
             y=input_signal,
-            # Performance
-            n_fft=self._chunk_size,
+            # Quality
+            n_fft=128,
             # Since the reference signal is already noise-reduced, we can assume it's stationary
+            clip_noise_stationary=False,  # Noise is longer than the signal
             stationary=True,
             y_noise=self._bot_voice_buffer,
-            # Output quality
-            prop_decrease=0.75,  # Reduce noise by 75%
         )
 
         # Perform VAD test

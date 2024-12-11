@@ -167,16 +167,23 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             stt_buffer.clear()
             stt_complete_gate.clear()
 
+            # Clear the audio buffer
+            while not audio_out.empty():
+                audio_out.get_nowait()
+                audio_out.task_done()
+
             # Send a stop signal
             await audio_out.put(False)
 
-        async def _commit_answer(tool_blacklist: set[str] | None = None) -> None:
+        async def _commit_answer(
+            wait: bool,
+            tool_blacklist: set[str] | None = None,
+        ) -> None:
             """
             Process the response.
-            """
-            # Stop any previous response
-            await _stop_callback()
 
+            Start the chat task and wait for its response if needed. Job is stored in `last_response` shared variable.
+            """
             # Start chat task
             nonlocal last_response
             last_response = await scheduler.spawn(
@@ -192,7 +199,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             )
 
             # Wait for its response
-            await last_response.wait()
+            if wait:
+                await last_response.wait()
 
         async def _response_callback(_retry: bool = False) -> None:
             """
@@ -204,7 +212,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             try:
                 await asyncio.wait_for(stt_complete_gate.wait(), timeout=0.05)
             except TimeoutError:
-                pass
+                logger.debug("Complete recognition timeout, using partial recognition")
 
             stt_text = " ".join(stt_buffer).strip()
 
@@ -217,8 +225,11 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                 await asyncio.sleep(0.2)
                 return await _response_callback(_retry=True)
 
+            # Stop any previous response
+            await _stop_callback()
+
             # Add it to the call history and update last interaction
-            logger.info("Voice stored: %s", stt_buffer)
+            logger.info("Voice stored: %s", stt_text)
             async with _db.call_transac(
                 call=call,
                 scheduler=scheduler,
@@ -231,11 +242,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                     )
                 )
 
-            # Clear the recognition buffer
-            stt_buffer.clear()
-
             # Process the response
-            await _commit_answer()
+            await _commit_answer(wait=True)
 
         # First call
         if len(call.messages) <= 1:
@@ -250,7 +258,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
         else:
             # Welcome with the LLM, do not use the end call tool for the first message, LLM hallucinates it and this is extremely frustrating for the user
             await _commit_answer(
-                {"end_call"},
+                tool_blacklist={"end_call"},
+                wait=False,
             )
 
         await asyncio.gather(
@@ -720,9 +729,8 @@ async def _process_audio_for_vad(  # noqa: PLR0913
         # Wait before clearing the TTS queue
         await asyncio.sleep(timeout_ms / 1000)
 
-        logger.debug("Canceling TTS after %i ms", timeout_ms)
-
         # Clear the queue
+        logger.info("Stoping TTS after %i ms", timeout_ms)
         await stop_callback()
 
     while True:
