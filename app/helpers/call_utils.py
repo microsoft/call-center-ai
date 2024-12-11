@@ -729,8 +729,8 @@ class EchoCancellationStream:
             # Input signal
             sr=self._sample_rate,
             y=input_signal,
-            # Performance
-            n_fft=self._chunk_size,
+            # Quality
+            n_fft=128,
             # Since the reference signal is already noise-reduced, we can assume it's stationary
             clip_noise_stationary=False,  # Noise is longer than the signal
             stationary=True,
