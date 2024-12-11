@@ -184,9 +184,6 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
 
             Start the chat task and wait for its response if needed. Job is stored in `last_response` shared variable.
             """
-            # Stop any previous response
-            await _stop_callback()
-
             # Start chat task
             nonlocal last_response
             last_response = await scheduler.spawn(
@@ -228,6 +225,9 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                 await asyncio.sleep(0.2)
                 return await _response_callback(_retry=True)
 
+            # Stop any previous response
+            await _stop_callback()
+
             # Add it to the call history and update last interaction
             logger.info("Voice stored: %s", stt_buffer)
             async with _db.call_transac(
@@ -241,9 +241,6 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                         persona=MessagePersonaEnum.HUMAN,
                     )
                 )
-
-            # Clear the recognition buffer
-            stt_buffer.clear()
 
             # Process the response
             await _commit_answer(wait=True)
