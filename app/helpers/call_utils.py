@@ -727,12 +727,12 @@ class EchoCancellationStream:
         # Apply noise reduction
         reduced_signal = reduce_noise(
             # Input signal
-            clip_noise_stationary=False,
             sr=self._sample_rate,
             y=input_signal,
             # Performance
             n_fft=self._chunk_size,
             # Since the reference signal is already noise-reduced, we can assume it's stationary
+            clip_noise_stationary=False,  # Noise is longer than the signal
             stationary=True,
             y_noise=self._bot_voice_buffer,
             # Output quality
