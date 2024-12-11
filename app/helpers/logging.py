@@ -12,7 +12,6 @@ from structlog.processors import (
     TimeStamper,
     UnicodeDecoder,
     add_log_level,
-    format_exc_info,
 )
 from structlog.stdlib import PositionalArgumentsFormatter
 
@@ -39,7 +38,6 @@ configure_once(
         TimeStamper(fmt="iso", utc=True),
         # Add exceptions info
         StackInfoRenderer(),
-        format_exc_info,
         # Decode Unicode to str
         UnicodeDecoder(),
         # Pretty printing in a terminal session
