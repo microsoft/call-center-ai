@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 
-from aiojobs import Job, Scheduler
+from aiojobs import Scheduler
 from azure.cognitiveservices.speech import (
     SpeechSynthesizer,
 )
@@ -132,7 +132,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
         ) as tts_client,
     ):
         # Build scheduler
-        last_response: Job | None = None
+        last_chat: asyncio.Task | None = None
 
         async def _timeout_callback() -> None:
             """
@@ -157,9 +157,9 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             """
             Triggered when the audio buffer needs to be cleared.
             """
-            # Close previous response now
-            if last_response:
-                await last_response.close(timeout=0)
+            # Cancel previous chat
+            if last_chat:
+                last_chat.cancel()
 
             # Stop TTS, clear the buffer and send a stop signal
             tts_client.stop_speaking_async()
@@ -186,8 +186,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             Start the chat task and wait for its response if needed. Job is stored in `last_response` shared variable.
             """
             # Start chat task
-            nonlocal last_response
-            last_response = await scheduler.spawn(
+            nonlocal last_chat
+            last_chat = asyncio.create_task(
                 _continue_chat(
                     call=call,
                     client=automation_client,
@@ -201,7 +201,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
 
             # Wait for its response
             if wait:
-                await last_response.wait()
+                await last_chat
 
         async def _response_callback(_retry: bool = False) -> None:
             """
