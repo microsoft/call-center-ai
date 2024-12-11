@@ -14,7 +14,7 @@ class ModeEnum(str, Enum):
 
 
 class MemoryModel(BaseModel, frozen=True):
-    max_size: int = Field(default=100, ge=10)
+    max_size: int = Field(default=128, ge=10)
 
     @cache
     def instance(self) -> ICache:

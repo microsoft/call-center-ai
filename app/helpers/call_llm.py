@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 
-from aiojobs import Job, Scheduler
+from aiojobs import Scheduler
 from azure.cognitiveservices.speech import (
     SpeechSynthesizer,
 )
@@ -65,6 +65,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
     stt_complete_gate = asyncio.Event()  # Gate to wait for the recognition
     aec = EchoCancellationStream(
         sample_rate=audio_sample_rate,
+        scheduler=scheduler,
     )
     audio_reference: asyncio.Queue[bytes] = asyncio.Queue()
 
@@ -111,9 +112,9 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             stt_buffer.append("")
         # Store the recognition
         stt_buffer[-1] = text
+        logger.debug("Complete recognition: %s", stt_buffer)
         # Add a new buffer for the next partial recognition
         stt_buffer.append("")
-        logger.debug("Complete recognition: %s", stt_buffer)
 
         # Open the recognition gate
         stt_complete_gate.set()
@@ -131,7 +132,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
         ) as tts_client,
     ):
         # Build scheduler
-        last_response: Job | None = None
+        last_chat: asyncio.Task | None = None
 
         async def _timeout_callback() -> None:
             """
@@ -156,24 +157,24 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             """
             Triggered when the audio buffer needs to be cleared.
             """
-            # Close previous response now
-            if last_response:
-                await last_response.close(timeout=0)
+            # Cancel previous chat
+            if last_chat:
+                last_chat.cancel()
 
-            # Stop TTS, clear the buffer and send a stop signal
+            # Stop TTS task
             tts_client.stop_speaking_async()
 
-            # Reset the recognition
-            stt_buffer.clear()
-            stt_complete_gate.clear()
-
-            # Clear the audio buffer
+            # Clear the out buffer
             while not audio_out.empty():
                 audio_out.get_nowait()
                 audio_out.task_done()
 
             # Send a stop signal
             await audio_out.put(False)
+
+            # Reset TTS buffer
+            stt_buffer.clear()
+            stt_complete_gate.clear()
 
         async def _commit_answer(
             wait: bool,
@@ -185,8 +186,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             Start the chat task and wait for its response if needed. Job is stored in `last_response` shared variable.
             """
             # Start chat task
-            nonlocal last_response
-            last_response = await scheduler.spawn(
+            nonlocal last_chat
+            last_chat = asyncio.create_task(
                 _continue_chat(
                     call=call,
                     client=automation_client,
@@ -200,7 +201,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
 
             # Wait for its response
             if wait:
-                await last_response.wait()
+                await last_chat
 
         async def _response_callback(_retry: bool = False) -> None:
             """
@@ -271,10 +272,11 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             # Detect VAD
             _process_audio_for_vad(
                 call=call,
-                stop_callback=_stop_callback,
                 echo_cancellation=aec,
                 out_stream=stt_stream,
                 response_callback=_response_callback,
+                scheduler=scheduler,
+                stop_callback=_stop_callback,
                 timeout_callback=_timeout_callback,
             ),
         )
@@ -354,10 +356,10 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
     # Timeouts
     soft_timeout_triggered = False
     soft_timeout_task = asyncio.create_task(
-        asyncio.sleep(await answer_soft_timeout_sec())
+        asyncio.sleep(await answer_soft_timeout_sec(scheduler))
     )
     hard_timeout_task = asyncio.create_task(
-        asyncio.sleep(await answer_hard_timeout_sec())
+        asyncio.sleep(await answer_hard_timeout_sec(scheduler))
     )
 
     def _clear_tasks() -> None:
@@ -387,7 +389,7 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
             if hard_timeout_task.done():
                 logger.warning(
                     "Hard timeout of %ss reached",
-                    await answer_hard_timeout_sec(),
+                    await answer_hard_timeout_sec(scheduler),
                 )
                 # Clean up
                 _clear_tasks()
@@ -399,7 +401,7 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
                 if soft_timeout_task.done() and not soft_timeout_triggered:
                     logger.warning(
                         "Soft timeout of %ss reached",
-                        await answer_soft_timeout_sec(),
+                        await answer_soft_timeout_sec(scheduler),
                     )
                     soft_timeout_triggered = True
                     # Never store the error message in the call history, it has caused hallucinations in the LLM
@@ -548,6 +550,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         async for delta in completion_stream(
             max_tokens=160,  # Lowest possible value for 90% of the cases, if not sufficient, retry will be triggered, 100 tokens ~= 75 words, 20 words ~= 1 sentence, 6 sentences ~= 160 tokens
             messages=call.messages,
+            scheduler=scheduler,
             system=system,
             tools=tools,
         ):
@@ -659,6 +662,7 @@ async def _process_audio_for_vad(  # noqa: PLR0913
     echo_cancellation: EchoCancellationStream,
     out_stream: PushAudioInputStream,
     response_callback: Callable[[], Awaitable[None]],
+    scheduler: Scheduler,
     stop_callback: Callable[[], Awaitable[None]],
     timeout_callback: Callable[[], Awaitable[None]],
 ) -> None:
@@ -682,7 +686,7 @@ async def _process_audio_for_vad(  # noqa: PLR0913
         """
         # Wait before flushing
         nonlocal stop_task
-        timeout_ms = await vad_silence_timeout_ms()
+        timeout_ms = await vad_silence_timeout_ms(scheduler)
         await asyncio.sleep(timeout_ms / 1000)
 
         # Cancel the clear TTS task
@@ -695,7 +699,7 @@ async def _process_audio_for_vad(  # noqa: PLR0913
         await response_callback()
 
         # Wait for silence and trigger timeout
-        timeout_sec = await phone_silence_timeout_sec()
+        timeout_sec = await phone_silence_timeout_sec(scheduler)
         while True:
             # Stop this time if the call played a message
             timeout_start = datetime.now(UTC)
@@ -724,7 +728,7 @@ async def _process_audio_for_vad(  # noqa: PLR0913
         """
         Stop the TTS if user speaks for too long.
         """
-        timeout_ms = await vad_cutoff_timeout_ms()
+        timeout_ms = await vad_cutoff_timeout_ms(scheduler)
 
         # Wait before clearing the TTS queue
         await asyncio.sleep(timeout_ms / 1000)

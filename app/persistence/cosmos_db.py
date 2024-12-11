@@ -81,7 +81,11 @@ class CosmosDbStore(IStore):
                 exist = True
         return exist
 
-    async def call_get(self, call_id: UUID) -> CallStateModel | None:
+    async def call_get(
+        self,
+        call_id: UUID,
+        scheduler: Scheduler,
+    ) -> CallStateModel | None:
         logger.debug("Loading call %s", call_id)
 
         # Try cache
@@ -114,7 +118,7 @@ class CosmosDbStore(IStore):
         if call:
             await self._cache.set(
                 key=cache_key,
-                ttl_sec=await callback_timeout_hour(),
+                ttl_sec=await callback_timeout_hour(scheduler),
                 value=call.model_dump_json(),
             )
 
@@ -185,7 +189,7 @@ class CosmosDbStore(IStore):
             cache_key_id = self._cache_key_call_id(call.call_id)
             await self._cache.set(
                 key=cache_key_id,
-                ttl_sec=await callback_timeout_hour(),
+                ttl_sec=await callback_timeout_hour(scheduler),
                 value=call.model_dump_json(),
             )
 
@@ -193,7 +197,11 @@ class CosmosDbStore(IStore):
         await scheduler.spawn(_exec())
 
     # TODO: Catch errors
-    async def call_create(self, call: CallStateModel) -> CallStateModel:
+    async def call_create(
+        self,
+        call: CallStateModel,
+        scheduler: Scheduler,
+    ) -> CallStateModel:
         logger.debug("Creating new call %s", call.call_id)
 
         # Serialize
@@ -213,7 +221,7 @@ class CosmosDbStore(IStore):
         cache_key = self._cache_key_call_id(call.call_id)
         await self._cache.set(
             key=cache_key,
-            ttl_sec=await callback_timeout_hour(),
+            ttl_sec=await callback_timeout_hour(scheduler),
             value=call.model_dump_json(),
         )
 
@@ -225,7 +233,11 @@ class CosmosDbStore(IStore):
 
         return call
 
-    async def call_search_one(self, phone_number: str) -> CallStateModel | None:
+    async def call_search_one(
+        self,
+        phone_number: str,
+        scheduler: Scheduler,
+    ) -> CallStateModel | None:
         logger.debug("Loading last call for %s", phone_number)
 
         # Try cache
@@ -244,7 +256,7 @@ class CosmosDbStore(IStore):
                 async with self._use_client() as db:
                     items = db.query_items(
                         max_item_count=1,
-                        query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{await callback_timeout_hour()}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
+                        query=f"SELECT * FROM c WHERE (STRINGEQUALS(c.initiate.phone_number, @phone_number, true) OR STRINGEQUALS(c.claim.policyholder_phone, @phone_number, true)) AND c.created_at >= DATETIMEADD('hh', -{await callback_timeout_hour(scheduler)}, GETCURRENTDATETIME()) ORDER BY c.created_at DESC",
                         parameters=[
                             {
                                 "name": "@phone_number",
@@ -264,7 +276,7 @@ class CosmosDbStore(IStore):
         if call:
             await self._cache.set(
                 key=cache_key,
-                ttl_sec=await callback_timeout_hour(),
+                ttl_sec=await callback_timeout_hour(scheduler),
                 value=call.model_dump_json(),
             )
 

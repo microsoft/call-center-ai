@@ -1,9 +1,10 @@
 import hashlib
-from datetime import timedelta
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from opentelemetry.instrumentation.redis import RedisInstrumentor
-from redis.asyncio import Redis
+from redis.asyncio import Connection, ConnectionPool, Redis, SSLConnection
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
 from redis.exceptions import (
@@ -12,6 +13,7 @@ from redis.exceptions import (
     RedisError,
 )
 
+from app.helpers.cache import async_lru_cache
 from app.helpers.config_models.cache import RedisModel
 from app.helpers.logging import logger
 from app.models.readiness import ReadinessEnum
@@ -20,33 +22,12 @@ from app.persistence.icache import ICache
 # Instrument redis
 RedisInstrumentor().instrument()
 
-_retry = Retry(backoff=ExponentialBackoff(), retries=3)
-
 
 class RedisCache(ICache):
-    _client: Redis
     _config: RedisModel
 
     def __init__(self, config: RedisModel):
-        logger.info("Using Redis cache %s:%s", config.host, config.port)
         self._config = config
-        self._client = Redis(
-            # Database location
-            db=config.database,
-            # Reliability
-            health_check_interval=10,  # Check the health of the connection every 10 secs
-            retry_on_error=[BusyLoadingError, RedisConnectionError],
-            retry_on_timeout=True,
-            retry=_retry,
-            socket_connect_timeout=5,  # Give the system sufficient time to connect even under higher CPU conditions
-            socket_timeout=1,  # Respond quickly or abort, this is a cache
-            # Deployment
-            host=config.host,
-            port=config.port,
-            ssl=config.ssl,
-            # Authentication
-            password=config.password.get_secret_value(),
-        )  # Redis manage by itself a low level connection pool with asyncio, but be warning to not use a generator while consuming the connection, it will close it
 
     async def readiness(self) -> ReadinessEnum:
         """
@@ -57,16 +38,17 @@ class RedisCache(ICache):
         test_name = str(uuid4())
         test_value = "test"
         try:
-            # Test the item does not exist
-            assert await self._client.get(test_name) is None
-            # Create a new item
-            await self._client.set(test_name, test_value)
-            # Test the item is the same
-            assert (await self._client.get(test_name)).decode() == test_value
-            # Delete the item
-            await self._client.delete(test_name)
-            # Test the item does not exist
-            assert await self._client.get(test_name) is None
+            async with self._use_client() as client:
+                # Test the item does not exist
+                assert await client.get(test_name) is None
+                # Create a new item
+                await client.set(test_name, test_value)
+                # Test the item is the same
+                assert (await client.get(test_name)).decode() == test_value
+                # Delete the item
+                await client.delete(test_name)
+                # Test the item does not exist
+                assert await client.get(test_name) is None
             return ReadinessEnum.OK
         except AssertionError:
             logger.exception("Readiness test failed")
@@ -87,12 +69,18 @@ class RedisCache(ICache):
         sha_key = self._key_to_hash(key)
         res = None
         try:
-            res = await self._client.get(sha_key)
+            async with self._use_client() as client:
+                res = await client.get(sha_key)
         except RedisError:
             logger.exception("Error getting value")
         return res
 
-    async def set(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
+    async def set(
+        self,
+        key: str,
+        ttl_sec: int,
+        value: str | bytes | None,
+    ) -> bool:
         """
         Set a value in the cache.
 
@@ -102,11 +90,12 @@ class RedisCache(ICache):
         """
         sha_key = self._key_to_hash(key)
         try:
-            await self._client.set(
-                ex=timedelta(seconds=ttl_sec),
-                name=sha_key,
-                value=value if value else "",
-            )
+            async with self._use_client() as client:
+                await client.set(
+                    ex=ttl_sec,
+                    name=sha_key,
+                    value=value if value else "",
+                )
         except RedisError:
             logger.exception("Error setting value")
             return False
@@ -120,11 +109,48 @@ class RedisCache(ICache):
         """
         sha_key = self._key_to_hash(key)
         try:
-            await self._client.delete(sha_key)
+            async with self._use_client() as client:
+                await client.delete(sha_key)
         except RedisError:
             logger.exception("Error deleting value")
             return False
         return True
+
+    @async_lru_cache()
+    async def _use_connection_pool(self) -> ConnectionPool:
+        """
+        Generate the Redis connection pool.
+        """
+        logger.info("Using Redis cache %s:%s", self._config.host, self._config.port)
+
+        return ConnectionPool(
+            # Database location
+            db=self._config.database,
+            # Reliability
+            health_check_interval=10,  # Check the health of the connection every 10 secs
+            retry_on_error=[BusyLoadingError, RedisConnectionError],
+            retry_on_timeout=True,
+            retry=Retry(backoff=ExponentialBackoff(), retries=3),
+            socket_connect_timeout=5,  # Give the system sufficient time to connect even under higher CPU conditions
+            socket_timeout=1,  # Respond quickly or abort, this is a cache
+            # Deployment
+            connection_class=SSLConnection if self._config.ssl else Connection,
+            host=self._config.host,
+            port=self._config.port,
+            # Authentication
+            password=self._config.password.get_secret_value(),
+        )
+
+    @asynccontextmanager
+    async def _use_client(self) -> AsyncGenerator[Redis, None]:
+        """
+        Return a Redis connection.
+        """
+        async with Redis(
+            auto_close_connection_pool=False,
+            connection_pool=await self._use_connection_pool(),
+        ) as client:
+            yield client
 
     @staticmethod
     def _key_to_hash(key: str) -> bytes:

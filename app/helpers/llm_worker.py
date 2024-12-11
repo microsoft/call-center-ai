@@ -5,6 +5,7 @@ from os import environ
 from typing import TypeVar
 
 import tiktoken
+from aiojobs import Scheduler
 from json_repair import repair_json
 from openai import (
     APIConnectionError,
@@ -88,6 +89,7 @@ _retried_exceptions = [
 async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
+    scheduler: Scheduler,
     system: list[ChatCompletionSystemMessageParam],
     tools: list[ChatCompletionToolParam] | None = None,
 ) -> AsyncGenerator[ChoiceDelta, None]:
@@ -110,7 +112,9 @@ async def completion_stream(
         async for attempt in retryed:
             with attempt:
                 async for chunck in _completion_stream_worker(
-                    is_fast=not await slow_llm_for_chat(),  # Let configuration decide
+                    is_fast=not await slow_llm_for_chat(
+                        scheduler
+                    ),  # Let configuration decide
                     max_tokens=max_tokens,
                     messages=messages,
                     system=system,
@@ -130,7 +134,7 @@ async def completion_stream(
     async for attempt in retryed:
         with attempt:
             async for chunck in _completion_stream_worker(
-                is_fast=await slow_llm_for_chat(),  # Let configuration decide
+                is_fast=await slow_llm_for_chat(scheduler),  # Let configuration decide
                 max_tokens=max_tokens,
                 messages=messages,
                 system=system,

@@ -1,9 +1,9 @@
 import hashlib
 from collections import OrderedDict
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 from app.helpers.config_models.cache import MemoryModel
-from app.helpers.logging import logger
 from app.models.readiness import ReadinessEnum
 from app.persistence.icache import ICache
 
@@ -19,13 +19,9 @@ class MemoryCache(ICache):
 
     _cache: OrderedDict[str, bytes | None] = OrderedDict()
     _config: MemoryModel
-    _ttl: dict[str, datetime] = {}
+    _ttl: OrderedDict[str, datetime] = OrderedDict()
 
     def __init__(self, config: MemoryModel):
-        logger.warning(
-            "Using memory cache with %s size limit, memory usage can be high, prefer an external cache like Redis",
-            config.max_size,
-        )
         self._config = config
 
     async def readiness(self) -> ReadinessEnum:
@@ -41,31 +37,48 @@ class MemoryCache(ICache):
         If the key does not exist, return `None`.
         """
         sha_key = self._key_to_hash(key)
-        # Check TTL
-        if sha_key in self._ttl:
-            if self._ttl[sha_key] < datetime.now(UTC):
-                return None
+
+        # Check TTL, delete if expired
+        ttl = self._ttl.get(sha_key, None)
+        if ttl and ttl < datetime.now(UTC):
+            await self.delete(key)
+            return None
+
         # Get from cache
         res = self._cache.get(sha_key, None)
         if not res:
             return None
+
         # Move to first
         self._cache.move_to_end(sha_key, last=False)
+        self._ttl.move_to_end(sha_key, last=False)
+
         return res
 
-    async def set(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
+    async def set(
+        self,
+        key: str,
+        ttl_sec: int,
+        value: str | bytes | None,
+    ) -> bool:
         """
         Set a value in the cache.
         """
         sha_key = self._key_to_hash(key)
+
         # Delete the last if full
         if len(self._cache) >= self._config.max_size:
+            self._ttl.popitem()
             self._cache.popitem()
-        # Add to first
+
+        # Set TTL as first element
+        self._ttl[sha_key] = datetime.now(UTC) + timedelta(seconds=ttl_sec)
+        self._ttl.move_to_end(sha_key, last=False)
+
+        # Add cache as first element
         self._cache[sha_key] = value.encode() if isinstance(value, str) else value
         self._cache.move_to_end(sha_key, last=False)
-        # Set the TTL
-        self._ttl[sha_key] = datetime.now(UTC) + timedelta(seconds=ttl_sec)
+
         return True
 
     async def delete(self, key: str) -> bool:
@@ -73,12 +86,13 @@ class MemoryCache(ICache):
         Delete a value from the cache.
         """
         sha_key = self._key_to_hash(key)
-        # Delete from cache
-        if sha_key in self._cache:
-            self._cache.pop(sha_key)
-        # Delete from TTL
-        if sha_key in self._ttl:
+
+        # Delete keys
+        with suppress(KeyError):
             self._ttl.pop(sha_key)
+        with suppress(KeyError):
+            self._cache.pop(sha_key)
+
         return True
 
     @staticmethod

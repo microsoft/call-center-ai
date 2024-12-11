@@ -23,7 +23,11 @@ class IStore(ABC):
 
     @abstractmethod
     @tracer.start_as_current_span("store_call_get")
-    async def call_get(self, call_id: UUID) -> CallStateModel | None:
+    async def call_get(
+        self,
+        call_id: UUID,
+        scheduler: Scheduler,
+    ) -> CallStateModel | None:
         pass
 
     @abstractmethod
@@ -37,12 +41,20 @@ class IStore(ABC):
 
     @abstractmethod
     @tracer.start_as_current_span("store_call_create")
-    async def call_create(self, call: CallStateModel) -> CallStateModel:
+    async def call_create(
+        self,
+        call: CallStateModel,
+        scheduler: Scheduler,
+    ) -> CallStateModel:
         pass
 
     @abstractmethod
     @tracer.start_as_current_span("store_call_search_one")
-    async def call_search_one(self, phone_number: str) -> CallStateModel | None:
+    async def call_search_one(
+        self,
+        phone_number: str,
+        scheduler: Scheduler,
+    ) -> CallStateModel | None:
         pass
 
     @abstractmethod

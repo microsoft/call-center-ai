@@ -1,6 +1,6 @@
-from contextlib import suppress
 from typing import TypeVar, cast
 
+from aiojobs import Scheduler
 from azure.appconfiguration.aio import AzureAppConfigurationClient
 from azure.core.exceptions import ResourceNotFoundError
 
@@ -10,89 +10,98 @@ from app.helpers.config_models.cache import MemoryModel
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 from app.helpers.logging import logger
-from app.persistence.icache import ICache
 from app.persistence.memory import MemoryCache
 
-_cache: ICache = MemoryCache(MemoryModel(max_size=100))
+_cache = MemoryCache(MemoryModel())
 T = TypeVar("T", bool, int, float, str)
 
 
-async def answer_hard_timeout_sec() -> int:
+async def answer_hard_timeout_sec(scheduler: Scheduler) -> int:
     return await _default(
         default=180,
         key="answer_hard_timeout_sec",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def answer_soft_timeout_sec() -> int:
+async def answer_soft_timeout_sec(scheduler: Scheduler) -> int:
     return await _default(
         default=120,
         key="answer_soft_timeout_sec",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def callback_timeout_hour() -> int:
+async def callback_timeout_hour(scheduler: Scheduler) -> int:
     return await _default(
         default=24,
         key="callback_timeout_hour",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def phone_silence_timeout_sec() -> int:
+async def phone_silence_timeout_sec(scheduler: Scheduler) -> int:
     return await _default(
         default=20,
         key="phone_silence_timeout_sec",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def vad_threshold() -> float:
+async def vad_threshold(scheduler: Scheduler) -> float:
     return await _default(
         default=0.5,
         key="vad_threshold",
+        scheduler=scheduler,
         type_res=float,
     )
 
 
-async def vad_silence_timeout_ms() -> int:
+async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
     return await _default(
         default=500,
         key="vad_silence_timeout_ms",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def vad_cutoff_timeout_ms() -> int:
+async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
     return await _default(
-        default=300,
+        default=150,
         key="vad_cutoff_timeout_ms",
+        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def recording_enabled() -> bool:
+async def recording_enabled(scheduler: Scheduler) -> bool:
     return await _default(
         default=False,
         key="recording_enabled",
+        scheduler=scheduler,
         type_res=bool,
     )
 
 
-async def slow_llm_for_chat() -> bool:
+async def slow_llm_for_chat(scheduler: Scheduler) -> bool:
     return await _default(
         default=True,
         key="slow_llm_for_chat",
+        scheduler=scheduler,
         type_res=bool,
     )
 
 
-async def recognition_retry_max() -> int:
+async def recognition_retry_max(scheduler: Scheduler) -> int:
     return await _default(
         default=3,
         key="recognition_retry_max",
+        scheduler=scheduler,
         type_res=int,
     )
 
@@ -100,16 +109,29 @@ async def recognition_retry_max() -> int:
 async def _default(
     default: T,
     key: str,
+    scheduler: Scheduler,
     type_res: type[T],
 ) -> T:
     """
     Get a setting from the App Configuration service with a default value.
     """
-    return (await _get(key=key, type_res=type_res)) or default
+    # Get the setting
+    res = await _get(
+        key=key,
+        scheduler=scheduler,
+        type_res=type_res,
+    )
+    if res:
+        return res
+
+    # Return default
+    logger.info("Feature %s not found, using default: %s", key, default)
+    return default
 
 
 async def _get(
     key: str,
+    scheduler: Scheduler,
     type_res: type[T],
 ) -> T | None:
     """
@@ -119,7 +141,20 @@ async def _get(
     cache_key = _cache_key(key)
     cached = await _cache.get(cache_key)
     if cached:
-        return _parse(value=cached.decode(), type_res=type_res)
+        return _parse(
+            type_res=type_res,
+            value=cached.decode(),
+        )
+
+    # Defer the update
+    await scheduler.spawn(_refresh(cache_key, key))
+    return
+
+
+async def _refresh(
+    cache_key: str,
+    key: str,
+) -> T | None:
     # Try live
     try:
         async with await _use_client() as client:
@@ -127,17 +162,18 @@ async def _get(
         # Return default if not found
         if not setting:
             return
+        res = setting.value
     except ResourceNotFoundError:
-        logger.warning("Setting %s not found", key)
         return
+
+    logger.debug("Setting %s refreshed: %s", key, res)
+
     # Update cache
     await _cache.set(
         key=cache_key,
         ttl_sec=CONFIG.app_configuration.ttl_sec,
-        value=setting.value,
+        value=res,
     )
-    # Return
-    return _parse(value=setting.value, type_res=type_res)
 
 
 @async_lru_cache()
@@ -172,13 +208,16 @@ def _parse(value: str, type_res: type[T]) -> T | None:
 
     Supported types: bool, int, float, str.
     """
-    with suppress(ValueError):
-        if type_res is bool:
-            return cast(T, value.lower() == "true")
-        if type_res is int:
-            return cast(T, int(value))
-        if type_res is float:
-            return cast(T, float(value))
-        if type_res is str:
-            return cast(T, str(value))
-        raise ValueError(f"Unsupported type: {type_res}")
+    # Try parse
+    if type_res is bool:
+        return cast(T, value.lower() == "true")
+    if type_res is int:
+        return cast(T, int(value))
+    if type_res is float:
+        return cast(T, float(value))
+    if type_res is str:
+        return cast(T, str(value))
+
+    # Unsupported type
+    logger.error("Unsupported feature type: %s", type_res)
+    return

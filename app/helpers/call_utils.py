@@ -211,13 +211,11 @@ async def handle_automation_tts(  # noqa: PLR0913
             return
 
     if store:
-        await scheduler.spawn(
-            _store_assistant_message(
-                call=call,
-                style=style,
-                text=text,
-                scheduler=scheduler,
-            )
+        await _store_assistant_message(
+            call=call,
+            style=style,
+            text=text,
+            scheduler=scheduler,
         )
 
 
@@ -274,13 +272,11 @@ async def handle_realtime_tts(  # noqa: PLR0913
         )
 
     if store:
-        await scheduler.spawn(
-            _store_assistant_message(
-                call=call,
-                style=style,
-                text=text,
-                scheduler=scheduler,
-            )
+        await _store_assistant_message(
+            call=call,
+            style=style,
+            text=text,
+            scheduler=scheduler,
         )
 
 
@@ -564,10 +560,6 @@ async def use_tts_client(
         audio_config=AudioOutputConfig(stream=PushAudioOutputStream(TtsCallback(out))),
     )
 
-    # Connect events
-    client.synthesis_started.connect(lambda _: logger.debug("TTS started"))
-    client.synthesis_completed.connect(lambda _: logger.debug("TTS completed"))
-
     # Return
     yield client
 
@@ -644,21 +636,26 @@ class EchoCancellationStream:
     _packet_size: int
     _reference_queue: asyncio.Queue[bytes] = asyncio.Queue()
     _sample_rate: int
+    _scheduler: Scheduler
+    _empty_packet: bytes
 
     def __init__(
         self,
         sample_rate: int,
-        max_delay_ms: int = 200,
+        scheduler: Scheduler,
+        max_delay_ms: int = 300,
         packet_duration_ms: int = 20,
     ):
         self._packet_duration_ms = packet_duration_ms
         self._sample_rate = sample_rate
+        self._scheduler = scheduler
 
         max_delay_samples = int(max_delay_ms / 1000 * self._sample_rate)
         self._bot_voice_buffer = np.zeros(max_delay_samples, dtype=np.float32)
 
         self._chunk_size = int(self._sample_rate * self._packet_duration_ms / 1000)
         self._packet_size = self._chunk_size * 2  # Each sample is 2 bytes (PCM 16-bit)
+        self._empty_packet: bytes = b"\x00" * self._packet_size
 
     def _pcm_to_float(self, pcm: bytes) -> np.ndarray:
         """
@@ -703,18 +700,20 @@ class EchoCancellationStream:
         # Calculate Root Mean Square (RMS)
         rms = np.sqrt(np.mean(voice**2))
         # Get VAD threshold, divide by 10 to more usability from user side, as RMS is in range 0-1 and a detection of 0.1 is a good maximum threshold
-        threshold = await vad_threshold() / 10
+        threshold = await vad_threshold(self._scheduler) / 10
         return rms >= threshold
 
     async def _process_one(self, input_pcm: bytes) -> None:
         """
         Process one audio chunk with echo cancellation.
         """
-        # Use silence as the reference if none is available
+        # Push raw input if reference is empty
         if self._reference_queue.empty():
-            reference_pcm = b"\x00" * self._packet_size
+            reference_pcm = self._empty_packet
+
+        # Reference signal is available
         else:
-            reference_pcm = await self._reference_queue.get()
+            reference_pcm = self._reference_queue.get_nowait()
             self._reference_queue.task_done()
 
         # Convert PCM to float for processing
@@ -723,6 +722,15 @@ class EchoCancellationStream:
 
         # Update the input buffer with the reference signal
         self._update_input_buffer(reference_signal)
+
+        # Reference signal is empty, skip noise reduction
+        if np.all(reference_signal == 0):
+            # Perform VAD test
+            input_speaking = await self._rms_speech_detection(input_signal)
+
+            # Add processed PCM and metadata to the output queue
+            self._output_queue.put_nowait((input_pcm, input_speaking))
+            return
 
         # Apply noise reduction
         reduced_signal = reduce_noise(
@@ -735,6 +743,8 @@ class EchoCancellationStream:
             clip_noise_stationary=False,  # Noise is longer than the signal
             stationary=True,
             y_noise=self._bot_voice_buffer,
+            # Output quality
+            prop_decrease=0.75,  # Reduce noise by 75%
         )
 
         # Perform VAD test
@@ -744,7 +754,27 @@ class EchoCancellationStream:
         processed_pcm = self._float_to_pcm(reduced_signal)
 
         # Add processed PCM and metadata to the output queue
-        await self._output_queue.put((processed_pcm, input_speaking))
+        self._output_queue.put_nowait((processed_pcm, input_speaking))
+
+    async def _ensure_stream(self, input_pcm: bytes) -> None:
+        """
+        Ensure the audio stream is processed in real-time.
+
+        If the processing is delayed, the original input will be returned.
+        """
+        # Process the audio
+        try:
+            await asyncio.wait_for(
+                self._process_one(input_pcm),
+                timeout=self._packet_duration_ms
+                / 1000
+                * 4,  # Allow temporary medium latency
+            )
+
+        # If the processing is delayed, return the original input
+        except TimeoutError:
+            logger.warning("Echo processing timeout, returning input")
+            await self._output_queue.put((input_pcm, False))
 
     async def process_stream(self) -> None:
         """
@@ -759,14 +789,7 @@ class EchoCancellationStream:
                 self._input_queue.task_done()
 
                 # Queue the processing
-                await scheduler.spawn(
-                    asyncio.wait_for(
-                        self._process_one(input_pcm),
-                        timeout=self._packet_duration_ms
-                        / 1000
-                        * 5,  # Allow temporary high latency
-                    )
-                )
+                await scheduler.spawn(self._ensure_stream(input_pcm))
 
     async def push_input(self, audio_data: bytes) -> None:
         """
@@ -797,7 +820,6 @@ class EchoCancellationStream:
 
         Returns a tuple with the echo-cancelled PCM audio and a boolean flag indicating if the user was speaking.
         """
-        # return await self._output_queue.get()
         try:
             return await asyncio.wait_for(
                 fut=self._output_queue.get(),
@@ -806,4 +828,4 @@ class EchoCancellationStream:
                 * 1.5,  # Allow temporary small latency
             )
         except TimeoutError:
-            return b"\x00" * self._packet_size, False  # Silence PCM chunk and no speech
+            return self._empty_packet, False

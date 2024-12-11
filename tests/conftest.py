@@ -211,7 +211,10 @@ class DeepEvalAzureOpenAI(GPTModel):
         # Try live
         res = super().generate(prompt)
         # Update cache
-        self._cache.set(cache_key, res)
+        self._cache.set(
+            key=cache_key,
+            value=res,
+        )
         # Return
         return res
 
@@ -225,7 +228,10 @@ class DeepEvalAzureOpenAI(GPTModel):
         # Try live
         res = await super().a_generate(prompt)
         # Update cache
-        self._cache.set(cache_key, res)
+        self._cache.set(
+            key=cache_key,
+            value=res,
+        )
         # Return
         return res
 
