@@ -84,14 +84,6 @@ class TtsCallback(PushAudioOutputStreamCallback):
         self.queue.put_nowait(audio_buffer.tobytes())
         return audio_buffer.nbytes
 
-    def close(self) -> None:
-        """
-        Close the callback.
-        """
-        while not self.queue.empty():
-            self.queue.get_nowait()
-            self.queue.task_done()
-
 
 class ContextEnum(str, Enum):
     """
