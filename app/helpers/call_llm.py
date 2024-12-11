@@ -167,6 +167,11 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             stt_buffer.clear()
             stt_complete_gate.clear()
 
+            # Clear the audio buffer
+            while not audio_out.empty():
+                audio_out.get_nowait()
+                audio_out.task_done()
+
             # Send a stop signal
             await audio_out.put(False)
 
