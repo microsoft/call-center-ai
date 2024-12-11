@@ -625,6 +625,7 @@ async def communicationservices_wss_post(
                     )
                 # Stop audio
                 elif audio_data is False:
+                    logger.debug("Stop audio event received, stopping audio")
                     await websocket.send_json(
                         {
                             "kind": "StopAudio",
