@@ -92,7 +92,12 @@ class RedisCache(ICache):
             logger.exception("Error getting value")
         return res
 
-    async def set(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
+    async def set(
+        self,
+        key: str,
+        ttl_sec: int,
+        value: str | bytes | None,
+    ) -> bool:
         """
         Set a value in the cache.
 

@@ -9,10 +9,9 @@ from app.helpers.config_models.cache import MemoryModel
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 from app.helpers.logging import logger
-from app.persistence.icache import ICache
 from app.persistence.memory import MemoryCache
 
-_cache: ICache = MemoryCache(MemoryModel(max_size=100))
+_cache = MemoryCache(MemoryModel())
 T = TypeVar("T", bool, int, float, str)
 
 
@@ -104,7 +103,11 @@ async def _default(
     """
     Get a setting from the App Configuration service with a default value.
     """
-    return (await _get(key=key, type_res=type_res)) or default
+    res = await _get(key=key, type_res=type_res)
+    if res:
+        return res
+    logger.warning("Setting %s not found, using default: %s", key, default)
+    return default
 
 
 async def _get(
@@ -118,7 +121,11 @@ async def _get(
     cache_key = _cache_key(key)
     cached = await _cache.get(cache_key)
     if cached:
-        return _parse(value=cached.decode(), type_res=type_res)
+        return _parse(
+            type_res=type_res,
+            value=cached.decode(),
+        )
+
     # Try live
     try:
         async with await _use_client() as client:
@@ -126,17 +133,24 @@ async def _get(
         # Return default if not found
         if not setting:
             return
+        res = setting.value
     except ResourceNotFoundError:
-        logger.warning("Setting %s not found", key)
         return
+
+    logger.debug("Setting %s refreshed: %s", key, res)
+
     # Update cache
     await _cache.set(
         key=cache_key,
         ttl_sec=CONFIG.app_configuration.ttl_sec,
-        value=setting.value,
+        value=res,
     )
-    # Return
-    return _parse(value=setting.value, type_res=type_res)
+
+    # Return the type
+    return _parse(
+        type_res=type_res,
+        value=res,
+    )
 
 
 @async_lru_cache()

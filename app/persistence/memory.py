@@ -53,7 +53,12 @@ class MemoryCache(ICache):
         self._cache.move_to_end(sha_key, last=False)
         return res
 
-    async def set(self, key: str, value: str | bytes | None, ttl_sec: int) -> bool:
+    async def set(
+        self,
+        key: str,
+        ttl_sec: int,
+        value: str | bytes | None,
+    ) -> bool:
         """
         Set a value in the cache.
         """
