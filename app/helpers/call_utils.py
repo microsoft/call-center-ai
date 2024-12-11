@@ -564,10 +564,6 @@ async def use_tts_client(
         audio_config=AudioOutputConfig(stream=PushAudioOutputStream(TtsCallback(out))),
     )
 
-    # Connect events
-    client.synthesis_started.connect(lambda _: logger.debug("TTS started"))
-    client.synthesis_completed.connect(lambda _: logger.debug("TTS completed"))
-
     # Return
     yield client
 
