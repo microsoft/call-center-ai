@@ -112,9 +112,9 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             stt_buffer.append("")
         # Store the recognition
         stt_buffer[-1] = text
+        logger.debug("Complete recognition: %s", stt_buffer)
         # Add a new buffer for the next partial recognition
         stt_buffer.append("")
-        logger.debug("Complete recognition: %s", stt_buffer)
 
         # Open the recognition gate
         stt_complete_gate.set()
