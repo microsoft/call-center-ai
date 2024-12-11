@@ -211,13 +211,11 @@ async def handle_automation_tts(  # noqa: PLR0913
             return
 
     if store:
-        await scheduler.spawn(
-            _store_assistant_message(
-                call=call,
-                style=style,
-                text=text,
-                scheduler=scheduler,
-            )
+        await _store_assistant_message(
+            call=call,
+            style=style,
+            text=text,
+            scheduler=scheduler,
         )
 
 
@@ -274,13 +272,11 @@ async def handle_realtime_tts(  # noqa: PLR0913
         )
 
     if store:
-        await scheduler.spawn(
-            _store_assistant_message(
-                call=call,
-                style=style,
-                text=text,
-                scheduler=scheduler,
-            )
+        await _store_assistant_message(
+            call=call,
+            style=style,
+            text=text,
+            scheduler=scheduler,
         )
 
 
