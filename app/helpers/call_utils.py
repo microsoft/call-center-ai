@@ -735,8 +735,6 @@ class EchoCancellationStream:
             clip_noise_stationary=False,  # Noise is longer than the signal
             stationary=True,
             y_noise=self._bot_voice_buffer,
-            # Output quality
-            prop_decrease=0.75,  # Reduce noise by 75%
         )
 
         # Perform VAD test
