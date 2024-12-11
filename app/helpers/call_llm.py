@@ -212,7 +212,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             try:
                 await asyncio.wait_for(stt_complete_gate.wait(), timeout=0.05)
             except TimeoutError:
-                pass
+                logger.debug("Complete recognition timeout, using partial recognition")
 
             stt_text = " ".join(stt_buffer).strip()
 
