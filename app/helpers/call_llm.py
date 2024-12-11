@@ -175,9 +175,14 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             # Send a stop signal
             await audio_out.put(False)
 
-        async def _commit_answer(tool_blacklist: set[str] | None = None) -> None:
+        async def _commit_answer(
+            wait: bool,
+            tool_blacklist: set[str] | None = None,
+        ) -> None:
             """
             Process the response.
+
+            Start the chat task and wait for its response if needed. Job is stored in `last_response` shared variable.
             """
             # Stop any previous response
             await _stop_callback()
@@ -197,7 +202,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             )
 
             # Wait for its response
-            await last_response.wait()
+            if wait:
+                await last_response.wait()
 
         async def _response_callback(_retry: bool = False) -> None:
             """
@@ -240,7 +246,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             stt_buffer.clear()
 
             # Process the response
-            await _commit_answer()
+            await _commit_answer(wait=True)
 
         # First call
         if len(call.messages) <= 1:
@@ -255,7 +261,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
         else:
             # Welcome with the LLM, do not use the end call tool for the first message, LLM hallucinates it and this is extremely frustrating for the user
             await _commit_answer(
-                {"end_call"},
+                tool_blacklist={"end_call"},
+                wait=False,
             )
 
         await asyncio.gather(
