@@ -161,20 +161,20 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             if last_chat:
                 last_chat.cancel()
 
-            # Stop TTS, clear the buffer and send a stop signal
+            # Stop TTS task
             tts_client.stop_speaking_async()
 
-            # Reset the recognition
-            stt_buffer.clear()
-            stt_complete_gate.clear()
-
-            # Clear the audio buffer
+            # Clear the out buffer
             while not audio_out.empty():
                 audio_out.get_nowait()
                 audio_out.task_done()
 
             # Send a stop signal
             await audio_out.put(False)
+
+            # Reset TTS buffer
+            stt_buffer.clear()
+            stt_complete_gate.clear()
 
         async def _commit_answer(
             wait: bool,
