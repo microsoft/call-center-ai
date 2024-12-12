@@ -48,35 +48,13 @@ curl \
 
 ### Features
 
-> [!NOTE]
-> This project is a proof of concept. It is not intended to be used in production. This demonstrates how can be combined Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
+- **Enhanced communication and user experience**: Integrates inbound and outbound calls with a dedicated phone number, supports multiple languages and voice tones, and allows users to provide or receive information via SMS. Conversations are **streamed in real-time** to avoid delays, can be **resumed after disconnections**, and are **stored for future reference**. This ensures an **improved customer experience**, enabling 24/7 communication and handling of low to medium complexity calls, all in a more accessible and user-friendly manner.
 
-- [x] Access the claim on a public website
-- [x] Access to customer conversation history
-- [x] Allow user to change the language of the conversation
-- [x] Assistant can send SMS to the user for futher information
-- [x] Bot can be called from a phone number
-- [x] Bot use multiple voice tones (e.g. happy, sad, neutral) to keep the conversation engaging
-- [x] Company products (= lexicon) can be understood by the bot (e.g. a name of a specific insurance product)
-- [x] Create by itself a todo list of tasks to complete the claim
-- [x] Customizable prompts
-- [x] Disengaging from a human agent when needed
-- [x] Filter out inappropriate content from the LLM, like profanity or concurrence company names
-- [x] Fine understanding of the customer request with GPT-4o and GPT 4o-mini
-- [x] Follow a specific data schema for the claim
-- [x] Has access to a documentation database (few-shot training / RAG)
-- [x] Help the user to find the information needed to complete the claim
-- [x] Jailbreak detection
-- [x] Lower AI Search cost by usign a Redis cache
-- [x] Monitoring and tracing with Application Insights
-- [x] Perform user tests with feature flags
-- [x] Receive SMS during a conversation for explicit wordings
-- [x] Record the calls for audit and quality assurance
-- [x] Responses are streamed from the LLM to the user, to avoid long pauses
-- [x] Send a SMS report after the call
-- [x] Take back a conversation after a disengagement
-- [ ] Call back the user when needed
-- [ ] Simulate a IVR workflow
+- **Advanced intelligence and data management**: Leverages **GPT-4o** and **GPT-4o Realtime** (known for higher performance and a 10–15x cost premium) to achieve nuanced comprehension. It can discuss **private and sensitive data**, including customer-specific information, while following **retrieval-augmented generation (RAG)** best practices to ensure secure and compliant handling of internal documents. The system understands domain-specific terms, follows a structured claim schema, generates automated to-do lists, filters inappropriate content, and detects jailbreak attempts. Historical conversations and past interactions can also be used to **fine-tune the LLM**, improving accuracy and personalization over time. Redis caching further enhances efficiency.
+
+- **Customization, oversight, and scalability**: Offers **customizable prompts**, feature flags for controlled experimentation, human agent fallback, and call recording for quality assurance. Integrates Application Insights for monitoring and tracing, provides publicly accessible claim data, and plans future enhancements such as automated callbacks and IVR-like workflows. It also enables the creation of a **brand-specific custom voice**, allowing the assistant’s voice to reflect the company’s identity and improve brand consistency.
+
+- **Cloud-native deployment and resource management**: Deployed on **Azure** with a containerized, serverless architecture for low maintenance and elastic scaling. This approach optimizes costs based on usage, ensuring flexibility and affordability over time. Seamless integration with **Azure Communication Services**, **Cognitive Services**, and **OpenAI resources** provides a secure environment suitable for rapid iteration, continuous improvement, and accommodating variable workloads in the call center.
 
 ### Demo
 
@@ -219,6 +197,9 @@ graph LR
 ```
 
 ## Deployment
+
+> [!NOTE]
+> This project is a proof of concept. It is not intended to be used in production. This demonstrates how can be combined Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
 
 ### Prerequisites
 
@@ -625,6 +606,16 @@ From now, the only impactful thing you can do is the LLM part. This can be achei
 The application is natively connected to Azure Application Insights, so you can monitor the response time and see where the time is spent. This is a great start to identify the bottlenecks.
 
 Feel free to raise an issue or propose a PR if you have any idea to optimize the response delay.
+
+### Improving conversation quality through model fine-tuning
+
+Enhance the LLM’s accuracy and domain adaptation by integrating historical data from human-run call centers. Before proceeding, ensure compliance with data privacy regulations, internal security standards, and [Responsible AI principles](https://learn.microsoft.com/en-us/azure/machine-learning/concept-responsible-ai?view=azureml-api-2). Consider the following steps:
+
+1. Aggregate authentic data sources: Collect voice recordings, call transcripts, and chat logs from previous human-managed interactions to provide the LLM with realistic training material.
+2. Preprocess and anonymize data: [Remove sensitive information (AI Language Personally Identifiable Information detection)](https://learn.microsoft.com/en-us/azure/ai-services/language-service/personally-identifiable-information/overview), including personal identifiers or confidential details, to preserve user privacy, meet compliance, and align with Responsible AI guidelines.
+3. Perform iterative fine-tuning: Continuously [refine the model’s using the curated dataset (AI Foundry Fine-tuning)](https://learn.microsoft.com/en-us/azure/ai-studio/concepts/fine-tuning-overview), allowing it to learn industry-specific terminology, preferred conversation styles, and problem-resolution approaches.
+4. Validate improvements: Test the updated model against sample scenarios and measure key performance indicators (e.g. user satisfaction, call duration, resolution rate) to confirm that adjustments have led to meaningful enhancements.
+5. Monitor, iterate, and A/B test: Regularly reassess the model’s performance, integrate newly gathered data, and apply further fine-tuning as needed. Leverage [built-in feature configurations to A/B test (App Configuration Experimentation)](https://learn.microsoft.com/en-us/azure/azure-app-configuration/concept-experimentation) different versions of the model, ensuring responsible, data-driven decisions and continuous optimization over time.
 
 ## Q&A
 
