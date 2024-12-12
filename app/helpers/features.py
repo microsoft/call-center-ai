@@ -72,7 +72,7 @@ async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
 
 async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
     return await _default(
-        default=150,
+        default=250,
         key="vad_cutoff_timeout_ms",
         scheduler=scheduler,
         type_res=int,

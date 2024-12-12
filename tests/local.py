@@ -105,7 +105,6 @@ async def main() -> None:
                 client=automation_client,
                 post_callback=_post_callback,
                 scheduler=scheduler,
-                tool_blacklist=None,
                 training_callback=_training_callback,
                 tts_client=tts_client,
             )

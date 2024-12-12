@@ -7,6 +7,7 @@ from textwrap import dedent
 from typing import Any
 
 import pytest
+import pytest_asyncio
 import yaml
 from _pytest.mark.structures import MarkDecorator
 from azure.cognitiveservices.speech import (
@@ -18,7 +19,9 @@ from azure.cognitiveservices.speech.interop import _spx_handle
 from azure.communication.callautomation import FileSource, SsmlSource, TextSource
 from azure.communication.callautomation._generated.aio.operations import (
     CallMediaOperations,
+    CallRecordingOperations,
 )
+from azure.communication.callautomation._generated.models import RecordingStateResponse
 from azure.communication.callautomation._models import TransferCallResult
 from azure.communication.callautomation.aio import (
     CallAutomationClient,
@@ -46,6 +49,18 @@ class CallMediaOperationsMock(CallMediaOperations):
         **kwargs,
     ) -> None:
         pass
+
+
+class CallRecordingOperationsMock(CallRecordingOperations):
+    def __init__(self) -> None:
+        pass
+
+    async def start_recording(
+        self,
+        *args,  # noqa: ARG002
+        **kwargs,  # noqa: ARG002
+    ) -> RecordingStateResponse:
+        return RecordingStateResponse()
 
 
 class CallConnectionClientMock(CallConnectionClient):
@@ -125,6 +140,7 @@ class CallConnectionClientMock(CallConnectionClient):
 
 class CallAutomationClientMock(CallAutomationClient):
     _call_client: CallConnectionClientMock
+    _call_recording_client = CallRecordingOperationsMock()
 
     def __init__(
         self,
@@ -152,13 +168,13 @@ class SpeechSynthesizerMock(SpeechSynthesizer):
     def __init__(self, play_media_callback: Callable[[str], None]) -> None:
         self._play_media_callback = play_media_callback
 
-    def speak_text_async(
+    def speak_ssml_async(
         self,
-        text: str,
+        ssml: str,
         *args,  # noqa: ARG002
         **kwargs,  # noqa: ARG002
     ) -> ResultFuture:
-        self._play_media_callback(text)
+        self._play_media_callback(ssml)
         return ResultFuture(
             async_handle=_spx_handle(0),
             get_function=lambda _: _spx_handle(0),
@@ -291,14 +307,17 @@ def random_text() -> str:
     return text
 
 
-@pytest.fixture
-def call() -> CallStateModel:
-    call = CallStateModel(
-        initiate=CallInitiateModel(
-            **CONFIG.conversation.initiate.model_dump(),
-            phone_number="+33612345678",  # pyright: ignore
-        ),
-        voice_id="dummy",
+@pytest_asyncio.fixture
+async def call() -> CallStateModel:
+    db = CONFIG.database.instance()
+    call = await db.call_create(
+        CallStateModel(
+            initiate=CallInitiateModel(
+                **CONFIG.conversation.initiate.model_dump(),
+                phone_number="+33612345678",  # pyright: ignore
+            ),
+            voice_id="dummy",
+        )
     )
     return call
 
