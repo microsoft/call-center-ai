@@ -54,6 +54,7 @@ class IStore(ABC):
         self,
         phone_number: str,
         scheduler: Scheduler,
+        callback_timeout: bool = True,
     ) -> CallStateModel | None:
         pass
 

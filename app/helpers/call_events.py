@@ -750,8 +750,8 @@ async def _handle_ivr_language(
     If only one language is available, selects it by default. Else, plays the IVR prompt.
     """
     # If only one language is available, skip the IVR
-    if len(CONFIG.conversation.initiate.lang.availables) == 1:
-        short_code = CONFIG.conversation.initiate.lang.availables[0].short_code
+    if len(call.initiate.lang.availables) == 1:
+        short_code = call.initiate.lang.availables[0].short_code
         logger.info("Only one language available, selecting %s by default", short_code)
         await on_ivr_recognized(
             call=call,
@@ -773,7 +773,7 @@ async def _handle_ivr_language(
         DtmfTone.NINE,
     ]
     choices = []
-    for i, lang in enumerate(CONFIG.conversation.initiate.lang.availables):
+    for i, lang in enumerate(call.initiate.lang.availables):
         choices.append(
             RecognitionChoice(
                 label=lang.short_code,

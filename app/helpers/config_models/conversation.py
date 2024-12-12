@@ -43,22 +43,22 @@ class LanguageModel(BaseModel):
         LanguageEntryModel(
             pronunciations_en=["French", "FR", "France"],
             short_code="fr-FR",
-            voice="fr-FR-DeniseNeural",
+            voice="fr-FR-VivienneMultilingualNeural",
         ),
         LanguageEntryModel(
             pronunciations_en=["English", "EN", "United States"],
             short_code="en-US",
-            voice="en-US-NancyNeural",
+            voice="en-US-ShimmerTurboMultilingualNeural",
         ),
         LanguageEntryModel(
             pronunciations_en=["Spanish", "ES", "Spain"],
             short_code="es-ES",
-            voice="es-ES-LiaNeural",
+            voice="es-ES-ArabellaMultilingualNeural",
         ),
         LanguageEntryModel(
             pronunciations_en=["Chinese", "ZH", "China"],
             short_code="zh-CN",
-            voice="zh-CN-XiaoqiuNeural",
+            voice="zh-CN-XiaoyuMultilingualNeural",
         ),
     ]
 
