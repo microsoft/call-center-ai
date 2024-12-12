@@ -138,13 +138,8 @@ class AbstractPlugin:
             logger.info("Executed function %s (%s): %s", name, args, res_log)
 
         # Catch wrong arguments
-        except TypeError as e:
-            logger.warning(
-                "Wrong arguments for function %s: %s. Error: %s",
-                name,
-                args,
-                e,
-            )
+        except TypeError:
+            logger.exception("Wrong arguments for function %s: %s.", name, args)
             res = "Wrong arguments, please fix them and try again."
             res_log = res
 
