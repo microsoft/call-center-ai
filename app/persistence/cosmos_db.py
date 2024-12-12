@@ -118,7 +118,9 @@ class CosmosDbStore(IStore):
         if call:
             await self._cache.set(
                 key=cache_key,
-                ttl_sec=await callback_timeout_hour(scheduler),
+                ttl_sec=max(await callback_timeout_hour(scheduler), 1)
+                * 60
+                * 60,  # Ensure at least 1 hour
                 value=call.model_dump_json(),
             )
 
@@ -189,7 +191,9 @@ class CosmosDbStore(IStore):
             cache_key_id = self._cache_key_call_id(call.call_id)
             await self._cache.set(
                 key=cache_key_id,
-                ttl_sec=await callback_timeout_hour(scheduler),
+                ttl_sec=max(await callback_timeout_hour(scheduler), 1)
+                * 60
+                * 60,  # Ensure at least 1 hour
                 value=call.model_dump_json(),
             )
 
@@ -221,7 +225,9 @@ class CosmosDbStore(IStore):
         cache_key = self._cache_key_call_id(call.call_id)
         await self._cache.set(
             key=cache_key,
-            ttl_sec=await callback_timeout_hour(scheduler),
+            ttl_sec=max(await callback_timeout_hour(scheduler), 1)
+            * 60
+            * 60,  # Ensure at least 1 hour
             value=call.model_dump_json(),
         )
 
@@ -276,7 +282,9 @@ class CosmosDbStore(IStore):
         if call:
             await self._cache.set(
                 key=cache_key,
-                ttl_sec=await callback_timeout_hour(scheduler),
+                ttl_sec=max(await callback_timeout_hour(scheduler), 1)
+                * 60
+                * 60,  # Ensure at least 1 hour
                 value=call.model_dump_json(),
             )
 
