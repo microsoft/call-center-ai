@@ -7,6 +7,7 @@ from textwrap import dedent
 from typing import Any
 
 import pytest
+import pytest_asyncio
 import yaml
 from _pytest.mark.structures import MarkDecorator
 from azure.cognitiveservices.speech import (
@@ -306,14 +307,17 @@ def random_text() -> str:
     return text
 
 
-@pytest.fixture
-def call() -> CallStateModel:
-    call = CallStateModel(
-        initiate=CallInitiateModel(
-            **CONFIG.conversation.initiate.model_dump(),
-            phone_number="+33612345678",  # pyright: ignore
-        ),
-        voice_id="dummy",
+@pytest_asyncio.fixture
+async def call() -> CallStateModel:
+    db = CONFIG.database.instance()
+    call = await db.call_create(
+        CallStateModel(
+            initiate=CallInitiateModel(
+                **CONFIG.conversation.initiate.model_dump(),
+                phone_number="+33612345678",  # pyright: ignore
+            ),
+            voice_id="dummy",
+        )
     )
     return call
 
