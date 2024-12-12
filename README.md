@@ -626,6 +626,16 @@ The application is natively connected to Azure Application Insights, so you can 
 
 Feel free to raise an issue or propose a PR if you have any idea to optimize the response delay.
 
+### Improving conversation quality through model fine-tuning
+
+Enhance the LLM’s accuracy and domain adaptation by integrating historical data from human-run call centers. Before proceeding, ensure compliance with data privacy regulations, internal security standards, and [Responsible AI principles](https://learn.microsoft.com/en-us/azure/machine-learning/concept-responsible-ai?view=azureml-api-2). Consider the following steps:
+
+1. Aggregate authentic data sources: Collect voice recordings, call transcripts, and chat logs from previous human-managed interactions to provide the LLM with realistic training material.
+2. Preprocess and anonymize data: [Remove sensitive information (AI Language Personally Identifiable Information detection)](https://learn.microsoft.com/en-us/azure/ai-services/language-service/personally-identifiable-information/overview), including personal identifiers or confidential details, to preserve user privacy, meet compliance, and align with Responsible AI guidelines.
+3. Perform iterative fine-tuning: Continuously [refine the model’s using the curated dataset (AI Foundry Fine-tuning)](https://learn.microsoft.com/en-us/azure/ai-studio/concepts/fine-tuning-overview), allowing it to learn industry-specific terminology, preferred conversation styles, and problem-resolution approaches.
+4. Validate improvements: Test the updated model against sample scenarios and measure key performance indicators (e.g. user satisfaction, call duration, resolution rate) to confirm that adjustments have led to meaningful enhancements.
+5. Monitor, iterate, and A/B test: Regularly reassess the model’s performance, integrate newly gathered data, and apply further fine-tuning as needed. Leverage [built-in feature configurations to A/B test (App Configuration Experimentation)](https://learn.microsoft.com/en-us/azure/azure-app-configuration/concept-experimentation) different versions of the model, ensuring responsible, data-driven decisions and continuous optimization over time.
+
 ## Q&A
 
 ### What will this cost?
