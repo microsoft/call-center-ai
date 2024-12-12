@@ -247,6 +247,11 @@ class CosmosDbStore(IStore):
     ) -> CallStateModel | None:
         logger.debug("Loading last call for %s", phone_number)
 
+        timeout = await callback_timeout_hour(scheduler)
+        if timeout < 1 and callback_timeout:
+            logger.debug("Callback timeout if off, skipping search")
+            return None
+
         # Try cache
         cache_key = self._cache_key_phone_number(phone_number)
         cached = await self._cache.get(cache_key)
@@ -259,7 +264,7 @@ class CosmosDbStore(IStore):
         # Filter by timeout if needed
         extra_where = ""
         if callback_timeout:
-            extra_where = f"AND c.created_at >= DATETIMEADD('hh', -{await callback_timeout_hour(scheduler)}, GETCURRENTDATETIME())"
+            extra_where = f"AND c.created_at >= DATETIMEADD('hh', -{timeout}, GETCURRENTDATETIME())"
 
         # Try live
         call = None
@@ -288,9 +293,7 @@ class CosmosDbStore(IStore):
         if call:
             await self._cache.set(
                 key=cache_key,
-                ttl_sec=max(await callback_timeout_hour(scheduler), 1)
-                * 60
-                * 60,  # Ensure at least 1 hour
+                ttl_sec=timeout * 60 * 60,  # Ensure at least 1 hour
                 value=call.model_dump_json(),
             )
 

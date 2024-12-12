@@ -42,12 +42,11 @@ async def answer_soft_timeout_sec(scheduler: Scheduler) -> int:
 
 async def callback_timeout_hour(scheduler: Scheduler) -> int:
     """
-    The timeout for a callback in hours. Minimum of 1.
+    The timeout for a callback in hours. Set 0 to disable.
     """
     return await _default(
         default=24,
         key="callback_timeout_hour",
-        min_incl=1,
         scheduler=scheduler,
         type_res=int,
     )
@@ -131,7 +130,6 @@ async def recognition_retry_max(scheduler: Scheduler) -> int:
     """
     The maximum number of retries for voice recognition. Minimum of 1.
     """
-    return 1
     return await _default(
         default=3,
         key="recognition_retry_max",
