@@ -110,15 +110,12 @@ class CallStateModel(CallGetModel, extra="ignore"):
     @computed_field
     @property
     def lang(self) -> LanguageEntryModel:  # pyright: ignore
-        from app.helpers.config import CONFIG
-
-        lang = CONFIG.conversation.initiate.lang
-        default = lang.default_lang
+        default = self.initiate.lang.default_lang
         if self.lang_short_code:
             return next(
                 (
                     lang
-                    for lang in lang.availables
+                    for lang in self.initiate.lang.availables
                     if lang.short_code == self.lang_short_code
                 ),
                 default,
