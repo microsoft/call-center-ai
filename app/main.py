@@ -363,6 +363,7 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
         # Second, try to get by phone number
         phone_number = PhoneNumber(call_id_or_phone_number)
         call = await _db.call_search_one(
+            callback_timeout=False,
             phone_number=phone_number,
             scheduler=scheduler,
         )
@@ -498,6 +499,7 @@ async def sms_event(
     async with get_scheduler() as scheduler:
         # Get call
         call = await _db.call_search_one(
+            callback_timeout=False,
             phone_number=phone_number,
             scheduler=scheduler,
         )
@@ -987,6 +989,7 @@ async def twilio_sms_post(
     async with get_scheduler() as scheduler:
         # Get call
         call = await _db.call_search_one(
+            callback_timeout=False,
             phone_number=From,
             scheduler=scheduler,
         )
