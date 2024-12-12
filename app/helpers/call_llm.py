@@ -178,7 +178,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
 
         async def _commit_answer(
             wait: bool,
-            tool_blacklist: set[str] | None = None,
+            tool_blacklist: set[str] = set(),
         ) -> None:
             """
             Process the response.
@@ -289,9 +289,9 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
-    tool_blacklist: set[str] | None,
     training_callback: Callable[[CallStateModel], Awaitable[None]],
     tts_client: SpeechSynthesizer,
+    tool_blacklist: set[str] = set(),
     _iterations_remaining: int = 3,
 ) -> CallStateModel:
     """
@@ -482,7 +482,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
     scheduler: Scheduler,
-    tool_blacklist: set[str] | None,
+    tool_blacklist: set[str],
     tts_callback: Callable[[str, MessageStyleEnum], Awaitable[None]],
     tts_client: SpeechSynthesizer,
     use_tools: bool,
@@ -539,7 +539,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     if not use_tools:
         logger.warning("Tools disabled for this chat")
     else:
-        tools = await plugins.to_openai(tool_blacklist)
+        tools = await plugins.to_openai(frozenset(tool_blacklist))
         # logger.debug("Tools: %s", tools)
 
     # Execute LLM inference
@@ -626,7 +626,13 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         scheduler=scheduler,
     ):
         await asyncio.gather(
-            *[plugins.execute_tool(tool_call) for tool_call in tool_calls]
+            *[
+                plugins.execute(
+                    blacklist=tool_blacklist,
+                    tool=tool_call,
+                )
+                for tool_call in tool_calls
+            ]
         )
 
     # Update call model if object reference changed
