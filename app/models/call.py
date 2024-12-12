@@ -5,7 +5,7 @@ from datetime import UTC, datetime, tzinfo
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from app.helpers.config_models.conversation import (
     LanguageEntryModel,
@@ -107,7 +107,6 @@ class CallStateModel(CallGetModel, extra="ignore"):
     recognition_retry: int = 0
     voice_id: str | None = None
 
-    @computed_field
     @property
     def lang(self) -> LanguageEntryModel:  # pyright: ignore
         default = self.initiate.lang.default_lang
