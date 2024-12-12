@@ -17,8 +17,11 @@ T = TypeVar("T", bool, int, float, str)
 
 
 async def answer_hard_timeout_sec(scheduler: Scheduler) -> int:
+    """
+    The hard timeout for the bot answer in secs.
+    """
     return await _default(
-        default=180,
+        default=60,
         key="answer_hard_timeout_sec",
         scheduler=scheduler,
         type_res=int,
@@ -26,8 +29,11 @@ async def answer_hard_timeout_sec(scheduler: Scheduler) -> int:
 
 
 async def answer_soft_timeout_sec(scheduler: Scheduler) -> int:
+    """
+    The soft timeout for the bot answer in secs.
+    """
     return await _default(
-        default=120,
+        default=30,
         key="answer_soft_timeout_sec",
         scheduler=scheduler,
         type_res=int,
@@ -35,15 +41,22 @@ async def answer_soft_timeout_sec(scheduler: Scheduler) -> int:
 
 
 async def callback_timeout_hour(scheduler: Scheduler) -> int:
+    """
+    The timeout for a callback in hours. Minimum of 1.
+    """
     return await _default(
         default=24,
         key="callback_timeout_hour",
+        min_incl=1,
         scheduler=scheduler,
         type_res=int,
     )
 
 
 async def phone_silence_timeout_sec(scheduler: Scheduler) -> int:
+    """
+    Amount of silence in secs to trigger a warning message from the assistant.
+    """
     return await _default(
         default=20,
         key="phone_silence_timeout_sec",
@@ -53,15 +66,23 @@ async def phone_silence_timeout_sec(scheduler: Scheduler) -> int:
 
 
 async def vad_threshold(scheduler: Scheduler) -> float:
+    """
+    The threshold for voice activity detection. Between 0.1 and 1.
+    """
     return await _default(
         default=0.5,
         key="vad_threshold",
+        max_incl=1,
+        min_incl=0.1,
         scheduler=scheduler,
         type_res=float,
     )
 
 
 async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
+    """
+    Amount of silence in ms to trigger voice activity detection.
+    """
     return await _default(
         default=500,
         key="vad_silence_timeout_ms",
@@ -71,6 +92,9 @@ async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
 
 
 async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
+    """
+    The cutoff timeout for voice activity detection in secs.
+    """
     return await _default(
         default=250,
         key="vad_cutoff_timeout_ms",
@@ -80,6 +104,9 @@ async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
 
 
 async def recording_enabled(scheduler: Scheduler) -> bool:
+    """
+    Whether call recording is enabled.
+    """
     return await _default(
         default=False,
         key="recording_enabled",
@@ -89,6 +116,9 @@ async def recording_enabled(scheduler: Scheduler) -> bool:
 
 
 async def slow_llm_for_chat(scheduler: Scheduler) -> bool:
+    """
+    Whether to use the slow LLM for chat.
+    """
     return await _default(
         default=True,
         key="slow_llm_for_chat",
@@ -98,19 +128,26 @@ async def slow_llm_for_chat(scheduler: Scheduler) -> bool:
 
 
 async def recognition_retry_max(scheduler: Scheduler) -> int:
+    """
+    The maximum number of retries for voice recognition. Minimum of 1.
+    """
+    return 1
     return await _default(
         default=3,
         key="recognition_retry_max",
+        min_incl=1,
         scheduler=scheduler,
         type_res=int,
     )
 
 
-async def _default(
+async def _default(  # noqa: PLR0913
     default: T,
     key: str,
     scheduler: Scheduler,
     type_res: type[T],
+    max_incl: T | None = None,
+    min_incl: T | None = None,
 ) -> T:
     """
     Get a setting from the App Configuration service with a default value.
@@ -122,11 +159,42 @@ async def _default(
         type_res=type_res,
     )
     if res:
-        return res
+        return _validate(
+            key=key,
+            max_incl=max_incl,
+            min_incl=min_incl,
+            res=res,
+        )
 
     # Return default
     logger.info("Feature %s not found, using default: %s", key, default)
-    return default
+    return _validate(
+        key=key,
+        max_incl=max_incl,
+        min_incl=min_incl,
+        res=default,
+    )
+
+
+def _validate(
+    key: str,
+    res: T,
+    max_incl: T | None = None,
+    min_incl: T | None = None,
+) -> T:
+    """
+    Validate a setting value against min and max.
+    """
+    # Check min
+    if min_incl is not None and res < min_incl:
+        logger.warning("Feature %s is below min: %s", key, res)
+        return min_incl
+    # Check max
+    if max_incl is not None and res > max_incl:
+        logger.warning("Feature %s is above max: %s", key, res)
+        return max_incl
+    # Return value
+    return res
 
 
 async def _get(
