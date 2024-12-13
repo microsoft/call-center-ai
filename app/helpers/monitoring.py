@@ -53,13 +53,19 @@ class SpanAttributeEnum(str, Enum):
         span.set_attribute(self.value, value)
 
 
-class SpanCounterEnum(str, Enum):
+class SpanMeterEnum(str, Enum):
     CALL_ANSWER_LATENCY = "call.answer.latency"
     """Answer latency in seconds."""
     CALL_AEC_MISSED = "call.aec.missed"
     """Echo cancellation missed frames."""
     CALL_AEC_DROPED = "call.aec.droped"
     """Echo cancellation dropped frames."""
+    CALL_CUTOFF_LATENCY = "call.cutoff.latency"
+    """Cutoff latency in seconds."""
+    CALL_FRAMES_IN_LATENCY = "call.frames.in.latency"
+    """Audio frames in latency in seconds."""
+    CALL_FRAMES_OUT_LATENCY = "call.frames.out.latency"
+    """Audio frames out latency in seconds."""
 
     def counter(
         self,
@@ -109,9 +115,12 @@ meter = metrics.get_meter(
 )
 
 # Init metrics
-call_answer_latency = SpanCounterEnum.CALL_ANSWER_LATENCY.gauge("s")
-call_aec_droped = SpanCounterEnum.CALL_AEC_DROPED.counter("frames")
-call_aec_missed = SpanCounterEnum.CALL_AEC_MISSED.counter("frames")
+call_aec_droped = SpanMeterEnum.CALL_AEC_DROPED.counter("frames")
+call_aec_missed = SpanMeterEnum.CALL_AEC_MISSED.counter("frames")
+call_answer_latency = SpanMeterEnum.CALL_ANSWER_LATENCY.gauge("s")
+call_cutoff_latency = SpanMeterEnum.CALL_CUTOFF_LATENCY.gauge("s")
+call_frames_in_latency = SpanMeterEnum.CALL_FRAMES_IN_LATENCY.gauge("s")
+call_frames_out_latency = SpanMeterEnum.CALL_FRAMES_OUT_LATENCY.gauge("s")
 
 
 def gauge_set(
