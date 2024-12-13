@@ -28,7 +28,7 @@ from pydantic.json_schema import JsonSchemaValue
 
 from app.helpers.cache import async_lru_cache
 from app.helpers.logging import logger
-from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
+from app.helpers.monitoring import SpanAttributeEnum, tracer
 from app.models.call import CallStateModel
 from app.models.message import ToolModel
 
@@ -105,7 +105,7 @@ class AbstractPlugin:
             # Update tool
             tool.content = res
             # Enrich span
-            span_attribute(SpanAttributes.TOOL_RESULT, tool.content)
+            SpanAttributeEnum.TOOL_RESULT.attribute(tool.content)
             return
 
         # Try to fix JSON args to catch LLM hallucinations
@@ -128,12 +128,12 @@ class AbstractPlugin:
                 f"Bad arguments, available are {functions}. Please try again."
             )
             # Enrich span
-            span_attribute(SpanAttributes.TOOL_RESULT, tool.content)
+            SpanAttributeEnum.TOOL_RESULT.attribute(tool.content)
             return
 
         # Enrich span
-        span_attribute(SpanAttributes.TOOL_ARGS, json.dumps(args))
-        span_attribute(SpanAttributes.TOOL_NAME, name)
+        SpanAttributeEnum.TOOL_ARGS.attribute(json.dumps(args))
+        SpanAttributeEnum.TOOL_NAME.attribute(name)
 
         # Execute the function
         try:
@@ -160,7 +160,7 @@ class AbstractPlugin:
         # Update tool
         tool.content = res
         # Enrich span
-        span_attribute(SpanAttributes.TOOL_RESULT, tool.content)
+        SpanAttributeEnum.TOOL_RESULT.attribute(tool.content)
 
     @cache
     def _available_functions(

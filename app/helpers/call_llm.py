@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import wraps
@@ -12,7 +13,7 @@ from azure.communication.callautomation.aio import CallAutomationClient
 from openai import APIError
 
 from app.helpers.call_utils import (
-    EchoCancellationStream,
+    AECStream,
     handle_media,
     handle_realtime_tts,
     tts_sentence_split,
@@ -34,7 +35,12 @@ from app.helpers.llm_worker import (
     completion_stream,
 )
 from app.helpers.logging import logger
-from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
+from app.helpers.monitoring import (
+    SpanAttributeEnum,
+    call_answer_latency,
+    gauge_set,
+    tracer,
+)
 from app.models.call import CallStateModel
 from app.models.message import (
     ActionEnum as MessageAction,
@@ -63,11 +69,12 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
     # Init language recognition
     stt_buffer: list[str] = []  # Temporary buffer for recognition
     stt_complete_gate = asyncio.Event()  # Gate to wait for the recognition
-    aec = EchoCancellationStream(
+    aec = AECStream(
         sample_rate=audio_sample_rate,
         scheduler=scheduler,
     )
     audio_reference: asyncio.Queue[bytes] = asyncio.Queue()
+    answer_start: float | None = None
 
     async def _send_in_to_aec() -> None:
         """
@@ -83,8 +90,21 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
         Forward the TTS to the echo cancellation and output.
         """
         while True:
+            # Consume the audio
             out_chunck = await audio_reference.get()
             audio_reference.task_done()
+
+            # Report the answer latency and reset the timer
+            nonlocal answer_start
+            if answer_start:
+                # Enrich span
+                gauge_set(
+                    metric=call_answer_latency,
+                    value=time.monotonic() - answer_start,
+                )
+            answer_start = None
+
+            # Forward the audio
             await asyncio.gather(
                 # First, send the audio to the output
                 audio_out.put(out_chunck),
@@ -209,6 +229,9 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
 
             If the recognition is empty, retry the recognition once. Otherwise, process the response.
             """
+            nonlocal answer_start
+            answer_start = time.monotonic()
+
             # Wait the complete recognition for 50ms maximum
             try:
                 await asyncio.wait_for(stt_complete_gate.wait(), timeout=0.05)
@@ -226,7 +249,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                 await asyncio.sleep(0.2)
                 return await _response_callback(_retry=True)
 
-            # Stop any previous response
+            # Stop any previous response, but keep the metrics
             await _stop_callback()
 
             # Add it to the call history and update last interaction
@@ -302,8 +325,8 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
     Returns the updated call model.
     """
     # Add span attributes
-    span_attribute(SpanAttributes.CALL_CHANNEL, "voice")
-    span_attribute(SpanAttributes.CALL_MESSAGE, call.messages[-1].content)
+    SpanAttributeEnum.CALL_CHANNEL.attribute("voice")
+    SpanAttributeEnum.CALL_MESSAGE.attribute(call.messages[-1].content)
 
     # Reset recognition retry counter
     async with _db.call_transac(
@@ -665,7 +688,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
 # TODO: Refacto and simplify
 async def _process_audio_for_vad(  # noqa: PLR0913
     call: CallStateModel,
-    echo_cancellation: EchoCancellationStream,
+    echo_cancellation: AECStream,
     out_stream: PushAudioInputStream,
     response_callback: Callable[[], Awaitable[None]],
     scheduler: Scheduler,

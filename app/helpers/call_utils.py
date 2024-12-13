@@ -43,6 +43,7 @@ from app.helpers.config import CONFIG
 from app.helpers.features import vad_threshold
 from app.helpers.identity import token
 from app.helpers.logging import logger
+from app.helpers.monitoring import call_aec_droped, call_aec_missed, counter_add
 from app.models.call import CallStateModel
 from app.models.message import (
     MessageModel,
@@ -622,7 +623,7 @@ async def use_stt_client(
         client.stop_continuous_recognition_async()
 
 
-class EchoCancellationStream:
+class AECStream:
     """
     Real-time audio stream with echo cancellation.
 
@@ -773,7 +774,11 @@ class EchoCancellationStream:
 
         # If the processing is delayed, return the original input
         except TimeoutError:
-            logger.warning("Echo processing timeout, returning input")
+            # Enrich span
+            counter_add(
+                metric=call_aec_missed,
+                value=1,
+            )
             await self._output_queue.put((input_pcm, False))
 
     async def process_stream(self) -> None:
@@ -820,6 +825,7 @@ class EchoCancellationStream:
 
         Returns a tuple with the echo-cancelled PCM audio and a boolean flag indicating if the user was speaking.
         """
+        # Fetch output audio
         try:
             return await asyncio.wait_for(
                 fut=self._output_queue.get(),
@@ -827,5 +833,13 @@ class EchoCancellationStream:
                 / 1000
                 * 1.5,  # Allow temporary small latency
             )
+
+        # If the processing is delayed, return an empty packet
         except TimeoutError:
+            # Enrich span
+            counter_add(
+                metric=call_aec_droped,
+                value=1,
+            )
+            # Return empty packet
             return self._empty_packet, False

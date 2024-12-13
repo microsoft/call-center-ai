@@ -617,6 +617,18 @@ Enhance the LLM’s accuracy and domain adaptation by integrating historical dat
 4. Validate improvements: Test the updated model against sample scenarios and measure key performance indicators (e.g. user satisfaction, call duration, resolution rate) to confirm that adjustments have led to meaningful enhancements.
 5. Monitor, iterate, and A/B test: Regularly reassess the model’s performance, integrate newly gathered data, and apply further fine-tuning as needed. Leverage [built-in feature configurations to A/B test (App Configuration Experimentation)](https://learn.microsoft.com/en-us/azure/azure-app-configuration/concept-experimentation) different versions of the model, ensuring responsible, data-driven decisions and continuous optimization over time.
 
+### Monitoring the application
+
+Application send traces and metrics to Azure Application Insights. You can monitor the application from the Azure portal, or by using the API.
+
+This includes application behavior, database queries, and external service calls. Plus, LLM metrics (latency, token usage, prompts content, raw response) from [OpenLLMetry](https://github.com/traceloop/openllmetry), following the [semantic sonventions for OpenAI operations](https://opentelemetry.io/docs/specs/semconv/gen-ai/openai/#openai-spans).
+
+Additionally custom metrics (viewable in Application Insights > Metrics) are published, notably:
+
+- `call.aec.droped`, number of times the echo cancellation dropped the voice completely.
+- `call.aec.missed`, number of times the echo cancellation failed to remove the echo in time.
+- `call.answer.latency`, time between the end of the user voice and the start of the bot voice.
+
 ## Q&A
 
 ### What will this cost?
