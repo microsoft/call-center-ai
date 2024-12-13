@@ -6,6 +6,7 @@ from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.metrics._internal.instrument import Counter, Gauge
+from opentelemetry.semconv.attributes import service_attributes
 from opentelemetry.trace.span import INVALID_SPAN
 from opentelemetry.util.types import AttributeValue
 from structlog.contextvars import bind_contextvars, get_contextvars
@@ -104,14 +105,19 @@ except ValueError as e:
         e,
     )
 
+# Attributes
+_default_attributes = {
+    service_attributes.SERVICE_NAME: MODULE_NAME,
+    service_attributes.SERVICE_VERSION: VERSION,
+}
+
 # Create a tracer and meter that will be used across the application
 tracer = trace.get_tracer(
-    instrumenting_library_version=VERSION,
+    attributes=_default_attributes,
     instrumenting_module_name=MODULE_NAME,
 )
 meter = metrics.get_meter(
     name=MODULE_NAME,
-    version=VERSION,
 )
 
 # Init metrics
@@ -132,7 +138,12 @@ def gauge_set(
     """
     metric.set(
         amount=value,
-        attributes=get_contextvars(),
+        attributes={
+            # First, set default attributes
+            **_default_attributes,
+            # Then, set context attributes, they can override default attributes
+            **get_contextvars(),
+        },
     )
 
 
@@ -145,5 +156,10 @@ def counter_add(
     """
     metric.add(
         amount=value,
-        attributes=get_contextvars(),
+        attributes={
+            # First, set default attributes
+            **_default_attributes,
+            # Then, set context attributes, they can override default attributes
+            **get_contextvars(),
+        },
     )
