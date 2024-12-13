@@ -265,7 +265,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-02-02-preview' = {
               type: 'cpu'
               metadata: {
                 type: 'Utilization'
-                value: '80'
+                value: '60' // Scale early to avoid cold start
               }
             }
           }
