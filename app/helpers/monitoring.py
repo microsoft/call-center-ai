@@ -53,7 +53,7 @@ class SpanAttributeEnum(str, Enum):
         span.set_attribute(self.value, value)
 
 
-class SpanCounterEnum(str, Enum):
+class SpanMeterEnum(str, Enum):
     CALL_ANSWER_LATENCY = "call.answer.latency"
     """Answer latency in seconds."""
     CALL_AEC_MISSED = "call.aec.missed"
@@ -109,9 +109,9 @@ meter = metrics.get_meter(
 )
 
 # Init metrics
-call_answer_latency = SpanCounterEnum.CALL_ANSWER_LATENCY.gauge("s")
-call_aec_droped = SpanCounterEnum.CALL_AEC_DROPED.counter("frames")
-call_aec_missed = SpanCounterEnum.CALL_AEC_MISSED.counter("frames")
+call_answer_latency = SpanMeterEnum.CALL_ANSWER_LATENCY.gauge("s")
+call_aec_droped = SpanMeterEnum.CALL_AEC_DROPED.counter("frames")
+call_aec_missed = SpanMeterEnum.CALL_AEC_MISSED.counter("frames")
 
 
 def gauge_set(
