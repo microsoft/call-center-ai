@@ -225,8 +225,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-02-02-preview' = {
             }
           ]
           resources: {
-            cpu: 1
-            memory: '2Gi'
+            cpu: json('1.25')
+            memory: '2.5Gi'
           }
           probes: [
             {
