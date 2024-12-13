@@ -38,6 +38,7 @@ from app.helpers.logging import logger
 from app.helpers.monitoring import (
     SpanAttributeEnum,
     call_answer_latency,
+    call_cutoff_latency,
     gauge_set,
     tracer,
 )
@@ -177,6 +178,9 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             """
             Triggered when the audio buffer needs to be cleared.
             """
+            # Report the cutoff latency
+            start = time.monotonic()
+
             # Cancel previous chat
             if last_chat:
                 last_chat.cancel()
@@ -195,6 +199,12 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             # Reset TTS buffer
             stt_buffer.clear()
             stt_complete_gate.clear()
+
+            # Report the cutoff latency
+            gauge_set(
+                metric=call_cutoff_latency,
+                value=time.monotonic() - start,
+            )
 
         async def _commit_answer(
             wait: bool,
@@ -229,6 +239,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
 
             If the recognition is empty, retry the recognition once. Otherwise, process the response.
             """
+            # Report the answer latency
             nonlocal answer_start
             answer_start = time.monotonic()
 
