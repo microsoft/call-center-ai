@@ -59,7 +59,7 @@ from app.helpers.call_utils import ContextEnum as CallContextEnum
 from app.helpers.config import CONFIG
 from app.helpers.http import aiohttp_session, azure_transport
 from app.helpers.logging import logger
-from app.helpers.monitoring import SpanAttributes, span_attribute, tracer
+from app.helpers.monitoring import SpanAttributeEnum, tracer
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
 from app.helpers.resources import resources_dir
 from app.models.call import CallGetModel, CallInitiateModel, CallStateModel
@@ -401,8 +401,8 @@ async def call_post(request: Request) -> CallGetModel:
     )
 
     # Enrich span
-    span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
-    span_attribute(SpanAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+    SpanAttributeEnum.CALL_ID.attribute(str(call.call_id))
+    SpanAttributeEnum.CALL_PHONE_NUMBER.attribute(call.initiate.phone_number)
 
     # Init SDK
     automation_client = await _use_automation_client()
@@ -456,8 +456,8 @@ async def call_event(
     callback_url, wss_url, _call = await _communicationservices_urls(phone_number)
 
     # Enrich span
-    span_attribute(SpanAttributes.CALL_ID, str(_call.call_id))
-    span_attribute(SpanAttributes.CALL_PHONE_NUMBER, _call.initiate.phone_number)
+    SpanAttributeEnum.CALL_ID.attribute(str(_call.call_id))
+    SpanAttributeEnum.CALL_PHONE_NUMBER.attribute(_call.initiate.phone_number)
 
     # Execute business logic
     await on_new_call(
@@ -494,7 +494,7 @@ async def sms_event(
     phone_number: str = event.data["from"]
 
     # Enrich span
-    span_attribute(SpanAttributes.CALL_PHONE_NUMBER, phone_number)
+    SpanAttributeEnum.CALL_PHONE_NUMBER.attribute(phone_number)
 
     async with get_scheduler() as scheduler:
         # Get call
@@ -508,7 +508,7 @@ async def sms_event(
             return
 
     # Enrich span
-    span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
+    SpanAttributeEnum.CALL_ID.attribute(str(call.call_id))
 
     async with get_scheduler() as scheduler:
         # Execute business logic
@@ -556,7 +556,7 @@ async def _communicationservices_validate_call_id(
     secret: str,
 ) -> CallStateModel:
     # Enrich span
-    span_attribute(SpanAttributes.CALL_ID, str(call_id))
+    SpanAttributeEnum.CALL_ID.attribute(str(call_id))
 
     async with get_scheduler() as scheduler:
         # Validate call
@@ -578,7 +578,7 @@ async def _communicationservices_validate_call_id(
         )
 
     # Enrich span
-    span_attribute(SpanAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+    SpanAttributeEnum.CALL_PHONE_NUMBER.attribute(call.initiate.phone_number)
 
     return call
 
@@ -869,8 +869,8 @@ async def training_event(
     call = CallStateModel.model_validate_json(training.content)
 
     # Enrich span
-    span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
-    span_attribute(SpanAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+    SpanAttributeEnum.CALL_ID.attribute(str(call.call_id))
+    SpanAttributeEnum.CALL_PHONE_NUMBER.attribute(call.initiate.phone_number)
 
     logger.debug("Training event received")
 
@@ -898,8 +898,8 @@ async def post_event(
             return
 
         # Enrich span
-        span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
-        span_attribute(SpanAttributes.CALL_PHONE_NUMBER, call.initiate.phone_number)
+        SpanAttributeEnum.CALL_ID.attribute(str(call.call_id))
+        SpanAttributeEnum.CALL_PHONE_NUMBER.attribute(call.initiate.phone_number)
 
         # Execute business logic
         logger.debug("Post event received")
@@ -984,7 +984,7 @@ async def twilio_sms_post(
     Returns a 200 OK if the SMS is properly formatted. Otherwise, returns a 400 Bad Request.
     """
     # Enrich span
-    span_attribute(SpanAttributes.CALL_PHONE_NUMBER, From)
+    SpanAttributeEnum.CALL_PHONE_NUMBER.attribute(From)
 
     async with get_scheduler() as scheduler:
         # Get call
@@ -1001,7 +1001,7 @@ async def twilio_sms_post(
         # Call found
         else:
             # Enrich span
-            span_attribute(SpanAttributes.CALL_ID, str(call.call_id))
+            SpanAttributeEnum.CALL_ID.attribute(str(call.call_id))
 
             # Execute business logic
             event_status = await on_sms_received(
