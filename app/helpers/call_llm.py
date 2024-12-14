@@ -25,6 +25,7 @@ from app.helpers.features import (
     answer_hard_timeout_sec,
     answer_soft_timeout_sec,
     phone_silence_timeout_sec,
+    recognition_stt_complete_timeout_ms,
     vad_cutoff_timeout_ms,
     vad_silence_timeout_ms,
 )
@@ -39,6 +40,7 @@ from app.helpers.monitoring import (
     SpanAttributeEnum,
     call_answer_latency,
     call_cutoff_latency,
+    call_stt_complete_latency,
     gauge_set,
     tracer,
 )
@@ -233,6 +235,17 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             if wait:
                 await last_chat
 
+        async def _compute_stt_metrics() -> None:
+            """
+            Report the recognition latency.
+            """
+            start = time.monotonic()
+            await stt_complete_gate.wait()
+            gauge_set(
+                metric=call_stt_complete_latency,
+                value=time.monotonic() - start,
+            )
+
         async def _response_callback(_retry: bool = False) -> None:
             """
             Triggered when the audio buffer needs to be processed.
@@ -243,9 +256,15 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             nonlocal answer_start
             answer_start = time.monotonic()
 
+            # Report the STT metrics
+            stt_metrics_task = asyncio.create_task(_compute_stt_metrics())
+
             # Wait the complete recognition for 50ms maximum
             try:
-                await asyncio.wait_for(stt_complete_gate.wait(), timeout=0.05)
+                await asyncio.wait_for(
+                    stt_complete_gate.wait(),
+                    timeout=await recognition_stt_complete_timeout_ms(scheduler) / 1000,
+                )
             except TimeoutError:
                 logger.debug("Complete recognition timeout, using partial recognition")
 
@@ -277,8 +296,11 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                     )
                 )
 
-            # Process the response
-            await _commit_answer(wait=True)
+            # Process the response and wait for latency metrics
+            await asyncio.gather(
+                _commit_answer(wait=False),
+                stt_metrics_task,
+            )
 
         # First call
         if len(call.messages) <= 1:

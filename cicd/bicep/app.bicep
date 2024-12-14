@@ -905,6 +905,7 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
     callback_timeout_hour: 3
     phone_silence_timeout_sec: 20
     recognition_retry_max: 2
+    recognition_stt_complete_timeout_ms: 100
     recording_enabled: false
     slow_llm_for_chat: false
     vad_cutoff_timeout_ms: 250

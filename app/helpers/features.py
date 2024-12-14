@@ -80,7 +80,7 @@ async def vad_threshold(scheduler: Scheduler) -> float:
 
 async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
     """
-    Amount of silence in ms to trigger voice activity detection.
+    Silence to trigger voice activity detection in milliseconds.
     """
     return await _default(
         default=500,
@@ -92,7 +92,7 @@ async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
 
 async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
     """
-    The cutoff timeout for voice activity detection in secs.
+    The cutoff timeout for voice activity detection in milliseconds.
     """
     return await _default(
         default=250,
@@ -134,6 +134,18 @@ async def recognition_retry_max(scheduler: Scheduler) -> int:
         default=3,
         key="recognition_retry_max",
         min_incl=1,
+        scheduler=scheduler,
+        type_res=int,
+    )
+
+
+async def recognition_stt_complete_timeout_ms(scheduler: Scheduler) -> int:
+    """
+    The timeout for STT completion in milliseconds.
+    """
+    return await _default(
+        default=100,
+        key="recognition_stt_complete_timeout_ms",
         scheduler=scheduler,
         type_res=int,
     )
