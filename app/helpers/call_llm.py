@@ -36,7 +36,6 @@ from app.helpers.llm_worker import (
 from app.helpers.logging import logger
 from app.helpers.monitoring import (
     SpanAttributeEnum,
-    call_answer_latency,
     call_cutoff_latency,
     gauge_set,
     tracer,
@@ -56,7 +55,7 @@ _db = CONFIG.database.instance()
 
 # TODO: Refacto, this function is too long
 @tracer.start_as_current_span("call_load_llm_chat")
-async def load_llm_chat(  # noqa: PLR0913, PLR0915
+async def load_llm_chat(  # noqa: PLR0913
     audio_in: asyncio.Queue[bytes],
     audio_out: asyncio.Queue[bytes | bool],
     audio_sample_rate: int,
@@ -67,48 +66,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
     training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     # Init language recognition
-    aec = AECStream(
-        sample_rate=audio_sample_rate,
-        scheduler=scheduler,
-    )
-    audio_reference: asyncio.Queue[bytes] = asyncio.Queue()
-    answer_start: float | None = None
-
-    async def _send_in_to_aec() -> None:
-        """
-        Send input audio to the echo cancellation.
-        """
-        while True:
-            in_chunck = await audio_in.get()
-            audio_in.task_done()
-            await aec.push_input(in_chunck)
-
-    async def _send_out_to_aec() -> None:
-        """
-        Forward the TTS to the echo cancellation and output.
-        """
-        while True:
-            # Consume the audio
-            out_chunck = await audio_reference.get()
-            audio_reference.task_done()
-
-            # Report the answer latency and reset the timer
-            nonlocal answer_start
-            if answer_start:
-                # Enrich span
-                gauge_set(
-                    metric=call_answer_latency,
-                    value=time.monotonic() - answer_start,
-                )
-            answer_start = None
-
-            # Forward the audio
-            await asyncio.gather(
-                # First, send the audio to the output
-                audio_out.put(out_chunck),
-                # Then, send the audio to the echo cancellation
-                aec.push_reference(out_chunck),
-            )
+    audio_tts: asyncio.Queue[bytes] = asyncio.Queue()
 
     async with (
         SttClient(
@@ -118,8 +76,15 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
         ) as stt_client,
         use_tts_client(
             call=call,
-            out=audio_reference,
+            out=audio_tts,
         ) as tts_client,
+        AECStream(
+            in_raw_queue=audio_in,
+            in_reference_queue=audio_tts,
+            out_queue=audio_out,
+            sample_rate=audio_sample_rate,
+            scheduler=scheduler,
+        ) as aec,
     ):
         # Build scheduler
         last_chat: asyncio.Task | None = None
@@ -205,9 +170,9 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             If the recognition is empty, retry the recognition once. Otherwise, process the response.
             """
             # Report the answer latency
-            nonlocal answer_start
-            answer_start = time.monotonic()
+            aec.answer_start()
 
+            # Pull the recognition
             stt_text = await stt_client.pull_recognition()
 
             # Ignore empty recognition
@@ -256,22 +221,15 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                 wait=False,
             )
 
-        await asyncio.gather(
-            # Start the echo cancellation
-            aec.process_stream(),
-            # Apply the echo cancellation
-            _send_in_to_aec(),
-            _send_out_to_aec(),
-            # Detect VAD
-            _process_audio_for_vad(
-                call=call,
-                in_callback=aec.pull_audio,
-                out_callback=stt_client.push_audio,
-                response_callback=_response_callback,
-                scheduler=scheduler,
-                stop_callback=_stop_callback,
-                timeout_callback=_timeout_callback,
-            ),
+        # Detect VAD
+        await _process_audio_for_vad(
+            call=call,
+            in_callback=aec.pull_audio,
+            out_callback=stt_client.push_audio,
+            response_callback=_response_callback,
+            scheduler=scheduler,
+            stop_callback=_stop_callback,
+            timeout_callback=_timeout_callback,
         )
 
 

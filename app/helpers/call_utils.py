@@ -5,6 +5,7 @@ import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from enum import Enum
+from typing import Any
 
 import numpy as np
 from aiojobs import Job, Scheduler
@@ -50,6 +51,7 @@ from app.helpers.logging import logger
 from app.helpers.monitoring import (
     call_aec_droped,
     call_aec_missed,
+    call_answer_latency,
     call_stt_complete_latency,
     counter_add,
     gauge_set,
@@ -744,28 +746,51 @@ class SttClient:
 
 class AECStream:
     """
-    Real-time audio stream with echo cancellation.
+    Real-time audio stream with echo cancellation (AEC).
 
     Input and output formats are in PCM 16-bit, 16 kHz, 1 channel.
     """
 
+    _aec_in_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    _aec_out_queue: asyncio.Queue[tuple[bytes, bool]] = asyncio.Queue()
+    _aec_reference_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    _answer_start: float | None = None
     _chunk_size: int
-    _input_queue: asyncio.Queue[bytes] = asyncio.Queue()
-    _output_queue: asyncio.Queue[tuple[bytes, bool]] = asyncio.Queue()
+    _empty_packet: bytes
+    _in_raw_queue: asyncio.Queue[bytes]
+    _in_reference_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    _out_queue: asyncio.Queue[bytes]
     _packet_duration_ms: int
     _packet_size: int
-    _reference_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    _run_task: asyncio.Future
     _sample_rate: int
     _scheduler: Scheduler
-    _empty_packet: bytes
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
+        in_raw_queue: asyncio.Queue[bytes],
+        in_reference_queue: asyncio.Queue[bytes],
+        out_queue: asyncio.Queue[bytes | Any],
         sample_rate: int,
         scheduler: Scheduler,
         max_delay_ms: int = 200,
         packet_duration_ms: int = 20,
     ):
+        """
+        Initialize the audio stream.
+
+        Parameters:
+        - `in_raw_queue`: Queue for the raw audio input (user speaking).
+        - `in_reference_queue`: Queue for the reference audio input (bot speaking).
+        - `max_delay_ms`: Maximum delay to consider between the raw and reference audio.
+        - `out_queue`: Queue for the processed audio output (echo-cancelled user speaking).
+        - `packet_duration_ms`: Duration of each audio packet in milliseconds.
+        - `sample_rate`: Audio sample rate in Hz.
+        - `scheduler`: Scheduler for the async tasks.
+        """
+        self._in_raw_queue = in_raw_queue
+        self._in_reference_queue = in_reference_queue
+        self._out_queue = out_queue
         self._packet_duration_ms = packet_duration_ms
         self._sample_rate = sample_rate
         self._scheduler = scheduler
@@ -776,6 +801,17 @@ class AECStream:
         self._chunk_size = int(self._sample_rate * self._packet_duration_ms / 1000)
         self._packet_size = self._chunk_size * 2  # Each sample is 2 bytes (PCM 16-bit)
         self._empty_packet: bytes = b"\x00" * self._packet_size
+
+    async def __aenter__(self):
+        self._run_task = asyncio.gather(
+            self._forward_in(),
+            self._forward_out(),
+            self._run(),
+        )
+        return self
+
+    async def __aexit__(self, *args, **kwargs):
+        self._run_task.cancel()
 
     def _pcm_to_float(self, pcm: bytes) -> np.ndarray:
         """
@@ -825,16 +861,16 @@ class AECStream:
 
     async def _process_one(self, input_pcm: bytes) -> None:
         """
-        Process one audio chunk with echo cancellation.
+        Process one audio chunk.
         """
         # Push raw input if reference is empty
-        if self._reference_queue.empty():
+        if self._aec_reference_queue.empty():
             reference_pcm = self._empty_packet
 
         # Reference signal is available
         else:
-            reference_pcm = self._reference_queue.get_nowait()
-            self._reference_queue.task_done()
+            reference_pcm = await self._aec_reference_queue.get()
+            self._aec_reference_queue.task_done()
 
         # Convert PCM to float for processing
         input_signal = self._pcm_to_float(input_pcm)
@@ -849,7 +885,7 @@ class AECStream:
             input_speaking = await self._rms_speech_detection(input_signal)
 
             # Add processed PCM and metadata to the output queue
-            self._output_queue.put_nowait((input_pcm, input_speaking))
+            await self._aec_out_queue.put((input_pcm, input_speaking))
             return
 
         # Apply noise reduction
@@ -874,11 +910,11 @@ class AECStream:
         processed_pcm = self._float_to_pcm(reduced_signal)
 
         # Add processed PCM and metadata to the output queue
-        self._output_queue.put_nowait((processed_pcm, input_speaking))
+        await self._aec_out_queue.put((processed_pcm, input_speaking))
 
-    async def _ensure_stream(self, input_pcm: bytes) -> None:
+    async def _ensure_run_slo(self, input_pcm: bytes) -> None:
         """
-        Ensure the audio stream is processed in real-time.
+        Ensure the audio stream is processed within the SLO.
 
         If the processing is delayed, the original input will be returned.
         """
@@ -898,9 +934,9 @@ class AECStream:
                 metric=call_aec_missed,
                 value=1,
             )
-            await self._output_queue.put((input_pcm, False))
+            await self._aec_out_queue.put((input_pcm, False))
 
-    async def process_stream(self) -> None:
+    async def _run(self) -> None:
         """
         Process the audio stream in real-time.
         """
@@ -909,34 +945,11 @@ class AECStream:
         ) as scheduler:
             while True:
                 # Fetch input audio
-                input_pcm = await self._input_queue.get()
-                self._input_queue.task_done()
+                input_pcm = await self._aec_in_queue.get()
+                self._aec_in_queue.task_done()
 
                 # Queue the processing
-                await scheduler.spawn(self._ensure_stream(input_pcm))
-
-    async def push_input(self, audio_data: bytes) -> None:
-        """
-        Push PCM input audio into the input queue.
-        """
-        if len(audio_data) != self._packet_size:
-            raise ValueError(
-                f"Expected packet size {self._packet_size} bytes, got {len(audio_data)} bytes."
-            )
-        await self._input_queue.put(audio_data)
-
-    async def push_reference(self, audio_data: bytes) -> None:
-        """
-        Push PCM reference audio into the reference queue.
-
-        The reference audio is used for echo cancellation.
-        """
-        # Extract packets and pad them if necessary
-        buffer_pointer = 0
-        while buffer_pointer < len(audio_data):
-            chunk = audio_data[: self._packet_size].ljust(self._packet_size, b"\x00")
-            await self._reference_queue.put(chunk)
-            buffer_pointer += self._packet_size
+                await scheduler.spawn(self._ensure_run_slo(input_pcm))
 
     async def pull_audio(self) -> tuple[bytes, bool]:
         """
@@ -947,7 +960,7 @@ class AECStream:
         # Fetch output audio
         try:
             return await asyncio.wait_for(
-                fut=self._output_queue.get(),
+                fut=self._aec_out_queue.get(),
                 timeout=self._packet_duration_ms
                 / 1000
                 * 1.5,  # Allow temporary small latency
@@ -962,3 +975,57 @@ class AECStream:
             )
             # Return empty packet
             return self._empty_packet, False
+
+    async def _forward_in(self) -> None:
+        """
+        Send input audio to the runner.
+        """
+        while True:
+            # Consume input
+            audio_data = await self._in_raw_queue.get()
+            self._in_raw_queue.task_done()
+
+            # Validate packet size
+            if len(audio_data) != self._packet_size:
+                raise ValueError(
+                    f"Expected packet size {self._packet_size} bytes, got {len(audio_data)} bytes."
+                )
+
+            # Push audio to the AEC queue
+            await self._aec_in_queue.put(audio_data)
+
+    async def _forward_out(self) -> None:
+        """
+        Forward processed audio to the clean output queue.
+        """
+        while True:
+            # Consume input
+            audio_data = await self._in_reference_queue.get()
+            self._in_reference_queue.task_done()
+
+            # Report the answer latency and reset the timer
+            if self._answer_start:
+                # Enrich span
+                gauge_set(
+                    metric=call_answer_latency,
+                    value=time.monotonic() - self._answer_start,
+                )
+            self._answer_start = None
+
+            # Send to clean output
+            await self._out_queue.put(audio_data)
+
+            # Send a copy as reference, extract packets and pad them if necessary
+            buffer_pointer = 0
+            while buffer_pointer < len(audio_data):
+                chunk = audio_data[: self._packet_size].ljust(
+                    self._packet_size, b"\x00"
+                )
+                await self._aec_reference_queue.put(chunk)
+                buffer_pointer += self._packet_size
+
+    def answer_start(self):
+        """
+        Notify the the user ended speaking.
+        """
+        self._answer_start = time.monotonic()
