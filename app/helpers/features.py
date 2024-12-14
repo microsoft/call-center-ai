@@ -1,6 +1,5 @@
 from typing import TypeVar, cast
 
-from aiojobs import Scheduler
 from azure.appconfiguration.aio import AzureAppConfigurationClient
 from azure.core.exceptions import ResourceNotFoundError
 
@@ -16,55 +15,51 @@ _cache = MemoryCache(MemoryModel())
 T = TypeVar("T", bool, int, float, str)
 
 
-async def answer_hard_timeout_sec(scheduler: Scheduler) -> int:
+async def answer_hard_timeout_sec() -> int:
     """
     The hard timeout for the bot answer in secs.
     """
     return await _default(
         default=60,
         key="answer_hard_timeout_sec",
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def answer_soft_timeout_sec(scheduler: Scheduler) -> int:
+async def answer_soft_timeout_sec() -> int:
     """
     The soft timeout for the bot answer in secs.
     """
     return await _default(
         default=30,
         key="answer_soft_timeout_sec",
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def callback_timeout_hour(scheduler: Scheduler) -> int:
+async def callback_timeout_hour() -> int:
     """
     The timeout for a callback in hours. Set 0 to disable.
     """
     return await _default(
         default=24,
         key="callback_timeout_hour",
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def phone_silence_timeout_sec(scheduler: Scheduler) -> int:
+async def phone_silence_timeout_sec() -> int:
     """
     Amount of silence in secs to trigger a warning message from the assistant.
     """
     return await _default(
         default=20,
         key="phone_silence_timeout_sec",
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def vad_threshold(scheduler: Scheduler) -> float:
+async def vad_threshold() -> float:
     """
     The threshold for voice activity detection. Between 0.1 and 1.
     """
@@ -73,60 +68,55 @@ async def vad_threshold(scheduler: Scheduler) -> float:
         key="vad_threshold",
         max_incl=1,
         min_incl=0.1,
-        scheduler=scheduler,
         type_res=float,
     )
 
 
-async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
+async def vad_silence_timeout_ms() -> int:
     """
     Silence to trigger voice activity detection in milliseconds.
     """
     return await _default(
         default=500,
         key="vad_silence_timeout_ms",
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
+async def vad_cutoff_timeout_ms() -> int:
     """
     The cutoff timeout for voice activity detection in milliseconds.
     """
     return await _default(
         default=250,
         key="vad_cutoff_timeout_ms",
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def recording_enabled(scheduler: Scheduler) -> bool:
+async def recording_enabled() -> bool:
     """
     Whether call recording is enabled.
     """
     return await _default(
         default=False,
         key="recording_enabled",
-        scheduler=scheduler,
         type_res=bool,
     )
 
 
-async def slow_llm_for_chat(scheduler: Scheduler) -> bool:
+async def slow_llm_for_chat() -> bool:
     """
     Whether to use the slow LLM for chat.
     """
     return await _default(
         default=True,
         key="slow_llm_for_chat",
-        scheduler=scheduler,
         type_res=bool,
     )
 
 
-async def recognition_retry_max(scheduler: Scheduler) -> int:
+async def recognition_retry_max() -> int:
     """
     The maximum number of retries for voice recognition. Minimum of 1.
     """
@@ -134,27 +124,24 @@ async def recognition_retry_max(scheduler: Scheduler) -> int:
         default=3,
         key="recognition_retry_max",
         min_incl=1,
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def recognition_stt_complete_timeout_ms(scheduler: Scheduler) -> int:
+async def recognition_stt_complete_timeout_ms() -> int:
     """
     The timeout for STT completion in milliseconds.
     """
     return await _default(
         default=100,
         key="recognition_stt_complete_timeout_ms",
-        scheduler=scheduler,
         type_res=int,
     )
 
 
-async def _default(  # noqa: PLR0913
+async def _default(
     default: T,
     key: str,
-    scheduler: Scheduler,
     type_res: type[T],
     max_incl: T | None = None,
     min_incl: T | None = None,
@@ -165,7 +152,6 @@ async def _default(  # noqa: PLR0913
     # Get the setting
     res = await _get(
         key=key,
-        scheduler=scheduler,
         type_res=type_res,
     )
     if res:
@@ -207,11 +193,7 @@ def _validate(
     return res
 
 
-async def _get(
-    key: str,
-    scheduler: Scheduler,
-    type_res: type[T],
-) -> T | None:
+async def _get(key: str, type_res: type[T]) -> T | None:
     """
     Get a setting from the App Configuration service.
     """
@@ -224,15 +206,6 @@ async def _get(
             value=cached.decode(),
         )
 
-    # Defer the update
-    await scheduler.spawn(_refresh(cache_key, key))
-    return
-
-
-async def _refresh(
-    cache_key: str,
-    key: str,
-) -> T | None:
     # Try live
     try:
         async with await _use_client() as client:
@@ -250,6 +223,12 @@ async def _refresh(
     await _cache.set(
         key=cache_key,
         ttl_sec=CONFIG.app_configuration.ttl_sec,
+        value=res,
+    )
+
+    # Return value
+    return _parse(
+        type_res=type_res,
         value=res,
     )
 

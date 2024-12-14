@@ -88,7 +88,7 @@ class DefaultPlugin(AbstractPlugin):
 
         # Store the last message and use it at first message of the new claim
         self.call = await _db.call_create(
-            call=CallStateModel(
+            CallStateModel(
                 initiate=self.call.initiate.model_copy(),
                 voice_id=self.call.voice_id,
                 messages=[
@@ -101,8 +101,7 @@ class DefaultPlugin(AbstractPlugin):
                     # Reinsert the last message, using more will add the user message asking to create the new claim and the assistant can loop on it sometimes
                     self.call.messages[-1],
                 ],
-            ),
-            scheduler=self.scheduler,
+            )
         )
         return "Claim, reminders and messages reset"
 

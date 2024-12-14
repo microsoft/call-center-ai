@@ -26,7 +26,6 @@ class IStore(ABC):
     async def call_get(
         self,
         call_id: UUID,
-        scheduler: Scheduler,
     ) -> CallStateModel | None:
         pass
 
@@ -44,7 +43,6 @@ class IStore(ABC):
     async def call_create(
         self,
         call: CallStateModel,
-        scheduler: Scheduler,
     ) -> CallStateModel:
         pass
 
@@ -53,7 +51,6 @@ class IStore(ABC):
     async def call_search_one(
         self,
         phone_number: str,
-        scheduler: Scheduler,
         callback_timeout: bool = True,
     ) -> CallStateModel | None:
         pass
