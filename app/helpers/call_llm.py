@@ -8,16 +8,15 @@ from aiojobs import Scheduler
 from azure.cognitiveservices.speech import (
     SpeechSynthesizer,
 )
-from azure.cognitiveservices.speech.audio import PushAudioInputStream
 from azure.communication.callautomation.aio import CallAutomationClient
 from openai import APIError
 
 from app.helpers.call_utils import (
     AECStream,
+    SttClient,
     handle_media,
     handle_realtime_tts,
     tts_sentence_split,
-    use_stt_client,
     use_tts_client,
 )
 from app.helpers.config import CONFIG
@@ -25,7 +24,6 @@ from app.helpers.features import (
     answer_hard_timeout_sec,
     answer_soft_timeout_sec,
     phone_silence_timeout_sec,
-    recognition_stt_complete_timeout_ms,
     vad_cutoff_timeout_ms,
     vad_silence_timeout_ms,
 )
@@ -40,7 +38,6 @@ from app.helpers.monitoring import (
     SpanAttributeEnum,
     call_answer_latency,
     call_cutoff_latency,
-    call_stt_complete_latency,
     gauge_set,
     tracer,
 )
@@ -70,8 +67,6 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
     training_callback: Callable[[CallStateModel], Awaitable[None]],
 ) -> None:
     # Init language recognition
-    stt_buffer: list[str] = []  # Temporary buffer for recognition
-    stt_complete_gate = asyncio.Event()  # Gate to wait for the recognition
     aec = AECStream(
         sample_rate=audio_sample_rate,
         scheduler=scheduler,
@@ -115,40 +110,12 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                 aec.push_reference(out_chunck),
             )
 
-    def _partial_stt_callback(text: str) -> None:
-        """
-        Store the partial recognition in the buffer.
-        """
-        # Init buffer if empty
-        if not stt_buffer:
-            stt_buffer.append("")
-        # Replace the partial recognition
-        stt_buffer[-1] = text
-        logger.debug("Partial recognition: %s", stt_buffer)
-
-    def _complete_stt_callback(text: str) -> None:
-        """
-        Store the recognition in the buffer.
-        """
-        # Init buffer if empty
-        if not stt_buffer:
-            stt_buffer.append("")
-        # Store the recognition
-        stt_buffer[-1] = text
-        logger.debug("Complete recognition: %s", stt_buffer)
-        # Add a new buffer for the next partial recognition
-        stt_buffer.append("")
-
-        # Open the recognition gate
-        stt_complete_gate.set()
-
     async with (
-        use_stt_client(
-            audio_sample_rate=audio_sample_rate,
+        SttClient(
             call=call,
-            complete_callback=_complete_stt_callback,
-            partial_callback=_partial_stt_callback,
-        ) as stt_stream,
+            sample_rate=audio_sample_rate,
+            scheduler=scheduler,
+        ) as stt_client,
         use_tts_client(
             call=call,
             out=audio_reference,
@@ -198,10 +165,6 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             # Send a stop signal
             await audio_out.put(False)
 
-            # Reset TTS buffer
-            stt_buffer.clear()
-            stt_complete_gate.clear()
-
             # Report the cutoff latency
             gauge_set(
                 metric=call_cutoff_latency,
@@ -235,17 +198,6 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             if wait:
                 await last_chat
 
-        async def _compute_stt_metrics() -> None:
-            """
-            Report the recognition latency.
-            """
-            start = time.monotonic()
-            await stt_complete_gate.wait()
-            gauge_set(
-                metric=call_stt_complete_latency,
-                value=time.monotonic() - start,
-            )
-
         async def _response_callback(_retry: bool = False) -> None:
             """
             Triggered when the audio buffer needs to be processed.
@@ -256,19 +208,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             nonlocal answer_start
             answer_start = time.monotonic()
 
-            # Report the STT metrics
-            stt_metrics_task = asyncio.create_task(_compute_stt_metrics())
-
-            # Wait the complete recognition for 50ms maximum
-            try:
-                await asyncio.wait_for(
-                    stt_complete_gate.wait(),
-                    timeout=await recognition_stt_complete_timeout_ms(scheduler) / 1000,
-                )
-            except TimeoutError:
-                logger.debug("Complete recognition timeout, using partial recognition")
-
-            stt_text = " ".join(stt_buffer).strip()
+            stt_text = await stt_client.pull_recognition()
 
             # Ignore empty recognition
             if not stt_text:
@@ -297,10 +237,7 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
                 )
 
             # Process the response and wait for latency metrics
-            await asyncio.gather(
-                _commit_answer(wait=False),
-                stt_metrics_task,
-            )
+            await _commit_answer(wait=False)
 
         # First call
         if len(call.messages) <= 1:
@@ -328,8 +265,8 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
             # Detect VAD
             _process_audio_for_vad(
                 call=call,
-                echo_cancellation=aec,
-                out_stream=stt_stream,
+                in_callback=aec.pull_audio,
+                out_callback=stt_client.push_audio,
                 response_callback=_response_callback,
                 scheduler=scheduler,
                 stop_callback=_stop_callback,
@@ -721,8 +658,8 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
 # TODO: Refacto and simplify
 async def _process_audio_for_vad(  # noqa: PLR0913
     call: CallStateModel,
-    echo_cancellation: AECStream,
-    out_stream: PushAudioInputStream,
+    in_callback: Callable[[], Awaitable[tuple[bytes, bool]]],
+    out_callback: Callable[[bytes], None],
     response_callback: Callable[[], Awaitable[None]],
     scheduler: Scheduler,
     stop_callback: Callable[[], Awaitable[None]],
@@ -801,10 +738,10 @@ async def _process_audio_for_vad(  # noqa: PLR0913
 
     while True:
         # Wait for the next audio packet
-        out_chunck, is_speech = await echo_cancellation.pull_audio()
+        out_chunck, is_speech = await in_callback()
 
         # Add audio to the buffer
-        out_stream.write(out_chunck)
+        out_callback(out_chunck)
 
         # If no speech, init the silence task
         if not is_speech:

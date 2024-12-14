@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from enum import Enum
@@ -40,10 +41,19 @@ from noisereduce import reduce_noise
 
 from app.helpers.cache import async_lru_cache
 from app.helpers.config import CONFIG
-from app.helpers.features import vad_threshold
+from app.helpers.features import (
+    recognition_stt_complete_timeout_ms,
+    vad_threshold,
+)
 from app.helpers.identity import token
 from app.helpers.logging import logger
-from app.helpers.monitoring import call_aec_droped, call_aec_missed, counter_add
+from app.helpers.monitoring import (
+    call_aec_droped,
+    call_aec_missed,
+    call_stt_complete_latency,
+    counter_add,
+    gauge_set,
+)
 from app.models.call import CallStateModel
 from app.models.message import (
     MessageModel,
@@ -565,62 +575,156 @@ async def use_tts_client(
     yield client
 
 
-@asynccontextmanager
-async def use_stt_client(
-    audio_sample_rate: int,
-    call: CallStateModel,
-    complete_callback: Callable[[str], None],
-    partial_callback: Callable[[str], None],
-) -> AsyncGenerator[PushAudioInputStream, None]:
+class SttClient:
     """
-    Use a speech-to-text client for a call.
+    Speech-to-text client.
 
     Input format is in PCM 16-bit, 16 kHz, 1 channel.
-
-    Yields a stream to push audio data to the client. Once the context is exited, the client will stop.
     """
-    # Get AAD token
-    aad_token = await (await token("https://cognitiveservices.azure.com/.default"))()
 
-    # Create client
-    stream = PushAudioInputStream(
-        # PCM 16-bit, 1 channel
-        stream_format=AudioStreamFormat(
-            bits_per_sample=16,
-            channels=1,
-            samples_per_second=audio_sample_rate,
-        ),
-    )
-    client = SpeechRecognizer(
-        audio_config=AudioConfig(stream=stream),
-        language=call.lang.short_code,
-        speech_config=SpeechConfig(
-            auth_token=f"aad#{CONFIG.cognitive_service.resource_id}#{aad_token}",
-            region=CONFIG.cognitive_service.region,
-        ),
-    )
+    _call: CallStateModel
+    _client: SpeechRecognizer | None = None
+    _scheduler: Scheduler
+    _stream: PushAudioInputStream
+    _stt_buffer: list[str] = []
+    _stt_complete_gate: asyncio.Event = asyncio.Event()
 
-    # TSS events
-    client.recognized.connect(
-        lambda e: complete_callback(e.result.text) if e.result.text else None
-    )
-    client.recognizing.connect(
-        lambda e: partial_callback(e.result.text) if e.result.text else None
-    )
+    def __init__(
+        self,
+        sample_rate: int,
+        call: CallStateModel,
+        scheduler: Scheduler,
+    ):
+        self._call = call
+        self._scheduler = scheduler
 
-    # Debugging events
-    client.canceled.connect(lambda event: logger.warning("STT cancelled: %s", event))
-    client.session_started.connect(lambda _: logger.debug("STT started"))
-    client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
+        self._stream = PushAudioInputStream(
+            stream_format=AudioStreamFormat(
+                bits_per_sample=16,
+                channels=1,
+                samples_per_second=sample_rate,
+            ),
+        )
 
-    try:
+    async def __aenter__(self):
+        # Get AAD token
+        aad_token = await (
+            await token("https://cognitiveservices.azure.com/.default")
+        )()
+
+        # Create client
+        self.client = SpeechRecognizer(
+            audio_config=AudioConfig(stream=self._stream),
+            language=self._call.lang.short_code,
+            speech_config=SpeechConfig(
+                auth_token=f"aad#{CONFIG.cognitive_service.resource_id}#{aad_token}",
+                region=CONFIG.cognitive_service.region,
+            ),
+        )
+
+        # TSS events
+        self.client.recognized.connect(self._complete_callback)
+        self.client.recognizing.connect(self._partial_callback)
+
+        # Debugging events
+        self.client.canceled.connect(
+            lambda event: logger.warning("STT cancelled: %s", event)
+        )
+        self.client.session_started.connect(lambda _: logger.debug("STT started"))
+        self.client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
+
         # Start STT
-        client.start_continuous_recognition_async()
-        # Return
-        yield stream
-    finally:
+        self.client.start_continuous_recognition_async()
+
+        return self
+
+    async def __aexit__(self, *args, **kwargs):
         # Stop STT
-        client.stop_continuous_recognition_async()
+        self.client.stop_continuous_recognition_async()
+
+    def _partial_callback(self, event):
+        """
+        Handle partial recognition.
+        """
+        # Skip empty results
+        text = event.result.text
+        if not text:
+            return
+
+        # Initialize buffer if empty
+        if not self._stt_buffer:
+            self._stt_buffer.append("")
+
+        # Store the result
+        self._stt_buffer[-1] = text
+        logger.debug("Partial recognition: %s", self._stt_buffer)
+
+    def _complete_callback(self, event):
+        """
+        Handle complete recognition.
+        """
+        # Skip empty results
+        text = event.result.text
+        if not text:
+            return
+
+        # Initialize buffer if empty
+        if not self._stt_buffer:
+            self._stt_buffer.append("")
+
+        # Store the result
+        self._stt_buffer[-1] = text
+        logger.debug("Complete recognition: %s", self._stt_buffer)
+
+        # Prepare for the next recognition
+        self._stt_buffer.append("")
+
+        # Signal the completion
+        self._stt_complete_gate.set()
+
+    async def _compute_stt_metrics(self) -> None:
+        """
+        Report the recognition latency.
+        """
+        start = time.monotonic()
+        await self._stt_complete_gate.wait()
+        gauge_set(
+            metric=call_stt_complete_latency,
+            value=time.monotonic() - start,
+        )
+
+    def push_audio(self, audio_data: bytes):
+        """
+        Push audio data to the recognition.
+        """
+        self._stream.write(audio_data)
+
+    async def pull_recognition(self) -> str:
+        """
+        Pull the recognition result and reset the buffer.
+        """
+        # Report the STT metrics
+        await self._scheduler.spawn(self._compute_stt_metrics())
+
+        # Wait the complete recognition for 50ms maximum
+        try:
+            await asyncio.wait_for(
+                self._stt_complete_gate.wait(),
+                timeout=await recognition_stt_complete_timeout_ms(self._scheduler)
+                / 1000,
+            )
+        except TimeoutError:
+            logger.debug("Complete recognition timeout, using partial recognition")
+
+        # Build text from the buffer
+        text = " ".join(self._stt_buffer).strip()
+
+        # Reset the buffer
+        self._stt_buffer.clear()
+        self._stt_complete_gate.clear()
+
+        # Return the text
+        return text
 
 
 class AECStream:
