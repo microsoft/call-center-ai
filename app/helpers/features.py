@@ -80,7 +80,7 @@ async def vad_threshold(scheduler: Scheduler) -> float:
 
 async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
     """
-    Amount of silence in ms to trigger voice activity detection.
+    Silence to trigger voice activity detection in milliseconds.
     """
     return await _default(
         default=500,
@@ -92,7 +92,7 @@ async def vad_silence_timeout_ms(scheduler: Scheduler) -> int:
 
 async def vad_cutoff_timeout_ms(scheduler: Scheduler) -> int:
     """
-    The cutoff timeout for voice activity detection in secs.
+    The cutoff timeout for voice activity detection in milliseconds.
     """
     return await _default(
         default=250,

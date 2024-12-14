@@ -479,8 +479,8 @@ Conversation options are represented as features. They can be configured from Ap
 | `recognition_retry_max` | TThe maximum number of retries for voice recognition. Minimum of 1. | `int` | 3 |
 | `recording_enabled` | Whether call recording is enabled. | `bool` | false |
 | `slow_llm_for_chat` | Whether to use the slow LLM for chat. | `bool` | false |
-| `vad_cutoff_timeout_ms` | The cutoff timeout for voice activity detection in secs. | `int` | 250 |
-| `vad_silence_timeout_ms` | Amount of silence in ms to trigger voice activity detection. | `int` | 500 |
+| `vad_cutoff_timeout_ms` | The cutoff timeout for voice activity detection in milliseconds. | `int` | 250 |
+| `vad_silence_timeout_ms` | Silence to trigger voice activity detection in milliseconds. | `int` | 500 |
 | `vad_threshold` | The threshold for voice activity detection. Between 0.1 and 1. | `float` | 0.5 |
 
 ### Use an OpenAI compatible model for the LLM
