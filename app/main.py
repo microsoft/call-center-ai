@@ -292,11 +292,7 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
 
     Returns a single call with a web interface.
     """
-    async with get_scheduler() as scheduler:
-        call = await _db.call_get(
-            call_id=call_id,
-            scheduler=scheduler,
-        )
+    call = await _db.call_get(call_id)
     if not call:
         return HTMLResponse(
             content=f"Call {call_id} not found",
@@ -356,29 +352,24 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
 
     Returns a single call object `CallGetModel`, in JSON format.
     """
-    async with get_scheduler() as scheduler:
-        # First, try to get by call ID
-        with suppress(ValueError):
-            call_id = UUID(call_id_or_phone_number)
-            call = await _db.call_get(
-                call_id=call_id,
-                scheduler=scheduler,
-            )
-            if call:
-                return TypeAdapter(CallGetModel).dump_python(call)
+    # First, try to get by call ID
+    with suppress(ValueError):
+        call_id = UUID(call_id_or_phone_number)
+        call = await _db.call_get(call_id)
+        if call:
+            return TypeAdapter(CallGetModel).dump_python(call)
 
-        # Second, try to get by phone number
-        phone_number = PhoneNumber(call_id_or_phone_number)
-        call = await _db.call_search_one(
-            callback_timeout=False,
-            phone_number=phone_number,
-            scheduler=scheduler,
+    # Second, try to get by phone number
+    phone_number = PhoneNumber(call_id_or_phone_number)
+    call = await _db.call_search_one(
+        callback_timeout=False,
+        phone_number=phone_number,
+    )
+    if not call:
+        raise HTTPException(
+            detail=f"Call {call_id_or_phone_number} not found",
+            status_code=HTTPStatus.NOT_FOUND,
         )
-        if not call:
-            raise HTTPException(
-                detail=f"Call {call_id_or_phone_number} not found",
-                status_code=HTTPStatus.NOT_FOUND,
-            )
 
     return TypeAdapter(CallGetModel).dump_python(call)
 
@@ -508,7 +499,6 @@ async def sms_event(
         call = await _db.call_search_one(
             callback_timeout=False,
             phone_number=phone_number,
-            scheduler=scheduler,
         )
         if not call:
             logger.warning("Call for phone number %s not found", phone_number)
@@ -565,17 +555,13 @@ async def _communicationservices_validate_call_id(
     # Enrich span
     SpanAttributeEnum.CALL_ID.attribute(str(call_id))
 
-    async with get_scheduler() as scheduler:
-        # Validate call
-        call = await _db.call_get(
-            call_id=call_id,
-            scheduler=scheduler,
+    # Validate call
+    call = await _db.call_get(call_id)
+    if not call:
+        raise HTTPException(
+            detail=f"Call {call_id} not found",
+            status_code=HTTPStatus.NOT_FOUND,
         )
-        if not call:
-            raise HTTPException(
-                detail=f"Call {call_id} not found",
-                status_code=HTTPStatus.NOT_FOUND,
-            )
 
     # Validate secret
     if call.callback_secret != secret:
@@ -927,10 +913,7 @@ async def post_event(
     """
     async with get_scheduler() as scheduler:
         # Validate call
-        call = await _db.call_get(
-            call_id=UUID(post.content),
-            scheduler=scheduler,
-        )
+        call = await _db.call_get(UUID(post.content))
         if not call:
             logger.warning("Call %s not found", post.content)
             return
@@ -971,25 +954,20 @@ async def _communicationservices_urls(
 
     Returnes a tuple of the callback URL, the WebSocket URL, and the call object.
     """
-    async with get_scheduler() as scheduler:
-        # Get call
-        call = await _db.call_search_one(
-            phone_number=phone_number,
-            scheduler=scheduler,
-        )
+    # Get call
+    call = await _db.call_search_one(phone_number)
 
-        # Create new call if initiate is different
-        if not call or (initiate and call.initiate != initiate):
-            call = await _db.call_create(
-                call=CallStateModel(
-                    initiate=initiate
-                    or CallInitiateModel(
-                        **CONFIG.conversation.initiate.model_dump(),
-                        phone_number=phone_number,
-                    )
-                ),
-                scheduler=scheduler,
+    # Create new call if initiate is different
+    if not call or (initiate and call.initiate != initiate):
+        call = await _db.call_create(
+            CallStateModel(
+                initiate=initiate
+                or CallInitiateModel(
+                    **CONFIG.conversation.initiate.model_dump(),
+                    phone_number=phone_number,
+                )
             )
+        )
 
     # Format URLs
     wss_url = _COMMUNICATIONSERVICES_WSS_TPL.format(
@@ -1029,7 +1007,6 @@ async def twilio_sms_post(
         call = await _db.call_search_one(
             callback_timeout=False,
             phone_number=From,
-            scheduler=scheduler,
         )
 
         # Call not found

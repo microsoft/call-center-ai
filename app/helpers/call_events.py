@@ -125,7 +125,6 @@ async def on_call_connected(
         _handle_recording(
             call=call,
             client=client,
-            scheduler=scheduler,
             server_call_id=server_call_id,
         ),  # Second, start recording the call
     )
@@ -235,7 +234,7 @@ async def on_automation_recognize_error(
     logger.info(
         "Timeout, retrying language selection (%s/%s)",
         call.recognition_retry,
-        await recognition_retry_max(scheduler),
+        await recognition_retry_max(),
     )
     await _handle_ivr_language(
         call=call,
@@ -321,7 +320,7 @@ async def _pre_recognize_error(
     Returns True if the call should continue, False if it should end.
     """
     # Voice retries are exhausted, end call
-    if call.recognition_retry >= await recognition_retry_max(scheduler):
+    if call.recognition_retry >= await recognition_retry_max():
         logger.info("Timeout, ending call")
         return False
 
@@ -793,7 +792,6 @@ async def _handle_ivr_language(
 async def _handle_recording(
     call: CallStateModel,
     client: CallAutomationClient,
-    scheduler: Scheduler,
     server_call_id: str,
 ) -> None:
     """
@@ -801,7 +799,7 @@ async def _handle_recording(
 
     Feature activation is checked before starting the recording.
     """
-    if not await recording_enabled(scheduler):
+    if not await recording_enabled():
         return
 
     assert CONFIG.communication_services.recording_container_url

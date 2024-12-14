@@ -22,67 +22,40 @@ async def test_acid(call: CallStateModel) -> None:
     """
     db = CONFIG.database.instance()
 
-    async with Scheduler() as scheduler:
-        # Check not exists
-        assume(
-            not await db.call_get(
-                call_id=call.call_id,
-                scheduler=scheduler,
-            )
+    # Check not exists
+    assume(not await db.call_get(call.call_id))
+    assume(await db.call_search_one(call.initiate.phone_number) != call)
+    assume(
+        call
+        not in (
+            (
+                await db.call_search_all(
+                    phone_number=call.initiate.phone_number, count=1
+                )
+            )[0]
+            or []
         )
-        assume(
-            await db.call_search_one(
-                phone_number=call.initiate.phone_number,
-                scheduler=scheduler,
-            )
-            != call
-        )
-        assume(
-            call
-            not in (
-                (
-                    await db.call_search_all(
-                        phone_number=call.initiate.phone_number, count=1
-                    )
-                )[0]
-                or []
-            )
-        )
+    )
 
-        # Insert test call
-        await db.call_create(
-            call=call,
-            scheduler=scheduler,
-        )
+    # Insert test call
+    await db.call_create(call)
 
-        # Check point read
-        assume(
-            await db.call_get(
-                call_id=call.call_id,
-                scheduler=scheduler,
-            )
-            == call
+    # Check point read
+    assume(await db.call_get(call.call_id) == call)
+    # Check search one
+    assume(await db.call_search_one(call.initiate.phone_number) == call)
+    # Check search all
+    assume(
+        call
+        in (
+            (
+                await db.call_search_all(
+                    phone_number=call.initiate.phone_number, count=1
+                )
+            )[0]
+            or []
         )
-        # Check search one
-        assume(
-            await db.call_search_one(
-                phone_number=call.initiate.phone_number,
-                scheduler=scheduler,
-            )
-            == call
-        )
-        # Check search all
-        assume(
-            call
-            in (
-                (
-                    await db.call_search_all(
-                        phone_number=call.initiate.phone_number, count=1
-                    )
-                )[0]
-                or []
-            )
-        )
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -98,18 +71,10 @@ async def test_transaction(
 
     async with Scheduler() as scheduler:
         # Check not exists
-        assume(
-            not await db.call_get(
-                call_id=call.call_id,
-                scheduler=scheduler,
-            )
-        )
+        assume(not await db.call_get(call.call_id))
 
         # Insert call
-        await db.call_create(
-            call=call,
-            scheduler=scheduler,
-        )
+        await db.call_create(call)
 
         # Check first change
         async with db.call_transac(
@@ -137,8 +102,5 @@ async def test_transaction(
         assume(call.voice_id == random_text)
 
         # Check point read
-        new_call = await db.call_get(
-            call_id=call.call_id,
-            scheduler=scheduler,
-        )
+        new_call = await db.call_get(call.call_id)
         assume(new_call and new_call.voice_id == random_text and new_call.in_progress)

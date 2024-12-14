@@ -728,8 +728,7 @@ class SttClient:
         try:
             await asyncio.wait_for(
                 self._stt_complete_gate.wait(),
-                timeout=await recognition_stt_complete_timeout_ms(self._scheduler)
-                / 1000,
+                timeout=await recognition_stt_complete_timeout_ms() / 1000,
             )
         except TimeoutError:
             logger.debug("Complete recognition timeout, using partial recognition")
@@ -856,7 +855,7 @@ class AECStream:
         # Calculate Root Mean Square (RMS)
         rms = np.sqrt(np.mean(voice**2))
         # Get VAD threshold, divide by 10 to more usability from user side, as RMS is in range 0-1 and a detection of 0.1 is a good maximum threshold
-        threshold = await vad_threshold(self._scheduler) / 10
+        threshold = await vad_threshold() / 10
         return rms >= threshold
 
     async def _process_one(self, input_pcm: bytes) -> None:

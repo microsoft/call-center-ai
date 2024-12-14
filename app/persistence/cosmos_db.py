@@ -84,7 +84,6 @@ class CosmosDbStore(IStore):
     async def call_get(
         self,
         call_id: UUID,
-        scheduler: Scheduler,
     ) -> CallStateModel | None:
         logger.debug("Loading call %s", call_id)
 
@@ -118,7 +117,7 @@ class CosmosDbStore(IStore):
         if call:
             await self._cache.set(
                 key=cache_key,
-                ttl_sec=max(await callback_timeout_hour(scheduler), 1)
+                ttl_sec=max(await callback_timeout_hour(), 1)
                 * 60
                 * 60,  # Ensure at least 1 hour
                 value=call.model_dump_json(),
@@ -191,7 +190,7 @@ class CosmosDbStore(IStore):
             cache_key_id = self._cache_key_call_id(call.call_id)
             await self._cache.set(
                 key=cache_key_id,
-                ttl_sec=max(await callback_timeout_hour(scheduler), 1)
+                ttl_sec=max(await callback_timeout_hour(), 1)
                 * 60
                 * 60,  # Ensure at least 1 hour
                 value=call.model_dump_json(),
@@ -204,7 +203,6 @@ class CosmosDbStore(IStore):
     async def call_create(
         self,
         call: CallStateModel,
-        scheduler: Scheduler,
     ) -> CallStateModel:
         logger.debug("Creating new call %s", call.call_id)
 
@@ -225,7 +223,7 @@ class CosmosDbStore(IStore):
         cache_key = self._cache_key_call_id(call.call_id)
         await self._cache.set(
             key=cache_key,
-            ttl_sec=max(await callback_timeout_hour(scheduler), 1)
+            ttl_sec=max(await callback_timeout_hour(), 1)
             * 60
             * 60,  # Ensure at least 1 hour
             value=call.model_dump_json(),
@@ -242,12 +240,11 @@ class CosmosDbStore(IStore):
     async def call_search_one(
         self,
         phone_number: str,
-        scheduler: Scheduler,
         callback_timeout: bool = True,
     ) -> CallStateModel | None:
         logger.debug("Loading last call for %s", phone_number)
 
-        timeout = await callback_timeout_hour(scheduler)
+        timeout = await callback_timeout_hour()
         if timeout < 1 and callback_timeout:
             logger.debug("Callback timeout if off, skipping search")
             return None
