@@ -682,12 +682,28 @@ class SttClient:
         # Signal the completion
         self._stt_complete_gate.set()
 
-    async def _compute_stt_metrics(self) -> None:
+    async def _clear_buffer_when_completed(self) -> None:
         """
-        Report the recognition latency.
+        Clear the buffer when the recognition is completed.
         """
-        start = time.monotonic()
+        # Wait for the completion
         await self._stt_complete_gate.wait()
+
+        # Clear the buffer
+        self._stt_buffer.clear()
+        self._stt_complete_gate.clear()
+
+    async def _report_complete_latency(self) -> None:
+        """
+        Report the complete latency.
+        """
+        # Measure the latency
+        start = time.monotonic()
+
+        # Wait for the completion
+        await self._stt_complete_gate.wait()
+
+        # Report the measure
         gauge_set(
             metric=call_stt_complete_latency,
             value=time.monotonic() - start,
@@ -703,8 +719,8 @@ class SttClient:
         """
         Pull the recognition result and reset the buffer.
         """
-        # Report the STT metrics
-        await self._scheduler.spawn(self._compute_stt_metrics())
+        # Report the complete latency
+        await self._scheduler.spawn(self._report_complete_latency())
 
         # Wait the complete recognition for 50ms maximum
         try:
@@ -719,9 +735,8 @@ class SttClient:
         # Build text from the buffer
         text = " ".join(self._stt_buffer).strip()
 
-        # Reset the buffer
-        self._stt_buffer.clear()
-        self._stt_complete_gate.clear()
+        # Clear the buffer when completed
+        await self._scheduler.spawn(self._clear_buffer_when_completed())
 
         # Return the text
         return text
