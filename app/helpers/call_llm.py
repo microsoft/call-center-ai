@@ -25,6 +25,7 @@ from app.helpers.features import (
     answer_hard_timeout_sec,
     answer_soft_timeout_sec,
     phone_silence_timeout_sec,
+    recognition_stt_complete_timeout_ms,
     vad_cutoff_timeout_ms,
     vad_silence_timeout_ms,
 )
@@ -260,7 +261,10 @@ async def load_llm_chat(  # noqa: PLR0913, PLR0915
 
             # Wait the complete recognition for 50ms maximum
             try:
-                await asyncio.wait_for(stt_complete_gate.wait(), timeout=0.05)
+                await asyncio.wait_for(
+                    stt_complete_gate.wait(),
+                    timeout=await recognition_stt_complete_timeout_ms(scheduler) / 1000,
+                )
             except TimeoutError:
                 logger.debug("Complete recognition timeout, using partial recognition")
 

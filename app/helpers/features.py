@@ -139,6 +139,18 @@ async def recognition_retry_max(scheduler: Scheduler) -> int:
     )
 
 
+async def recognition_stt_complete_timeout_ms(scheduler: Scheduler) -> int:
+    """
+    The timeout for STT completion in milliseconds.
+    """
+    return await _default(
+        default=100,
+        key="recognition_stt_complete_timeout_ms",
+        scheduler=scheduler,
+        type_res=int,
+    )
+
+
 async def _default(  # noqa: PLR0913
     default: T,
     key: str,
