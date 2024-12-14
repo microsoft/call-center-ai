@@ -67,6 +67,8 @@ class SpanMeterEnum(str, Enum):
     """Audio frames in latency in seconds."""
     CALL_FRAMES_OUT_LATENCY = "call.frames.out.latency"
     """Audio frames out latency in seconds."""
+    CALL_STT_COMPLETE_LATENCY = "call.stt.complete.latency"
+    """Speech-to-text missed complete latency."""
 
     def counter(
         self,
@@ -127,6 +129,7 @@ call_answer_latency = SpanMeterEnum.CALL_ANSWER_LATENCY.gauge("s")
 call_cutoff_latency = SpanMeterEnum.CALL_CUTOFF_LATENCY.gauge("s")
 call_frames_in_latency = SpanMeterEnum.CALL_FRAMES_IN_LATENCY.gauge("s")
 call_frames_out_latency = SpanMeterEnum.CALL_FRAMES_OUT_LATENCY.gauge("s")
+call_stt_complete_latency = SpanMeterEnum.CALL_STT_COMPLETE_LATENCY.gauge("s")
 
 
 def gauge_set(
