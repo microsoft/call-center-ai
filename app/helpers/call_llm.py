@@ -9,7 +9,6 @@ from azure.cognitiveservices.speech import (
     SpeechSynthesizer,
 )
 from azure.communication.callautomation.aio import CallAutomationClient
-from openai import APIError
 
 from app.helpers.call_utils import (
     AECStream,
@@ -427,7 +426,7 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
 
 # TODO: Refacto, this function is too long
 @tracer.start_as_current_span("call_generate_chat_completion")
-async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
+async def _generate_chat_completion(  # noqa: PLR0913, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
     post_callback: Callable[[CallStateModel], Awaitable[None]],
@@ -495,7 +494,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     # Execute LLM inference
     maximum_tokens_reached = False
     content_buffer_pointer = 0
-    tool_calls_buffer: dict[int, MessageToolModel] = {}
+    tool_calls_buffer: dict[str, MessageToolModel] = {}
     try:
         async for delta in completion_stream(
             max_tokens=160,  # Lowest possible value for 90% of the cases, if not sufficient, retry will be triggered, 100 tokens ~= 75 words, 20 words ~= 1 sentence, 6 sentences ~= 160 tokens
@@ -505,10 +504,10 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
         ):
             if not delta.content:
                 for piece in delta.tool_calls or []:
-                    tool_calls_buffer[piece.index] = tool_calls_buffer.get(
-                        piece.index, MessageToolModel()
+                    tool_calls_buffer[piece.id] = tool_calls_buffer.get(
+                        piece.id, MessageToolModel()
                     )
-                    tool_calls_buffer[piece.index] += piece
+                    tool_calls_buffer[piece.id] += piece
             else:
                 # Store whole content
                 content_full += delta.content
@@ -522,10 +521,6 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0911, PLR0912, PLR0915
     except MaximumTokensReachedError:
         logger.warning("Maximum tokens reached for this completion, retry asked")
         maximum_tokens_reached = True
-    # Retry on API error
-    except APIError as e:
-        logger.warning("OpenAI API call error: %s", e)
-        return True, True, call  # Error, retry
     # Last user message is trash, remove it
     except SafetyCheckError as e:
         logger.warning("Safety Check error: %s", e)

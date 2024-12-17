@@ -6,8 +6,8 @@ from html import escape
 from logging import Logger
 from textwrap import dedent
 
+from azure.ai.inference.models import SystemMessage
 from azure.core.exceptions import HttpResponseError
-from openai.types.chat import ChatCompletionSystemMessageParam
 from pydantic import BaseModel, TypeAdapter
 
 from app.models.call import CallStateModel
@@ -329,7 +329,7 @@ class LlmModel(BaseModel):
 
     def chat_system(
         self, call: CallStateModel, trainings: list[TrainingModel]
-    ) -> list[ChatCompletionSystemMessageParam]:
+    ) -> list[SystemMessage]:
         from app.models.message import (
             ActionEnum as MessageActionEnum,
             StyleEnum as MessageStyleEnum,
@@ -352,9 +352,7 @@ class LlmModel(BaseModel):
             call=call,
         )
 
-    def sms_summary_system(
-        self, call: CallStateModel
-    ) -> list[ChatCompletionSystemMessageParam]:
+    def sms_summary_system(self, call: CallStateModel) -> list[SystemMessage]:
         return self._messages(
             self._format(
                 self.sms_summary_system_tpl,
@@ -373,9 +371,7 @@ class LlmModel(BaseModel):
             call=call,
         )
 
-    def synthesis_system(
-        self, call: CallStateModel
-    ) -> list[ChatCompletionSystemMessageParam]:
+    def synthesis_system(self, call: CallStateModel) -> list[SystemMessage]:
         return self._messages(
             self._format(
                 self.synthesis_system_tpl,
@@ -392,9 +388,7 @@ class LlmModel(BaseModel):
             call=call,
         )
 
-    def citations_system(
-        self, call: CallStateModel, text: str
-    ) -> list[ChatCompletionSystemMessageParam]:
+    def citations_system(self, call: CallStateModel, text: str) -> list[SystemMessage]:
         """
         Return the formatted prompt. Prompt is used to add citations to the text, without cluttering the content itself.
 
@@ -412,9 +406,7 @@ class LlmModel(BaseModel):
             call=call,
         )
 
-    def next_system(
-        self, call: CallStateModel
-    ) -> list[ChatCompletionSystemMessageParam]:
+    def next_system(self, call: CallStateModel) -> list[SystemMessage]:
         return self._messages(
             self._format(
                 self.next_system_tpl,
@@ -461,17 +453,13 @@ class LlmModel(BaseModel):
         # self.logger.debug("Formatted prompt: %s", formatted_prompt)
         return formatted_prompt
 
-    def _messages(
-        self, system: str, call: CallStateModel
-    ) -> list[ChatCompletionSystemMessageParam]:
+    def _messages(self, system: str, call: CallStateModel) -> list[SystemMessage]:
         messages = [
-            ChatCompletionSystemMessageParam(
+            SystemMessage(
                 content=self.default_system(call),
-                role="system",
             ),
-            ChatCompletionSystemMessageParam(
+            SystemMessage(
                 content=system,
-                role="system",
             ),
         ]
         # self.logger.debug("Messages: %s", messages)

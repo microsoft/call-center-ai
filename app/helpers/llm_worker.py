@@ -5,32 +5,21 @@ from os import environ
 from typing import TypeVar
 
 import tiktoken
+from azure.ai.inference._model_base import Model, SdkJSONEncoder
+from azure.ai.inference.aio import ChatCompletionsClient
+from azure.ai.inference.models import (
+    AssistantMessage,
+    ChatCompletionsResponseFormatJSON,
+    ChatCompletionsToolDefinition,
+    ChatRequestMessage,
+    StreamingChatResponseMessageUpdate,
+    SystemMessage,
+    UserMessage,
+)
+from azure.core.exceptions import (
+    ServiceResponseError,
+)
 from json_repair import repair_json
-from openai import (
-    APIConnectionError,
-    APIResponseValidationError,
-    AsyncAzureOpenAI,
-    AsyncOpenAI,
-    AsyncStream,
-    BadRequestError,
-    InternalServerError,
-    RateLimitError,
-)
-from openai.types.chat import (
-    ChatCompletion,
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionChunk,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionToolMessageParam,
-    ChatCompletionToolParam,
-    ChatCompletionUserMessageParam,
-)
-from openai.types.chat.chat_completion_chunk import (
-    ChoiceDelta,
-    ChoiceDeltaToolCall,
-    ChoiceDeltaToolCallFunction,
-)
-from opentelemetry.instrumentation.openai import OpenAIInstrumentor
 from pydantic import ValidationError
 from tenacity import (
     AsyncRetrying,
@@ -42,19 +31,12 @@ from tenacity import (
 )
 
 from app.helpers.config import CONFIG
-from app.helpers.config_models.llm import (
-    AbstractPlatformModel as LlmAbstractPlatformModel,
-)
+from app.helpers.config_models.llm import DeploymentModel as LlmDeploymentModel
 from app.helpers.features import slow_llm_for_chat
 from app.helpers.logging import logger
 from app.helpers.monitoring import tracer
 from app.helpers.resources import resources_dir
 from app.models.message import MessageModel
-
-environ["TRACELOOP_TRACE_CONTENT"] = str(
-    True
-)  # Instrumentation logs prompts, completions, and embeddings to span attributes, set to False to lower monitoring costs or to avoid logging PII
-OpenAIInstrumentor().instrument()  # Instrument OpenAI
 
 # tiktoken cache
 environ["TIKTOKEN_CACHE_DIR"] = resources_dir("tiktoken")
@@ -77,10 +59,7 @@ class MaximumTokensReachedError(Exception):
 
 
 _retried_exceptions = [
-    APIConnectionError,
-    APIResponseValidationError,
-    InternalServerError,
-    RateLimitError,
+    ServiceResponseError,
 ]
 
 
@@ -88,9 +67,9 @@ _retried_exceptions = [
 async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
-    system: list[ChatCompletionSystemMessageParam],
-    tools: list[ChatCompletionToolParam] | None = None,
-) -> AsyncGenerator[ChoiceDelta, None]:
+    system: list[SystemMessage],
+    tools: list[ChatCompletionsToolDefinition] = [],
+) -> AsyncGenerator[StreamingChatResponseMessageUpdate, None]:
     """
     Returns a stream of completions.
 
@@ -140,21 +119,20 @@ async def completion_stream(
 
 
 # TODO: Refacto, too long (and remove PLR0912 ignore)
-async def _completion_stream_worker(  # noqa: PLR0912
+async def _completion_stream_worker(
     is_fast: bool,
     max_tokens: int,
     messages: list[MessageModel],
-    system: list[ChatCompletionSystemMessageParam],
-    tools: list[ChatCompletionToolParam] | None = None,
-) -> AsyncGenerator[ChoiceDelta, None]:
+    system: list[SystemMessage],
+    tools: list[ChatCompletionsToolDefinition] = [],
+) -> AsyncGenerator[StreamingChatResponseMessageUpdate, None]:
     """
     Returns a stream of completions.
     """
+    # Init client
     client, platform = await _use_llm(is_fast)
-    extra = {}
-    if tools:
-        extra["tools"] = tools  # Add tools if any
 
+    # Build context and limit to 20 messages for quick response and avoid hallucinations
     prompt = _limit_messages(
         context_window=platform.context,
         max_messages=20,  # Quick response
@@ -163,83 +141,32 @@ async def _completion_stream_worker(  # noqa: PLR0912
         model=platform.model,
         system=system,
         tools=tools,
-    )  # Limit to 20 messages for quick response and avoid hallucinations
-    chat_kwargs = {
-        "max_tokens": max_tokens,
-        "messages": prompt,
-        "model": platform.model,
-        "seed": platform.seed,
-        "temperature": platform.temperature,
-        **extra,
-    }  # Shared kwargs for both streaming and non-streaming
-    maximum_tokens_reached = False
+    )
 
-    try:
-        # Streaming
-        if platform.streaming:
-            stream: AsyncStream[
-                ChatCompletionChunk
-            ] = await client.chat.completions.create(
-                **chat_kwargs,
-                stream=True,
-            )
-            async for chunck in stream:
-                choices = chunck.choices
-                # Skip empty choices, happens sometimes with GPT-4 Turbo
-                if not choices:
-                    continue
-                choice = choices[0]
-                delta = choice.delta
-                # Azure OpenAI content filter
-                if choice.finish_reason == "content_filter":
-                    raise SafetyCheckError(f"Issue detected in text: {delta.content}")
-                if choice.finish_reason == "length":
-                    logger.warning(
-                        "Maximum tokens reached %s, should be fixed", max_tokens
-                    )
-                    maximum_tokens_reached = True
-                if delta:
-                    yield delta
+    # Start completion
+    stream = await client.complete(
+        max_tokens=max_tokens,
+        messages=prompt,
+        stream=True,
+        tools=tools,
+    )
 
-        # Non-streaming, emulate streaming with a single completion
-        else:
-            completion: ChatCompletion = await client.chat.completions.create(
-                **chat_kwargs
-            )
-            choice = completion.choices[0]
-            # Azure OpenAI content filter
-            if choice.finish_reason == "content_filter":
-                raise SafetyCheckError(
-                    f"Issue detected in generation: {choice.message.content}"
-                )
-            if choice.finish_reason == "length":
-                logger.warning("Maximum tokens reached %s, should be fixed", max_tokens)
-                maximum_tokens_reached = True
-            message = choice.message
-            delta = ChoiceDelta(
-                content=message.content,
-                role=message.role,
-                tool_calls=[
-                    ChoiceDeltaToolCall(
-                        id=tool.id,
-                        index=0,
-                        type=tool.type,
-                        function=ChoiceDeltaToolCallFunction(
-                            arguments=tool.function.arguments,
-                            name=tool.function.name,
-                        ),
-                    )
-                    for tool in message.tool_calls or []
-                ],
-            )
+    # Yield chuncks
+    async for chunck in stream:
+        choices = chunck.choices
+        # Skip empty choices, happens sometimes with GPT-4 Turbo
+        if not choices:
+            continue
+        choice = choices[0]
+        delta = choice.delta
+        # Azure OpenAI content filter
+        if choice.finish_reason == "content_filter":
+            raise SafetyCheckError(f"Issue detected in text: {delta.content}")
+        if choice.finish_reason == "length":
+            logger.warning("Maximum tokens reached %s, should be fixed", max_tokens)
+            raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
+        if delta:
             yield delta
-    except BadRequestError as e:
-        if e.code == "content_filter":
-            raise SafetyCheckError("Issue detected in prompt") from e
-        raise e
-
-    if maximum_tokens_reached:
-        raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
 
 
 @retry(
@@ -251,7 +178,7 @@ async def _completion_stream_worker(  # noqa: PLR0912
 @tracer.start_as_current_span("llm_completion_sync")
 async def completion_sync(
     res_type: type[T],
-    system: list[ChatCompletionSystemMessageParam],
+    system: list[SystemMessage],
     validation_callback: Callable[[str | None], tuple[bool, str | None, T | None]],
     validate_json: bool = False,
     _previous_result: str | None = None,
@@ -262,13 +189,11 @@ async def completion_sync(
     messages = system
     if _validation_error:
         messages += [
-            ChatCompletionAssistantMessageParam(
+            AssistantMessage(
                 content=_previous_result or "",
-                role="assistant",
             ),
-            ChatCompletionUserMessageParam(
+            UserMessage(
                 content=f"A validation error occurred, please retry: {_validation_error}",
-                role="user",
             ),
         ]
 
@@ -310,18 +235,17 @@ async def completion_sync(
 
 async def _completion_sync_worker(
     is_fast: bool,
-    system: list[ChatCompletionSystemMessageParam],
+    system: list[SystemMessage],
     json_output: bool = False,
     max_tokens: int | None = None,
 ) -> str | None:
     """
     Returns a completion.
     """
+    # Init client
     client, platform = await _use_llm(is_fast)
-    extra = {}
-    if json_output:
-        extra["response_format"] = {"type": "json_object"}
 
+    # Build context
     prompt = _limit_messages(
         context_window=platform.context,
         max_tokens=max_tokens,
@@ -344,20 +268,19 @@ async def _completion_sync_worker(
     choice = None
     async for attempt in retryed:
         with attempt:
-            try:
-                res = await client.chat.completions.create(
+            # Start completion
+            choice = (
+                await client.complete(
                     max_tokens=max_tokens,
                     messages=prompt,
                     model=platform.model,
                     seed=platform.seed,
                     temperature=platform.temperature,
-                    **extra,
+                    response_format=ChatCompletionsResponseFormatJSON()
+                    if json_output
+                    else None,
                 )
-            except BadRequestError as e:
-                if e.code == "content_filter":
-                    raise SafetyCheckError("Issue detected in prompt") from e
-                raise e
-            choice = res.choices[0]
+            ).choices[0]
             # Azure OpenAI content filter
             if choice.finish_reason == "content_filter":
                 raise SafetyCheckError(
@@ -374,15 +297,10 @@ def _limit_messages(  # noqa: PLR0913
     max_tokens: int | None,
     messages: list[MessageModel],
     model: str,
-    system: list[ChatCompletionSystemMessageParam],
+    system: list[SystemMessage],
     max_messages: int = 1000,
-    tools: list[ChatCompletionToolParam] | None = None,
-) -> list[
-    ChatCompletionAssistantMessageParam
-    | ChatCompletionSystemMessageParam
-    | ChatCompletionToolMessageParam
-    | ChatCompletionUserMessageParam
-]:
+    tools: list[ChatCompletionsToolDefinition] | None = None,
+) -> list[ChatRequestMessage]:
     """
     Returns a list of messages limited by the context size.
 
@@ -398,18 +316,18 @@ def _limit_messages(  # noqa: PLR0913
 
     # Add system messages
     for message in system:
-        tokens += _count_tokens(json.dumps(message), model)
+        tokens += _count_tokens(_dump_sdk_model(message), model)
         counter += 1
 
     # Add tools
     for tool in tools or []:
-        tokens += _count_tokens(json.dumps(tool), model)
+        tokens += _count_tokens(_dump_sdk_model(tool), model)
 
     # Add user messages until the available context is reached, from the newest to the oldest
     for message in messages[::-1]:
         openai_message = message.to_openai()
         new_tokens = _count_tokens(
-            "".join([json.dumps(x) for x in openai_message]),
+            "".join([_dump_sdk_model(x) for x in openai_message]),
             model,
         )
         if tokens + new_tokens >= max_context:
@@ -442,9 +360,20 @@ def _count_tokens(content: str, model: str) -> int:
     return len(tiktoken.get_encoding(encoding_name).encode(content))
 
 
+def _dump_sdk_model(message: Model) -> str:
+    """
+    Returns a JSON representation of the AI Inference SDK data model.
+    """
+    return json.dumps(
+        cls=SdkJSONEncoder,
+        exclude_readonly=True,
+        obj=message,
+    )
+
+
 async def _use_llm(
     is_fast: bool,
-) -> tuple[AsyncAzureOpenAI | AsyncOpenAI, LlmAbstractPlatformModel]:
+) -> tuple[ChatCompletionsClient, LlmDeploymentModel]:
     """
     Returns an LLM client and platform model.
 

@@ -4,7 +4,6 @@ from os import environ
 from azure.monitor.opentelemetry import configure_azure_monitor
 from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.metrics._internal.instrument import Counter, Gauge
 from opentelemetry.semconv.attributes import service_attributes
 from opentelemetry.trace.span import INVALID_SPAN
@@ -98,9 +97,13 @@ class SpanMeterEnum(str, Enum):
 
 
 try:
-    configure_azure_monitor()  # Configure Azure Application Insights exporter
-    AioHttpClientInstrumentor().instrument()  # Instrument aiohttp
-    HTTPXClientInstrumentor().instrument()  # Instrument httpx
+    # Capture LLM prompt and completion contents
+    # See: https://learn.microsoft.com/en-us/azure/ai-studio/how-to/develop/trace-local-sdk?tabs=python#configuration
+    environ["AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED"] = "true"
+    # Configure Azure Application Insights exporter
+    configure_azure_monitor()
+    # Instrument aiohttp
+    AioHttpClientInstrumentor().instrument()
 except ValueError as e:
     print(  # noqa: T201
         "Azure Application Insights instrumentation failed, likely due to a missing APPLICATIONINSIGHTS_CONNECTION_STRING environment variable.",

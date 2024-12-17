@@ -2,13 +2,15 @@ import re
 from datetime import UTC, datetime
 from enum import Enum
 
-from openai.types.chat import (
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionMessageToolCallParam,
-    ChatCompletionToolMessageParam,
-    ChatCompletionUserMessageParam,
+from azure.ai.inference.models import (
+    AssistantMessage,
+    ChatCompletionsToolCall,
+    ChatRequestMessage,
+    FunctionCall,
+    StreamingChatResponseToolCallUpdate,
+    ToolMessage,
+    UserMessage,
 )
-from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field, field_validator
 
 _FUNC_NAME_SANITIZER_R = r"[^a-zA-Z0-9_-]"
@@ -58,7 +60,7 @@ class ToolModel(BaseModel):
     tool_id: str = ""
 
     def __add__(self, other: object) -> "ToolModel":
-        if not isinstance(other, ChoiceDeltaToolCall):
+        if not isinstance(other, StreamingChatResponseToolCallUpdate):
             return NotImplemented
         if other.id:
             self.tool_id = other.id
@@ -77,20 +79,19 @@ class ToolModel(BaseModel):
             return False
         return self.tool_id == other.tool_id
 
-    def to_openai(self) -> ChatCompletionMessageToolCallParam:
-        return ChatCompletionMessageToolCallParam(
+    def to_openai(self) -> ChatCompletionsToolCall:
+        return ChatCompletionsToolCall(
             id=self.tool_id,
-            type="function",
-            function={
-                "arguments": self.function_arguments,
-                "name": "-".join(
+            function=FunctionCall(
+                arguments=self.function_arguments,
+                name="-".join(
                     re.sub(
                         _FUNC_NAME_SANITIZER_R,
                         "-",
                         self.function_name,
                     ).split("-")
                 ),  # Sanitize with dashes then deduplicate dashes, backward compatibility with old models
-            },
+            ),
         )
 
 
@@ -118,43 +119,35 @@ class MessageModel(BaseModel):
 
     def to_openai(
         self,
-    ) -> list[
-        ChatCompletionAssistantMessageParam
-        | ChatCompletionToolMessageParam
-        | ChatCompletionUserMessageParam
-    ]:
+    ) -> list[ChatRequestMessage]:
         # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
         content = " ".join([line.strip() for line in self.content.splitlines()])
 
         if self.persona == PersonaEnum.HUMAN:
             return [
-                ChatCompletionUserMessageParam(
+                UserMessage(
                     content=f"action={self.action.value} {content}",
-                    role="user",
                 )
             ]
 
         if self.persona == PersonaEnum.ASSISTANT:
             if not self.tool_calls:
                 return [
-                    ChatCompletionAssistantMessageParam(
+                    AssistantMessage(
                         content=f"action={self.action.value} style={self.style.value} {content}",
-                        role="assistant",
                     )
                 ]
 
         res = []
         res.append(
-            ChatCompletionAssistantMessageParam(
+            AssistantMessage(
                 content=f"action={self.action.value} style={self.style.value} {content}",
-                role="assistant",
                 tool_calls=[tool_call.to_openai() for tool_call in self.tool_calls],
             )
         )
         res.extend(
-            ChatCompletionToolMessageParam(
+            ToolMessage(
                 content=tool_call.content,
-                role="tool",
                 tool_call_id=tool_call.tool_id,
             )
             for tool_call in self.tool_calls
