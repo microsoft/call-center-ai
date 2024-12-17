@@ -7,7 +7,7 @@ import asyncio
 import inspect
 import json
 from collections.abc import Awaitable, Callable
-from functools import cache, wraps
+from functools import lru_cache, wraps
 from inspect import getmembers, isfunction
 from textwrap import dedent
 from types import FunctionType
@@ -162,7 +162,7 @@ class AbstractPlugin:
         # Enrich span
         SpanAttributeEnum.TOOL_RESULT.attribute(tool.content)
 
-    @cache
+    @lru_cache
     def _available_functions(
         self,
         blacklist: frozenset[str],
