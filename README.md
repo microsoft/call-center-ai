@@ -272,9 +272,7 @@ make logs name=my-rg-name
 
 #### 1. Prerequisites
 
-In macOS, with [Homebrew](https://brew.sh), simply type `make brew`, if not already done.
-
-For other systems, make sure you have the following installed:
+If you skiped the `make brew` command from the first install section, make sure you have the following installed:
 
 - [Rust](https://rust-lang.org)
 - [uv](https://docs.astral.sh/uv)
