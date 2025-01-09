@@ -279,6 +279,8 @@ For other systems, make sure you have the following installed:
 - [Rust](https://rust-lang.org)
 - [uv](https://docs.astral.sh/uv)
 
+Finally, run `make install` to setup Python environment.
+
 #### 2. Create the full config file
 
 If the application is already deployed on Azure, you can run `make name=my-rg-name sync-local-config` to copy the configuration from remote to your local machine.
