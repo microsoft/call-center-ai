@@ -1,4 +1,4 @@
-from functools import cache
+from functools import lru_cache
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ class AiSearchModel(BaseModel, frozen=True):
     strictness: float = Field(default=2, ge=0, le=5)
     top_n_documents: int = Field(default=5, ge=1)
 
-    @cache
+    @lru_cache
     def instance(self) -> ISearch:
         from app.helpers.config import CONFIG
         from app.persistence.ai_search import (

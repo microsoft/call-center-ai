@@ -7,21 +7,20 @@ import asyncio
 import inspect
 import json
 from collections.abc import Awaitable, Callable
-from functools import cache, wraps
+from functools import lru_cache, wraps
 from inspect import getmembers, isfunction
 from textwrap import dedent
 from types import FunctionType
 from typing import Annotated, Any, ForwardRef, TypeVar
 
 from aiojobs import Scheduler
+from azure.ai.inference.models import ChatCompletionsToolDefinition, FunctionDefinition
 from azure.cognitiveservices.speech import (
     SpeechSynthesizer,
 )
 from azure.communication.callautomation.aio import CallAutomationClient
 from jinja2 import Environment
 from json_repair import repair_json
-from openai.types.chat import ChatCompletionToolParam
-from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import eval_type_lenient
 from pydantic.json_schema import JsonSchemaValue
@@ -77,7 +76,7 @@ class AbstractPlugin:
     async def to_openai(
         self,
         blacklist: frozenset[str],
-    ) -> list[ChatCompletionToolParam]:
+    ) -> list[ChatCompletionsToolDefinition]:
         """
         Get the OpenAI SDK schema for all functions of the plugin, excluding the ones in the blacklist.
         """
@@ -162,7 +161,7 @@ class AbstractPlugin:
         # Enrich span
         SpanAttributeEnum.TOOL_RESULT.attribute(tool.content)
 
-    @cache
+    @lru_cache
     def _available_functions(
         self,
         blacklist: frozenset[str],
@@ -257,7 +256,7 @@ def add_customer_response(
 async def _function_schema(
     f: Callable[..., Any],
     **kwargs: Any,
-) -> ChatCompletionToolParam:
+) -> ChatCompletionsToolDefinition:
     """
     Take a function and return a JSON schema for it as defined by the OpenAI API.
 
@@ -303,8 +302,7 @@ async def _function_schema(
         )
     ).model_dump()
 
-    return ChatCompletionToolParam(
-        type="function",
+    return ChatCompletionsToolDefinition(
         function=FunctionDefinition(
             description=description,
             name=name,

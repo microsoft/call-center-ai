@@ -272,12 +272,12 @@ make logs name=my-rg-name
 
 #### 1. Prerequisites
 
-In macOS, with [Homebrew](https://brew.sh), simply type `make brew`, if not already done.
-
-For other systems, make sure you have the following installed:
+If you skiped the `make brew` command from the first install section, make sure you have the following installed:
 
 - [Rust](https://rust-lang.org)
 - [uv](https://docs.astral.sh/uv)
+
+Finally, run `make install` to setup Python environment.
 
 #### 2. Create the full config file
 
@@ -483,37 +483,6 @@ Conversation options are represented as features. They can be configured from Ap
 | `vad_cutoff_timeout_ms` | The cutoff timeout for voice activity detection in milliseconds. | `int` | 250 |
 | `vad_silence_timeout_ms` | Silence to trigger voice activity detection in milliseconds. | `int` | 500 |
 | `vad_threshold` | The threshold for voice activity detection. Between 0.1 and 1. | `float` | 0.5 |
-
-### Use an OpenAI compatible model for the LLM
-
-To use a model compatible with the OpenAI completion API, you need to create an account and get the following information:
-
-- API key
-- Context window size
-- Endpoint URL
-- Model name
-- Streaming capability
-
-Then, add the following in the `config.yaml` file:
-
-```yaml
-# config.yaml
-llm:
-  fast:
-    mode: openai
-    openai:
-      context: 128000
-      endpoint: https://api.openai.com
-      model: gpt-4o-mini
-      streaming: true
-  slow:
-    mode: openai
-    openai:
-      context: 128000
-      endpoint: https://api.openai.com
-      model: gpt-4o
-      streaming: true
-```
 
 ### Use Twilio for SMS
 

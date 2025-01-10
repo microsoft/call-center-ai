@@ -1,5 +1,5 @@
 from enum import Enum
-from functools import cache
+from functools import lru_cache
 
 from pydantic import BaseModel, SecretStr, ValidationInfo, field_validator
 
@@ -21,7 +21,7 @@ class CommunicationServiceModel(BaseModel, frozen=True):
     Model is purely empty to fit to the `ISms` interface and the "mode" enum code organization. As the Communication Services is also used as the only call interface, it is not necessary to duplicate the models.
     """
 
-    @cache
+    @lru_cache
     def instance(self) -> ISms:
         from app.helpers.config import CONFIG
         from app.persistence.communication_services import (
@@ -36,7 +36,7 @@ class TwilioModel(BaseModel, frozen=True):
     auth_token: SecretStr
     phone_number: PhoneNumber
 
-    @cache
+    @lru_cache
     def instance(self) -> ISms:
         from app.persistence.twilio import (
             TwilioSms,

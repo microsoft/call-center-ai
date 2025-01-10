@@ -1,5 +1,5 @@
 from enum import Enum
-from functools import cache
+from functools import lru_cache
 
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
@@ -16,7 +16,7 @@ class ModeEnum(str, Enum):
 class MemoryModel(BaseModel, frozen=True):
     max_size: int = Field(default=128, ge=10)
 
-    @cache
+    @lru_cache
     def instance(self) -> ICache:
         from app.persistence.memory import (
             MemoryCache,
@@ -32,7 +32,7 @@ class RedisModel(BaseModel, frozen=True):
     port: int = 6379
     ssl: bool = True
 
-    @cache
+    @lru_cache
     def instance(self) -> ICache:
         from app.persistence.redis import (
             RedisCache,

@@ -192,7 +192,7 @@ class DeepEvalAzureOpenAI(GPTModel):
         cache: pytest.Cache,
         **kwargs,
     ):
-        platform = CONFIG.llm.fast.azure_openai
+        platform = CONFIG.llm.fast
         assert platform
 
         _langchain_kwargs = {
@@ -203,7 +203,6 @@ class DeepEvalAzureOpenAI(GPTModel):
             "temperature": platform.temperature,
             # Deployment
             "api_version": platform.api_version,
-            "azure_deployment": platform.deployment,
             "azure_endpoint": platform.endpoint,
             "model": platform.model,
             # Authentication, either RBAC or API

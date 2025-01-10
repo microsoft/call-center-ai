@@ -78,7 +78,7 @@ test:
 
 test-static:
 	@echo "➡️ Test Python code style..."
-	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012
+	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012,A005
 
 	@echo "➡️ Test Python type hints..."
 	uv run pyright .
@@ -94,7 +94,7 @@ test-unit:
 
 lint:
 	@echo "➡️ Fix Python code style..."
-	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012 --fix
+	uv run ruff check --select I,PL,RUF,UP,ASYNC,A,DTZ,T20,ARG,PERF --ignore RUF012,A005 --fix
 
 tunnel:
 	@echo "➡️ Creating tunnel..."
