@@ -24,21 +24,13 @@ cognitive_service:
 
 llm:
   fast:
-    mode: azure_openai
-    azure_openai:
-      context: 16385
-      deployment: gpt-4o-mini-2024-07-18
-      endpoint: https://xxx.openai.azure.com
-      model: gpt-4o-mini
-      streaming: true
+    context: 16385
+    endpoint: https://xxx.openai.azure.com/openai/deployments/gpt-4o-mini-2024-07-18
+    model: gpt-4o-mini
   slow:
-    mode: azure_openai
-    azure_openai:
-      context: 128000
-      deployment: gpt-4o-2024-08-06
-      endpoint: https://xxx.openai.azure.com
-      model: gpt-4o
-      streaming: true
+    context: 128000
+    endpoint: https://xxx.openai.azure.com/openai/deployments/gpt-4o-2024-08-06
+    model: gpt-4o
 
 ai_search:
   embedding_deployment: text-embedding-3-large-1
