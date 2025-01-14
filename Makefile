@@ -9,6 +9,7 @@ container_name := ghcr.io/clemlesne/call-center-ai
 docker := docker
 image_version := main
 # App location
+# Warning: Some regions may not support all services (e.g. OpenAI models, AI Search) or capabilities (e.g. Cognitive Services TTS voices). Those regions have been tested and are known to work. If you encounter issues, please refer to the Azure documentation for the latest information, or try deploying with default locations.
 cognitive_communication_location := westeurope
 default_location := swedencentral
 openai_location := swedencentral
