@@ -1,6 +1,5 @@
 {
   "python.languageServer": "Pylance",
-  "python.analysis.typeCheckingMode": "basic",
   "ruff.nativeServer": "on",
   "[python]": {
     "editor.formatOnSave": true,
