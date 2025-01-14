@@ -1,4 +1,5 @@
 {
+  "python.defaultInterpreterPath": ".venv/bin/python",
   "python.languageServer": "Pylance",
   "ruff.nativeServer": "on",
   "[python]": {
