@@ -95,6 +95,7 @@ async def main() -> None:
                 call.messages.append(
                     MessageModel(
                         content=speech,
+                        lang_short_code=call.lang.short_code,
                         persona=MessagePersonaEnum.HUMAN,
                     )
                 )

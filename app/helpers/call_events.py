@@ -469,7 +469,7 @@ async def on_ivr_recognized(
         call=call,
         scheduler=scheduler,
     ):
-        call.lang = lang.short_code
+        call.lang_short_code = lang.short_code
         call.recognition_retry = 0
 
     await start_audio_streaming(
@@ -528,6 +528,7 @@ async def on_sms_received(
             MessageModel(
                 action=MessageActionEnum.SMS,
                 content=message,
+                lang_short_code=call.lang.short_code,
                 persona=MessagePersonaEnum.HUMAN,
             )
         )
@@ -655,6 +656,7 @@ async def _intelligence_sms(
             call=call,
             scheduler=scheduler,
         ):
+            # Dont't store the lang as we aren't sure about the language of the SMS
             call.messages.append(
                 MessageModel(
                     action=MessageActionEnum.SMS,

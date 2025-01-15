@@ -427,6 +427,7 @@ class DefaultPlugin(AbstractPlugin):
             MessageModel(
                 action=MessageActionEnum.SMS,
                 content=message,
+                lang_short_code=self.call.lang.short_code,
                 persona=MessagePersonaEnum.ASSISTANT,
             )
         )
@@ -519,7 +520,7 @@ class DefaultPlugin(AbstractPlugin):
 
         # Update lang
         initial_lang = self.call.lang.short_code
-        self.call.lang = lang
+        self.call.lang_short_code = lang
 
         # LLM confirmation
         return f"Voice language set to {lang} (was {initial_lang})"

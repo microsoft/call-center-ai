@@ -309,6 +309,7 @@ async def _store_assistant_message(
         call.messages.append(
             MessageModel(
                 content=text,
+                lang_short_code=call.lang.short_code,
                 persona=MessagePersonaEnum.ASSISTANT,
                 style=style,
             )

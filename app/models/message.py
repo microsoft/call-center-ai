@@ -59,27 +59,33 @@ class ToolModel(BaseModel):
     function_name: str = ""
     tool_id: str = ""
 
-    def __add__(self, other: object) -> "ToolModel":
-        if not isinstance(other, StreamingChatResponseToolCallUpdate):
-            return NotImplemented
-        if other.id:
-            self.tool_id = other.id
-        if other.function:
-            if other.function.name:
-                self.function_name = other.function.name
-            if other.function.arguments:
-                self.function_arguments += other.function.arguments
+    @property
+    def is_openai_valid(self) -> bool:
+        """
+        Check if the tool model is valid for OpenAI.
+
+        The model is valid if it has a tool ID and a function name.
+        """
+        return bool(self.tool_id and self.function_name)
+
+    def add_delta(self, delta: StreamingChatResponseToolCallUpdate) -> "ToolModel":
+        """
+        Update the tool model with a delta.
+
+        This model will be updated with the delta's values from the streaming API.
+        """
+        if delta.id:
+            self.tool_id = delta.id
+        if delta.function.name:
+            self.function_name = delta.function.name
+        if delta.function.arguments:
+            self.function_arguments += delta.function.arguments
         return self
 
-    def __hash__(self) -> int:
-        return self.tool_id.__hash__()
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ToolModel):
-            return False
-        return self.tool_id == other.tool_id
-
     def to_openai(self) -> ChatCompletionsToolCall:
+        """
+        Convert the tool model to an OpenAI tool call.
+        """
         return ChatCompletionsToolCall(
             id=self.tool_id,
             function=FunctionCall(
@@ -94,6 +100,14 @@ class ToolModel(BaseModel):
             ),
         )
 
+    def __hash__(self) -> int:
+        return self.tool_id.__hash__()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ToolModel):
+            return False
+        return self.tool_id == other.tool_id
+
 
 class MessageModel(BaseModel):
     # Immutable fields
@@ -101,9 +115,37 @@ class MessageModel(BaseModel):
     # Editable fields
     action: ActionEnum = ActionEnum.TALK
     content: str
+    lang_short_code: str | None = None
     persona: PersonaEnum
     style: StyleEnum = StyleEnum.NONE
     tool_calls: list[ToolModel] = []
+
+    async def translate(self, target_short_code: str) -> "MessageModel":
+        """
+        Translate the message to a target language.
+
+        A copy of the model is returned with the translated content.
+        """
+        from app.helpers.translation import translate_text
+
+        # Work on a copy to avoid modifying the original model in the database
+        copy = self.model_copy()
+
+        # Skip if no language is set
+        if not self.lang_short_code:
+            return copy
+
+        # Apply translation
+        translation = await translate_text(
+            source_lang=self.lang_short_code,
+            target_lang=target_short_code,
+            text=self.content,
+        )
+        if translation:
+            copy.content = translation
+            copy.lang_short_code = target_short_code
+
+        return copy
 
     @field_validator("created_at")
     @classmethod
@@ -120,9 +162,15 @@ class MessageModel(BaseModel):
     def to_openai(
         self,
     ) -> list[ChatRequestMessage]:
+        """
+        Convert the message model to an OpenAI message.
+
+        Tools are validated before being added to the message, invalid ones are discarded.
+        """
         # Removing newlines from the content to avoid hallucinations issues with GPT-4 Turbo
         content = " ".join([line.strip() for line in self.content.splitlines()])
 
+        # Init content for human persona
         if self.persona == PersonaEnum.HUMAN:
             return [
                 UserMessage(
@@ -130,6 +178,7 @@ class MessageModel(BaseModel):
                 )
             ]
 
+        # Init content for assistant persona
         if self.persona == PersonaEnum.ASSISTANT:
             if not self.tool_calls:
                 return [
@@ -138,11 +187,15 @@ class MessageModel(BaseModel):
                     )
                 ]
 
+        # Add tools
+        valid_tools = [
+            tool_call for tool_call in self.tool_calls if tool_call.is_openai_valid
+        ]
         res = []
         res.append(
             AssistantMessage(
                 content=f"action={self.action.value} style={self.style.value} {content}",
-                tool_calls=[tool_call.to_openai() for tool_call in self.tool_calls],
+                tool_calls=[tool_call.to_openai() for tool_call in valid_tools],
             )
         )
         res.extend(
@@ -150,7 +203,7 @@ class MessageModel(BaseModel):
                 content=tool_call.content,
                 tool_call_id=tool_call.tool_id,
             )
-            for tool_call in self.tool_calls
+            for tool_call in valid_tools
             if tool_call.content
         )
         return res

@@ -139,13 +139,14 @@ async def test_relevancy(  # noqa: PLR0913
     Test is repeated 10 times to catch multi-threading and concurrency issues.
     """
     # Set call language
-    call.lang = lang
+    call.lang_short_code = lang
 
     # Fill call with messages
     for speech in speeches:
         call.messages.append(
             MessageModel(
                 content=speech,
+                lang_short_code=call.lang.short_code,
                 persona=MessagePersonaEnum.HUMAN,
             )
         )
