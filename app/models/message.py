@@ -115,9 +115,37 @@ class MessageModel(BaseModel):
     # Editable fields
     action: ActionEnum = ActionEnum.TALK
     content: str
+    lang_short_code: str | None = None
     persona: PersonaEnum
     style: StyleEnum = StyleEnum.NONE
     tool_calls: list[ToolModel] = []
+
+    async def translate(self, target_short_code: str) -> "MessageModel":
+        """
+        Translate the message to a target language.
+
+        A copy of the model is returned with the translated content.
+        """
+        from app.helpers.translation import translate_text
+
+        # Work on a copy to avoid modifying the original model in the database
+        copy = self.model_copy()
+
+        # Skip if no language is set
+        if not self.lang_short_code:
+            return copy
+
+        # Apply translation
+        translation = await translate_text(
+            source_lang=self.lang_short_code,
+            target_lang=target_short_code,
+            text=self.content,
+        )
+        if translation:
+            copy.content = translation
+            copy.lang_short_code = target_short_code
+
+        return copy
 
     @field_validator("created_at")
     @classmethod

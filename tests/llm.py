@@ -274,7 +274,7 @@ async def test_llm(  # noqa: PLR0913
     call_client = automation_client.get_call_connection()
 
     # Mock call
-    call.lang = lang
+    call.lang_short_code = lang
 
     async with Scheduler() as scheduler:
 
@@ -312,6 +312,7 @@ async def test_llm(  # noqa: PLR0913
                 call.messages.append(
                     MessageModel(
                         content=speech,
+                        lang_short_code=call.lang.short_code,
                         persona=MessagePersonaEnum.HUMAN,
                     )
                 )
