@@ -492,24 +492,38 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0912, PLR0915
         # logger.debug("Tools: %s", tools)
 
     # Execute LLM inference
-    maximum_tokens_reached = False
     content_buffer_pointer = 0
+    last_buffered_tool_id = None
+    maximum_tokens_reached = False
     tool_calls_buffer: dict[str, MessageToolModel] = {}
     try:
+        # Consume the completion stream
         async for delta in completion_stream(
             max_tokens=160,  # Lowest possible value for 90% of the cases, if not sufficient, retry will be triggered, 100 tokens ~= 75 words, 20 words ~= 1 sentence, 6 sentences ~= 160 tokens
             messages=call.messages,
             system=system,
             tools=tools,
         ):
-            if not delta.content:
-                for piece in delta.tool_calls or []:
-                    tool_calls_buffer[piece.id] = tool_calls_buffer.get(
-                        piece.id, MessageToolModel()
-                    )
-                    tool_calls_buffer[piece.id] += piece
-            else:
-                # Store whole content
+            # Complete tools
+            if delta.tool_calls:
+                for piece in delta.tool_calls:
+                    # Azure AI Inference sometimes returns empty tool IDs, in that case, use the last one
+                    if piece.id:
+                        last_buffered_tool_id = piece.id
+                    # No tool ID, alert and skip
+                    if not last_buffered_tool_id:
+                        logger.warning(
+                            "Empty tool ID, cannot buffer tool call: %s", piece
+                        )
+                        continue
+                    # New, init buffer
+                    if last_buffered_tool_id not in tool_calls_buffer:
+                        tool_calls_buffer[last_buffered_tool_id] = MessageToolModel()
+                    # Append
+                    tool_calls_buffer[last_buffered_tool_id].add_delta(piece)
+
+            # Complete content
+            if delta.content:
                 content_full += delta.content
                 for sentence, length in tts_sentence_split(
                     content_full[content_buffer_pointer:], False
