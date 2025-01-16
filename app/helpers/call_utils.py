@@ -616,7 +616,7 @@ class SttClient:
         )()
 
         # Create client
-        self.client = SpeechRecognizer(
+        self._client = SpeechRecognizer(
             audio_config=AudioConfig(stream=self._stream),
             language=self._call.lang.short_code,
             speech_config=SpeechConfig(
@@ -626,24 +626,25 @@ class SttClient:
         )
 
         # TSS events
-        self.client.recognized.connect(self._complete_callback)
-        self.client.recognizing.connect(self._partial_callback)
+        self._client.recognized.connect(self._complete_callback)
+        self._client.recognizing.connect(self._partial_callback)
 
         # Debugging events
-        self.client.canceled.connect(
+        self._client.canceled.connect(
             lambda event: logger.warning("STT cancelled: %s", event)
         )
-        self.client.session_started.connect(lambda _: logger.debug("STT started"))
-        self.client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
+        self._client.session_started.connect(lambda _: logger.debug("STT started"))
+        self._client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
 
         # Start STT
-        self.client.start_continuous_recognition_async()
+        self._client.start_continuous_recognition_async()
 
         return self
 
     async def __aexit__(self, *args, **kwargs):
         # Stop STT
-        self.client.stop_continuous_recognition_async()
+        if self._client:
+            self._client.stop_continuous_recognition_async()
 
     def _partial_callback(self, event):
         """
