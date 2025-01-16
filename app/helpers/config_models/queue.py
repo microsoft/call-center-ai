@@ -1,4 +1,4 @@
-from functools import lru_cache
+from functools import cached_property
 
 from pydantic import BaseModel
 
@@ -10,7 +10,7 @@ class QueueModel(BaseModel, frozen=True):
     sms_name: str
     training_name: str
 
-    @lru_cache
+    @cached_property
     def call(self):
         from app.persistence.azure_queue_storage import AzureQueueStorage
 
@@ -19,7 +19,7 @@ class QueueModel(BaseModel, frozen=True):
             name=self.call_name,
         )
 
-    @lru_cache
+    @cached_property
     def post(self):
         from app.persistence.azure_queue_storage import AzureQueueStorage
 
@@ -28,7 +28,7 @@ class QueueModel(BaseModel, frozen=True):
             name=self.post_name,
         )
 
-    @lru_cache
+    @cached_property
     def sms(self):
         from app.persistence.azure_queue_storage import AzureQueueStorage
 
@@ -37,7 +37,7 @@ class QueueModel(BaseModel, frozen=True):
             name=self.sms_name,
         )
 
-    @lru_cache
+    @cached_property
     def training(self):
         from app.persistence.azure_queue_storage import AzureQueueStorage
 

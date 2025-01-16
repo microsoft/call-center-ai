@@ -49,7 +49,7 @@ from app.models.message import (
     extract_message_style,
 )
 
-_db = CONFIG.database.instance()
+_db = CONFIG.database.instance
 
 
 # TODO: Refacto, this function is too long
@@ -497,7 +497,7 @@ async def _generate_chat_completion(  # noqa: PLR0913, PLR0912, PLR0915
     translated_messages = await asyncio.gather(
         *[message.translate(call.lang.short_code) for message in call.messages]
     )
-    logger.debug("Translated messages: %s", translated_messages)
+    # logger.debug("Translated messages: %s", translated_messages)
 
     # Execute LLM inference
     content_buffer_pointer = 0

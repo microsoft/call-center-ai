@@ -46,8 +46,8 @@ from app.models.message import (
 from app.models.next import NextModel
 from app.models.synthesis import SynthesisModel
 
-_sms = CONFIG.sms.instance()
-_db = CONFIG.database.instance()
+_sms = CONFIG.sms.instance
+_db = CONFIG.database.instance
 
 
 @tracer.start_as_current_span("on_new_call")

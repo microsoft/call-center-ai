@@ -14,7 +14,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from app.helpers.cache import async_lru_cache, get_scheduler
+from app.helpers.cache import get_scheduler, lru_acache
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 from app.helpers.logging import logger
@@ -158,7 +158,7 @@ class AzureQueueStorage:
         # Then, delete message
         await self.delete_message(message)
 
-    @async_lru_cache()
+    @lru_acache()
     async def _use_service_client(self) -> QueueServiceClient:
         """
         Generate a new service client.

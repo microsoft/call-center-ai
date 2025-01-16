@@ -40,7 +40,7 @@ from azure.communication.callautomation.aio import (
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from noisereduce import reduce_noise
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config import CONFIG
 from app.helpers.features import (
     recognition_stt_complete_timeout_ms,
@@ -71,7 +71,7 @@ _TTS_SANITIZER_R = re.compile(
     r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&€$%=]"  # noqa: RUF001
 )  # Sanitize text for TTS
 
-_db = CONFIG.database.instance()
+_db = CONFIG.database.instance
 
 
 class CallHangupException(Exception):
@@ -526,7 +526,7 @@ def _detect_hangup() -> Generator[None, None, None]:
             raise e
 
 
-@async_lru_cache()
+@lru_acache()
 async def _use_call_client(
     client: CallAutomationClient, voice_id: str
 ) -> CallConnectionClient:
@@ -616,7 +616,7 @@ class SttClient:
         )()
 
         # Create client
-        self.client = SpeechRecognizer(
+        self._client = SpeechRecognizer(
             audio_config=AudioConfig(stream=self._stream),
             language=self._call.lang.short_code,
             speech_config=SpeechConfig(
@@ -626,24 +626,25 @@ class SttClient:
         )
 
         # TSS events
-        self.client.recognized.connect(self._complete_callback)
-        self.client.recognizing.connect(self._partial_callback)
+        self._client.recognized.connect(self._complete_callback)
+        self._client.recognizing.connect(self._partial_callback)
 
         # Debugging events
-        self.client.canceled.connect(
+        self._client.canceled.connect(
             lambda event: logger.warning("STT cancelled: %s", event)
         )
-        self.client.session_started.connect(lambda _: logger.debug("STT started"))
-        self.client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
+        self._client.session_started.connect(lambda _: logger.debug("STT started"))
+        self._client.session_stopped.connect(lambda _: logger.debug("STT stopped"))
 
         # Start STT
-        self.client.start_continuous_recognition_async()
+        self._client.start_continuous_recognition_async()
 
         return self
 
     async def __aexit__(self, *args, **kwargs):
         # Stop STT
-        self.client.stop_continuous_recognition_async()
+        if self._client:
+            self._client.stop_continuous_recognition_async()
 
     def _partial_callback(self, event):
         """

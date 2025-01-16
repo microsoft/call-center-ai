@@ -1,7 +1,7 @@
 from azure.ai.inference.aio import ChatCompletionsClient
 from pydantic import BaseModel
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 
@@ -14,8 +14,8 @@ class DeploymentModel(BaseModel, frozen=True):
     seed: int = 42  # Reproducible results
     temperature: float = 0.0  # Most focused and deterministic
 
-    @async_lru_cache()
-    async def instance(self) -> tuple[ChatCompletionsClient, "DeploymentModel"]:
+    @lru_acache()
+    async def client(self) -> tuple[ChatCompletionsClient, "DeploymentModel"]:
         return ChatCompletionsClient(
             # Reliability
             seed=self.seed,

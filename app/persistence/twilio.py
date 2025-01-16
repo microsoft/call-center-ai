@@ -1,7 +1,7 @@
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config_models.sms import TwilioModel
 from app.helpers.http import twilio_http
 from app.helpers.logging import logger
@@ -63,7 +63,7 @@ class TwilioSms(ISms):
             logger.exception("Error sending SMS to %s", phone_number)
         return success
 
-    @async_lru_cache()
+    @lru_acache()
     async def _use_client(self) -> Client:
         logger.debug("Using Twilio client for %s", self._config.account_sid)
 

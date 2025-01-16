@@ -13,7 +13,7 @@ from redis.exceptions import (
     RedisError,
 )
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config_models.cache import RedisModel
 from app.helpers.logging import logger
 from app.models.readiness import ReadinessEnum
@@ -116,7 +116,7 @@ class RedisCache(ICache):
             return False
         return True
 
-    @async_lru_cache()
+    @lru_acache()
     async def _use_connection_pool(self) -> ConnectionPool:
         """
         Generate the Redis connection pool.

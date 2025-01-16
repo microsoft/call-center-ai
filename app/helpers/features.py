@@ -3,7 +3,7 @@ from typing import TypeVar, cast
 from azure.appconfiguration.aio import AzureAppConfigurationClient
 from azure.core.exceptions import ResourceNotFoundError
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config import CONFIG
 from app.helpers.config_models.cache import MemoryModel
 from app.helpers.http import azure_transport
@@ -233,7 +233,7 @@ async def _get(key: str, type_res: type[T]) -> T | None:
     )
 
 
-@async_lru_cache()
+@lru_acache()
 async def _use_client() -> AzureAppConfigurationClient:
     """
     Generate the App Configuration client and close it after use.

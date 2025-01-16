@@ -1,4 +1,4 @@
-from functools import lru_cache
+from functools import cached_property
 
 from pydantic import BaseModel
 
@@ -10,7 +10,7 @@ class CosmosDbModel(BaseModel, frozen=True):
     database: str
     endpoint: str
 
-    @lru_cache
+    @cached_property
     def instance(self) -> IStore:
         from app.helpers.config import CONFIG
         from app.persistence.cosmos_db import (
@@ -18,7 +18,7 @@ class CosmosDbModel(BaseModel, frozen=True):
         )
 
         return CosmosDbStore(
-            cache=CONFIG.cache.instance(),
+            cache=CONFIG.cache.instance,
             config=self,
         )
 
@@ -26,5 +26,6 @@ class CosmosDbModel(BaseModel, frozen=True):
 class DatabaseModel(BaseModel):
     cosmos_db: CosmosDbModel
 
+    @cached_property
     def instance(self) -> IStore:
-        return self.cosmos_db.instance()
+        return self.cosmos_db.instance

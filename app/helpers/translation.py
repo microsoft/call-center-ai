@@ -9,14 +9,14 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config import CONFIG
 from app.helpers.http import azure_transport
 from app.helpers.logging import logger
 
 logger.info("Using Translation %s", CONFIG.ai_translation.endpoint)
 
-_cache = CONFIG.cache.instance()
+_cache = CONFIG.cache.instance
 
 
 @retry(
@@ -61,7 +61,7 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> str |
     return translation
 
 
-@async_lru_cache()
+@lru_acache()
 async def _use_client() -> TextTranslationClient:
     """
     Generate the Translation client and close it after use.

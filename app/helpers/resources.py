@@ -1,10 +1,11 @@
-from functools import lru_cache
 from os import getcwd
 from os.path import abspath, join
 from pathlib import Path
 
+from app.helpers.cache import lru_cache
 
-@lru_cache  # Cache results in memory as resources are not expected to change
+
+@lru_cache()  # Cache results in memory as resources are not expected to change
 def resources_dir(folder: str) -> str:
     """
     Get the absolute path to the resources folder.

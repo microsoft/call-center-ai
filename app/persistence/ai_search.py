@@ -45,7 +45,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config_models.ai_search import AiSearchModel
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
@@ -182,7 +182,7 @@ class AiSearchSearch(ISearch):
 
         return trainings or None
 
-    @async_lru_cache()
+    @lru_acache()
     async def _use_client(self) -> SearchClient:
         """
         Get the search client.

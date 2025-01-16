@@ -254,7 +254,7 @@ async def test_llm(  # noqa: PLR0913
     3. Test claim data exists
     4. Test LLM metrics
     """
-    db = CONFIG.database.instance()
+    db = CONFIG.database.instance
 
     def _play_media_callback(text: str) -> None:
         nonlocal actual_output
