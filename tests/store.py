@@ -20,7 +20,7 @@ async def test_acid(call: CallStateModel) -> None:
 
     Test is repeated 10 times to catch multi-threading and concurrency issues.
     """
-    db = CONFIG.database.instance()
+    db = CONFIG.database.instance
 
     # Check not exists
     assume(not await db.call_get(call.call_id))
@@ -67,7 +67,7 @@ async def test_transaction(
     """
     Test transactional properties of the database backend.
     """
-    db = CONFIG.database.instance()
+    db = CONFIG.database.instance
 
     async with Scheduler() as scheduler:
         # Check not exists

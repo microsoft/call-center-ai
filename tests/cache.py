@@ -37,7 +37,7 @@ async def test_acid(
     """
     # Set cache mode
     CONFIG.cache.mode = cache_mode
-    cache = CONFIG.cache.instance()
+    cache = CONFIG.cache.instance
 
     # Init values
     test_key = random_text

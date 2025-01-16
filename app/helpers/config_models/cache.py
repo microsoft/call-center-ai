@@ -1,5 +1,5 @@
 from enum import Enum
-from functools import lru_cache
+from functools import cached_property
 
 from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
@@ -16,7 +16,7 @@ class ModeEnum(str, Enum):
 class MemoryModel(BaseModel, frozen=True):
     max_size: int = Field(default=128, ge=10)
 
-    @lru_cache
+    @cached_property
     def instance(self) -> ICache:
         from app.persistence.memory import (
             MemoryCache,
@@ -32,7 +32,7 @@ class RedisModel(BaseModel, frozen=True):
     port: int = 6379
     ssl: bool = True
 
-    @lru_cache
+    @cached_property
     def instance(self) -> ICache:
         from app.persistence.redis import (
             RedisCache,
@@ -68,10 +68,11 @@ class CacheModel(BaseModel):
             raise ValueError("Memory config required")
         return memory
 
+    @cached_property
     def instance(self) -> ICache:
         if self.mode == ModeEnum.MEMORY:
             assert self.memory
-            return self.memory.instance()
+            return self.memory.instance
 
         assert self.redis
-        return self.redis.instance()
+        return self.redis.instance

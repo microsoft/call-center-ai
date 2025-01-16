@@ -130,7 +130,7 @@ class CallStateModel(CallGetModel, extra="ignore"):
         from app.helpers.monitoring import tracer
 
         with tracer.start_as_current_span("call_trainings"):
-            search = CONFIG.ai_search.instance()
+            search = CONFIG.ai_search.instance
             tasks = await asyncio.gather(
                 *[
                     search.training_search_all(

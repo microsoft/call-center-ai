@@ -49,7 +49,7 @@ from app.models.message import (
     extract_message_style,
 )
 
-_db = CONFIG.database.instance()
+_db = CONFIG.database.instance
 
 
 # TODO: Refacto, this function is too long

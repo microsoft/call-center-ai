@@ -9,10 +9,10 @@ from aiohttp_retry import JitterRetry, RetryClient
 from azure.core.pipeline.transport._aiohttp import AioHttpTransport
 from twilio.http.async_http_client import AsyncTwilioHttpClient
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 
 
-@async_lru_cache()
+@lru_acache()
 async def _aiohttp_cookie_jar() -> DummyCookieJar:
     """
     Create a cookie jar mock for AIOHTTP.
@@ -24,7 +24,7 @@ async def _aiohttp_cookie_jar() -> DummyCookieJar:
     return DummyCookieJar()
 
 
-@async_lru_cache()
+@lru_acache()
 async def aiohttp_session() -> ClientSession:
     """
     Create an AIOHTTP session.
@@ -48,7 +48,7 @@ async def aiohttp_session() -> ClientSession:
     )
 
 
-@async_lru_cache()
+@lru_acache()
 async def azure_transport() -> AioHttpTransport:
     """
     Create an AIOHTTP transport, for Azure SDK.
@@ -64,7 +64,7 @@ async def azure_transport() -> AioHttpTransport:
     )
 
 
-@async_lru_cache()
+@lru_acache()
 async def twilio_http() -> AsyncTwilioHttpClient:
     """
     Create a Twilio HTTP client.

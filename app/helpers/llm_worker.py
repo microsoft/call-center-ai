@@ -1,6 +1,5 @@
 import json
 from collections.abc import AsyncGenerator, Callable
-from functools import lru_cache
 from os import environ
 from typing import TypeVar
 
@@ -30,6 +29,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from app.helpers.cache import lru_cache
 from app.helpers.config import CONFIG
 from app.helpers.config_models.llm import DeploymentModel as LlmDeploymentModel
 from app.helpers.features import slow_llm_for_chat
@@ -345,7 +345,7 @@ def _limit_messages(  # noqa: PLR0913
     ]
 
 
-@lru_cache  # Cache results in memory as token count is done many times on the same content
+@lru_cache()  # Cache results in memory as token count is done many times on the same content
 def _count_tokens(content: str, model: str) -> int:
     """
     Returns the number of tokens in the content, using the model's encoding.
@@ -379,4 +379,4 @@ async def _use_llm(
 
     The client is either an Azure OpenAI or an OpenAI client, depending on the configuration.
     """
-    return await CONFIG.llm.selected(is_fast).instance()
+    return await CONFIG.llm.selected(is_fast).client()

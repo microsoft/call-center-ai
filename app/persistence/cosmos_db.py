@@ -10,7 +10,7 @@ from azure.cosmos.aio import ContainerProxy, CosmosClient
 from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
 from pydantic import ValidationError
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config_models.database import CosmosDbModel
 from app.helpers.features import callback_timeout_hour
 from app.helpers.http import azure_transport
@@ -373,7 +373,7 @@ class CosmosDbStore(IStore):
 
         return total
 
-    @async_lru_cache()
+    @lru_acache()
     async def _use_service_client(self) -> CosmosClient:
         """
         Generate the Cosmos DB client.

@@ -41,7 +41,7 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
 
-from app.helpers.cache import async_lru_cache, get_scheduler
+from app.helpers.cache import get_scheduler, lru_acache
 from app.helpers.call_events import (
     on_audio_connected,
     on_automation_play_completed,
@@ -106,14 +106,14 @@ _communication_services_jwks_client = jwt.PyJWKClient(
 )
 
 # Persistences
-_cache = CONFIG.cache.instance()
-_call_queue = CONFIG.queue.call()
-_db = CONFIG.database.instance()
-_post_queue = CONFIG.queue.post()
-_search = CONFIG.ai_search.instance()
-_sms = CONFIG.sms.instance()
-_sms_queue = CONFIG.queue.sms()
-_training_queue = CONFIG.queue.training()
+_cache = CONFIG.cache.instance
+_call_queue = CONFIG.queue.call
+_db = CONFIG.database.instance
+_post_queue = CONFIG.queue.post
+_search = CONFIG.ai_search.instance
+_sms = CONFIG.sms.instance
+_sms_queue = CONFIG.queue.sms
+_training_queue = CONFIG.queue.training
 
 # Communication Services callback
 assert CONFIG.public_domain, "public_domain config is not set"
@@ -1127,7 +1127,7 @@ def _standard_error(
     )
 
 
-@async_lru_cache()
+@lru_acache()
 async def _use_automation_client() -> CallAutomationClient:
     """
     Get the call automation client for Azure Communication Services.

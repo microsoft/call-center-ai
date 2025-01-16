@@ -15,7 +15,7 @@ from app.models.call import CallInitiateModel, CallStateModel
 from app.models.message import MessageModel, PersonaEnum as MessagePersonaEnum
 from tests.conftest import CallAutomationClientMock, SpeechSynthesizerMock
 
-_db = CONFIG.database.instance()
+_db = CONFIG.database.instance
 
 
 async def main() -> None:

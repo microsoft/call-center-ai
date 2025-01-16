@@ -40,7 +40,7 @@ from azure.communication.callautomation.aio import (
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from noisereduce import reduce_noise
 
-from app.helpers.cache import async_lru_cache
+from app.helpers.cache import lru_acache
 from app.helpers.config import CONFIG
 from app.helpers.features import (
     recognition_stt_complete_timeout_ms,
@@ -71,7 +71,7 @@ _TTS_SANITIZER_R = re.compile(
     r"[^\w\sÀ-ÿ'«»“”\"\"‘’''(),.!?;:\-\+_@/&€$%=]"  # noqa: RUF001
 )  # Sanitize text for TTS
 
-_db = CONFIG.database.instance()
+_db = CONFIG.database.instance
 
 
 class CallHangupException(Exception):
@@ -526,7 +526,7 @@ def _detect_hangup() -> Generator[None, None, None]:
             raise e
 
 
-@async_lru_cache()
+@lru_acache()
 async def _use_call_client(
     client: CallAutomationClient, voice_id: str
 ) -> CallConnectionClient:

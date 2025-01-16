@@ -20,9 +20,9 @@ from app.models.message import (
 from app.models.reminder import ReminderModel
 from app.models.training import TrainingModel
 
-_db = CONFIG.database.instance()
-_search = CONFIG.ai_search.instance()
-_sms = CONFIG.sms.instance()
+_db = CONFIG.database.instance
+_search = CONFIG.ai_search.instance
+_sms = CONFIG.sms.instance
 
 
 class UpdateClaimDict(TypedDict):

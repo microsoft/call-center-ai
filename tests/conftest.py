@@ -308,7 +308,7 @@ def random_text() -> str:
 
 @pytest_asyncio.fixture
 async def call() -> CallStateModel:
-    db = CONFIG.database.instance()
+    db = CONFIG.database.instance
     call = await db.call_create(
         CallStateModel(
             initiate=CallInitiateModel(
