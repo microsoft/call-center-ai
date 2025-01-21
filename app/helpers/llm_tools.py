@@ -98,8 +98,7 @@ class DefaultPlugin(AbstractPlugin):
                         content="",
                         persona=MessagePersonaEnum.HUMAN,
                     ),
-                    # Reinsert the last message, using more will add the user message asking to create the new claim and the assistant can loop on it sometimes
-                    self.call.messages[-1],
+                    # TODO: Should it be a reminder for the last conversation subject? It would allow to keep the context of the conversation. Keeping the last message in the history is felt as weird for users (see: https://github.com/microsoft/call-center-ai/issues/397).
                 ],
             )
         )
