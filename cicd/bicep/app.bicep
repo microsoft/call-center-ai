@@ -211,7 +211,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-02-02-preview' = {
             }
             {
               name: 'OTEL_TRACES_SAMPLER_ARG'
-              value: '0.2' // 20% sampling
+              value: '0.05' // 5% sampling
             }
           ]
           resources: {
