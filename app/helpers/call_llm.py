@@ -201,8 +201,8 @@ async def load_llm_chat(  # noqa: PLR0913
                     )
                 )
 
-            # Process the response and wait for latency metrics
-            await _commit_answer(wait=False)
+            # Process the response and wait for it to be able to kill the task if needed
+            await _commit_answer(wait=True)
 
         # First call
         if len(call.messages) <= 1:
@@ -215,7 +215,7 @@ async def load_llm_chat(  # noqa: PLR0913
             )
         # User is back
         else:
-            # Welcome with the LLM, do not use the end call tool for the first message, LLM hallucinates it and this is extremely frustrating for the user
+            # Welcome with the LLM, do not use the end call tool for the first message, LLM hallucinates it and this is extremely frustrating for the user, don't wait for the response to start the VAD quickly
             await _commit_answer(
                 tool_blacklist={"end_call"},
                 wait=False,
