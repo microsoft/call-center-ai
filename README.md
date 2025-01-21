@@ -472,8 +472,8 @@ Conversation options are represented as features. They can be configured from Ap
 
 | Name | Description | Type | Default |
 |-|-|-|-|
-| `answer_hard_timeout_sec` | The hard timeout for the bot answer in secs. | `int` | 60 |
-| `answer_soft_timeout_sec` | The soft timeout for the bot answer in secs. | `int` | 30 |
+| `answer_hard_timeout_sec` | Time waiting the LLM before aborting the answer with an error message. | `int` | 40 |
+| `answer_soft_timeout_sec` | Time waiting the LLM before sending a waiting message. | `int` | 15 |
 | `callback_timeout_hour` | The timeout for a callback in hours. Set 0 to disable. | `int` | 3 |
 | `phone_silence_timeout_sec` | Amount of silence in secs to trigger a warning message from the assistant. | `int` | 20 |
 | `recognition_retry_max` | TThe maximum number of retries for voice recognition. Minimum of 1. | `int` | 3 |
