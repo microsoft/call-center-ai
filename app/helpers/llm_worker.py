@@ -148,7 +148,9 @@ async def _completion_stream_worker(
         max_tokens=max_tokens,
         messages=prompt,
         stream=True,
-        tools=tools,
+        # AI Inference API doesn't support enpty tools array
+        # See: https://github.com/microsoft/call-center-ai/issues/399
+        tools=tools or None,
     )
 
     # Yield chuncks
