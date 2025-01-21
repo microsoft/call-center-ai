@@ -17,10 +17,10 @@ T = TypeVar("T", bool, int, float, str)
 
 async def answer_hard_timeout_sec() -> int:
     """
-    The hard timeout for the bot answer in secs.
+    Time waiting the LLM before aborting the answer with an error message.
     """
     return await _default(
-        default=60,
+        default=40,
         key="answer_hard_timeout_sec",
         type_res=int,
     )
@@ -28,10 +28,10 @@ async def answer_hard_timeout_sec() -> int:
 
 async def answer_soft_timeout_sec() -> int:
     """
-    The soft timeout for the bot answer in secs.
+    Time waiting the LLM before sending a waiting message.
     """
     return await _default(
-        default=30,
+        default=15,
         key="answer_soft_timeout_sec",
         type_res=int,
     )
