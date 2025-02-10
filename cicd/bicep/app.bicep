@@ -102,6 +102,7 @@ var config = {
     mode: 'redis'
     redis: {
       host: redis.name
+      port: redis.properties.configuration.ingress.targetPort
       ssl: false
     }
   }
