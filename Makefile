@@ -212,7 +212,7 @@ sync-local-config:
 			--query "[0].properties.template.containers[0].env[?name=='CONFIG_JSON'].value" \
 			--resource-group $(name_sanitized) \
 		| iconv -f utf-8 -t utf-8 -c \
-		| yq \
-			--output-format yaml \
+		| yq eval 'del(.cache)' \
+			--output-format=yaml \
 			--prettyPrint \
 		> config.yaml

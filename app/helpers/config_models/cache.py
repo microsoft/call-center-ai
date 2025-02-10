@@ -28,7 +28,7 @@ class MemoryModel(BaseModel, frozen=True):
 class RedisModel(BaseModel, frozen=True):
     database: int = Field(default=0, ge=0)
     host: str
-    password: SecretStr
+    password: SecretStr | None = None
     port: int = 6379
     ssl: bool = True
 

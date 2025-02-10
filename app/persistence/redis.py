@@ -138,7 +138,9 @@ class RedisCache(ICache):
             host=self._config.host,
             port=self._config.port,
             # Authentication
-            password=self._config.password.get_secret_value(),
+            password=self._config.password.get_secret_value()
+            if self._config.password
+            else None,
         )
 
     @asynccontextmanager

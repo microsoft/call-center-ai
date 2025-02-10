@@ -633,12 +633,6 @@ This totalizes $720.07 /month, $0.12 /hour, with the following breakdown:
 | Sweden Central | Serverless vCPU | $0.000024 /sec | $128.56 | Avg of 2 replicas with 1 vCPU |
 | Sweden Central | Serverless memory (average of 2 replicas) | $0.000003 /sec | $32.14 | Avg of 2 replicas with 2GB |
 
-[Azure Cache for Redis](https://azure.microsoft.com/en-us/pricing/details/cache/):
-
-| Region | Metric | Cost | Total (monthly $) | Note |
-|-|-|-|-|-|
-| Sweden Central | Standard C0 | $40.15 /month | $40.15 | Has 250MB of memory, should be upgraded for more intensive usage |
-
 [Azure AI Search](https://azure.microsoft.com/en-us/pricing/details/search/):
 
 | Region | Metric | Cost | Total (monthly $) | Note |
