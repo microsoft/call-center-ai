@@ -167,7 +167,6 @@ resource redis 'Microsoft.App/containerApps@2024-03-01' = {
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
-        exposedPort: 6379
         targetPort: 6379
         transport: 'tcp'
       }
