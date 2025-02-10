@@ -175,8 +175,9 @@ resource redis 'Microsoft.App/containerApps@2024-03-01' = {
     environmentId: acaEnv.id
     template: {
       scale: {
-        maxReplicas: 1
-        minReplicas: 1
+        maxReplicas: 1 // Scaling would require a cluster, not needed
+        minReplicas: 1 // Cache requires low latency, need to keep it running
+        rules: []
       }
       containers: [
         {
@@ -192,7 +193,7 @@ resource redis 'Microsoft.App/containerApps@2024-03-01' = {
               tcpSocket: {
                 port: 6379
               }
-              initialDelaySeconds: 10
+              initialDelaySeconds: 1 // Start in few secs, delay is not needed
             }
           ]
         }
