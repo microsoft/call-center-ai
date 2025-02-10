@@ -1,5 +1,5 @@
 # Builder container (with UV as package manager)
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:aacf61c53ed988e4a32b8b4da19043fdce7a8efcc67fb21ebc4cc0ba85f335b3 AS builder
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:525eb0972b68435ca35014cf975e368b1a6cdd48fb0b5836866518b89863ca4c AS builder
 
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
@@ -19,7 +19,7 @@ RUN --mount=target=/root/.cache/uv,type=cache,id=uv-${TARGETPLATFORM},sharing=lo
     uv sync --frozen --no-dev
 
 # Output container (with only venv and app source)
-FROM python:3.12-slim-bookworm@sha256:10f3aaab98db50cba827d3b33a91f39dc9ec2d02ca9b85cbc5008220d07b17f3
+FROM python:3.13-slim-bookworm@sha256:ae9f9ac89467077ed1efefb6d9042132d28134ba201b2820227d46c9effd3174
 
 WORKDIR /app
 

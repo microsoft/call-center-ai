@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class LoggingLevelEnum(str, Enum):
-    # Copied from https://docs.python.org/3.12/library/logging.html#logging-levels
+    # Copied from https://docs.python.org/3.13/library/logging.html#logging-levels
     CRITICAL = "CRITICAL"
     DEBUG = "DEBUG"
     ERROR = "ERROR"
