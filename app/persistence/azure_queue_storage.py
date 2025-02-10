@@ -63,7 +63,7 @@ class AzureQueueStorage:
         self,
         max_messages: int,
         visibility_timeout: int,
-    ) -> AsyncGenerator[Message, None]:
+    ) -> AsyncGenerator[Message]:
         async with self._use_client() as client:
             messages = client.receive_messages(
                 max_messages=max_messages,
@@ -175,7 +175,7 @@ class AzureQueueStorage:
         )
 
     @asynccontextmanager
-    async def _use_client(self) -> AsyncGenerator[QueueClient, None]:
+    async def _use_client(self) -> AsyncGenerator[QueueClient]:
         """
         Generate a queue client.
         """

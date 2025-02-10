@@ -130,7 +130,7 @@ class CosmosDbStore(IStore):
         self,
         call: CallStateModel,
         scheduler: Scheduler,
-    ) -> AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None]:
         # Copy and yield the updated object
         init_data = call.model_dump(mode="json", exclude_none=True)
         yield
@@ -397,7 +397,7 @@ class CosmosDbStore(IStore):
         )
 
     @asynccontextmanager
-    async def _use_client(self) -> AsyncGenerator[ContainerProxy, None]:
+    async def _use_client(self) -> AsyncGenerator[ContainerProxy]:
         """
         Generate the container client.
         """
