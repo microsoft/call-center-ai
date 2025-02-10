@@ -68,7 +68,7 @@ async def completion_stream(
     messages: list[MessageModel],
     system: list[SystemMessage],
     tools: list[ChatCompletionsToolDefinition] = [],
-) -> AsyncGenerator[StreamingChatResponseMessageUpdate, None]:
+) -> AsyncGenerator[StreamingChatResponseMessageUpdate]:
     """
     Returns a stream of completions.
 
@@ -124,7 +124,7 @@ async def _completion_stream_worker(
     messages: list[MessageModel],
     system: list[SystemMessage],
     tools: list[ChatCompletionsToolDefinition] = [],
-) -> AsyncGenerator[StreamingChatResponseMessageUpdate, None]:
+) -> AsyncGenerator[StreamingChatResponseMessageUpdate]:
     """
     Returns a stream of completions.
     """

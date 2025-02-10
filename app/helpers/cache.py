@@ -8,7 +8,7 @@ from aiojobs import Scheduler
 
 
 @asynccontextmanager
-async def get_scheduler() -> AsyncGenerator[Scheduler, None]:
+async def get_scheduler() -> AsyncGenerator[Scheduler]:
     """
     Get the scheduler for async background tasks.
 

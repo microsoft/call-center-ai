@@ -115,7 +115,7 @@ class ContextEnum(str, Enum):
 
 def tts_sentence_split(
     text: str, include_last: bool
-) -> Generator[tuple[str, int], None, None]:
+) -> Generator[tuple[str, int]]:
     """
     Split a text into sentences.
 
@@ -509,7 +509,7 @@ def _context_serializer(contexts: set[ContextEnum | None] | None) -> str | None:
 
 
 @contextmanager
-def _detect_hangup() -> Generator[None, None, None]:
+def _detect_hangup() -> Generator[None]:
     """
     Catch a call hangup and raise a `CallHangupException` instead of the Call Automation SDK exceptions.
     """
@@ -542,7 +542,7 @@ async def _use_call_client(
 async def use_tts_client(
     call: CallStateModel,
     out: asyncio.Queue[bytes],
-) -> AsyncGenerator[SpeechSynthesizer, None]:
+) -> AsyncGenerator[SpeechSynthesizer]:
     """
     Use a text-to-speech client for a call.
 

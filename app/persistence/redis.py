@@ -144,7 +144,7 @@ class RedisCache(ICache):
         )
 
     @asynccontextmanager
-    async def _use_client(self) -> AsyncGenerator[Redis, None]:
+    async def _use_client(self) -> AsyncGenerator[Redis]:
         """
         Return a Redis connection.
         """
