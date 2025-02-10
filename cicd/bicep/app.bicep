@@ -167,6 +167,7 @@ resource redis 'Microsoft.App/containerApps@2024-03-01' = {
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
+        external: false // No need to expose the cache
         targetPort: 6379
         transport: 'tcp'
       }
