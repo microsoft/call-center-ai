@@ -101,9 +101,8 @@ var config = {
   cache: {
     mode: 'redis'
     redis: {
-      host: redis.properties.hostName
-      password: redis.listKeys().primaryKey
-      port: redis.properties.sslPort
+      host: redis.name
+      ssl: false
     }
   }
   app_configuration: {
@@ -160,6 +159,48 @@ resource acaEnv 'Microsoft.App/managedEnvironments@2024-02-02-preview' = {
   }
 }
 
+resource redis 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'redis'
+  location: location
+  tags: tags
+  properties: {
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        exposedPort: 6379
+        targetPort: 6379
+        transport: 'tcp'
+      }
+    }
+    environmentId: acaEnv.id
+    template: {
+      scale: {
+        maxReplicas: 1
+        minReplicas: 1
+      }
+      containers: [
+        {
+          image: 'redis/redis-stack-server:7.4.0-v2'
+          name: 'redis'
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          probes: [
+            {
+              type: 'Startup'
+              tcpSocket: {
+                port: 6379
+              }
+              initialDelaySeconds: 10
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+
 var containerAppScaleRules = [
   for queue in [
     callQueue.name
@@ -211,7 +252,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-02-02-preview' = {
             }
             {
               name: 'OTEL_TRACES_SAMPLER_ARG'
-              value: '0.2' // 20% sampling
+              value: '0.05' // 5% sampling
             }
           ]
           resources: {
@@ -906,21 +947,6 @@ resource translate 'Microsoft.CognitiveServices/accounts@2024-06-01-preview' = {
   kind: 'TextTranslation'
   properties: {
     customSubDomainName: '${prefix}-${location}-translate'
-  }
-}
-
-resource redis 'Microsoft.Cache/redis@2024-03-01' = {
-  name: prefix
-  location: location
-  tags: tags
-  properties: {
-    sku: {
-      capacity: 0 // 250 MB of data
-      family: 'C'
-      name: 'Standard' // First tier with SLA
-    }
-    minimumTlsVersion: '1.2'
-    redisVersion: '6' // v6.x
   }
 }
 

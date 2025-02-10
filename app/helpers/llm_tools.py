@@ -69,19 +69,19 @@ class DefaultPlugin(AbstractPlugin):
         self,
     ) -> str:
         """
-        Use this if the customer wants to create a new claim.
+        Use this if the customer wants to open a new claim.
 
         # Behavior
         1. Old claim is stored but not accessible anymore
-        2. Reset the Assistant claim
+        2. Reset the conversation
 
         # Rules
         - Approval from the customer must be explicitely given (e.g. 'I want to create a new claim')
         - This should be used only when the subject is totally different
 
         # Usage examples
+        - Customer is talking about a totally different subject and confirmed they was done with the previous one
         - Customer wants explicitely to create a new claim
-        - Talking about a totally different subject
         """
         # Launch post-call intelligence for the current call
         await self.post_callback(self.call)
