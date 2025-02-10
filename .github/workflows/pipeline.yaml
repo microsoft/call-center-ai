@@ -34,7 +34,7 @@ jobs:
       VERSION_FULL: ${{ steps.version.outputs.version_full }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
         with:
           # We need all Git history for "version.sh"
           fetch-depth: 0
@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
         with:
           # We need all Git history for testing credentials
           fetch-depth: 0
@@ -60,7 +60,7 @@ jobs:
           submodules: recursive
 
       - name: Run tests
-        uses: trufflesecurity/trufflehog@v3.78.1
+        uses: trufflesecurity/trufflehog@v3.88.4
         with:
           base: ${{ github.event.repository.default_branch }}
           extra_args: --only-verified
@@ -76,7 +76,7 @@ jobs:
       image: returntocorp/semgrep
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
 
       - name: Run tests
         # Semgrep can be used to break the build when it detects security issues. In this case we want to upload the issues to GitHub Security
@@ -86,7 +86,7 @@ jobs:
         run: semgrep ci --sarif --output=semgrep.sarif
 
       - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3.25.10
+        uses: github/codeql-action/upload-sarif@v3.28.8
         with:
           sarif_file: semgrep.sarif
 
@@ -153,7 +153,7 @@ jobs:
         run: make test-${{ matrix.step }} version_full=${{ needs.init.outputs.VERSION_FULL }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4.3.6
+        uses: actions/upload-artifact@v4.6.0
         if: always()
         with:
           compression-level: 9
@@ -173,7 +173,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.2
+        uses: actions/checkout@v4.2.2
 
       - name: Configure Git
         run: |
@@ -258,7 +258,7 @@ jobs:
     if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
 
       - name: Create release
         id: create-release

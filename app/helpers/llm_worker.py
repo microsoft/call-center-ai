@@ -8,7 +8,6 @@ from azure.ai.inference._model_base import Model, SdkJSONEncoder
 from azure.ai.inference.aio import ChatCompletionsClient
 from azure.ai.inference.models import (
     AssistantMessage,
-    ChatCompletionsResponseFormatJSON,
     ChatCompletionsToolDefinition,
     ChatRequestMessage,
     StreamingChatResponseMessageUpdate,
@@ -276,11 +275,9 @@ async def _completion_sync_worker(
                     max_tokens=max_tokens,
                     messages=prompt,
                     model=platform.model,
+                    response_format="json_object" if json_output else None,
                     seed=platform.seed,
                     temperature=platform.temperature,
-                    response_format=ChatCompletionsResponseFormatJSON()
-                    if json_output
-                    else None,
                 )
             ).choices[0]
             # Azure OpenAI content filter
