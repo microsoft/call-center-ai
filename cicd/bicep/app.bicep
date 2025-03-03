@@ -824,8 +824,8 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
     consistencyPolicy: {
       defaultConsistencyLevel: 'Strong'
     }
-    databaseAccountOfferType: 'Standard'
-    disableLocalAuth: true
+    databaseAccountOfferType: 'Standard' // Required for serverless
+    disableLocalAuth: true // Disable access keys
     locations: [
       {
         locationName: location
