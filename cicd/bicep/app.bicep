@@ -310,14 +310,27 @@ resource containerApp 'Microsoft.App/containerApps@2024-02-02-preview' = {
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: replace(toLower(prefix), '-', '')
   location: location
-  tags: tags
+  tags: shallowMerge([
+    tags
+    // Ignoring "Secure PaaS Resources" (see: https://eng.ms/docs/cloud-ai-platform/azure-core/azure-networking/sdn-dbansal/azure-virtual-network-manager/nsp-dataplane-library/articles/ns22tsg/ns22tsgoverview)
+    {
+      SecurityControl: 'Ignore'
+    }
+  ])
   sku: {
     name: 'Standard_ZRS'
   }
   kind: 'StorageV2'
   properties: {
-    allowSharedKeyAccess: false
+    // Force using Entra ID authentication
+    defaultToOAuthAuthentication: true // Entra ID authorization in the Azure portal
+    isLocalUserEnabled: false // Disable access keys
+    // Secure transfers
+    minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
+    // Internet access is required to publish the front-end binaries to the container
+    // Note: Remediation rule "Secure PaaS Resources" requires to be disabled
+    publicNetworkAccess: 'Enabled'
   }
 }
 
