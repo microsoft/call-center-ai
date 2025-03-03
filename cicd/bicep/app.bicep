@@ -799,7 +799,13 @@ resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: prefix
   location: location
-  tags: tags
+  tags: shallowMerge([
+    tags
+    // Ignoring "Secure PaaS Resources" (see: https://eng.ms/docs/cloud-ai-platform/azure-core/azure-networking/sdn-dbansal/azure-virtual-network-manager/nsp-dataplane-library/articles/ns22tsg/ns22tsgoverview)
+    {
+      SecurityControl: 'Ignore'
+    }
+  ])
   kind: 'GlobalDocumentDB'
   properties: {
     consistencyPolicy: {
