@@ -102,6 +102,7 @@ var config = {
     mode: 'redis'
     redis: {
       host: redis.name
+      port: redis.properties.configuration.ingress.targetPort
       ssl: false
     }
   }
@@ -167,7 +168,6 @@ resource redis 'Microsoft.App/containerApps@2024-03-01' = {
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
-        exposedPort: 6379
         targetPort: 6379
         transport: 'tcp'
       }
@@ -175,8 +175,9 @@ resource redis 'Microsoft.App/containerApps@2024-03-01' = {
     environmentId: acaEnv.id
     template: {
       scale: {
-        maxReplicas: 1
-        minReplicas: 1
+        maxReplicas: 1 // Scaling would require a cluster, not needed
+        minReplicas: 1 // Cache requires low latency, need to keep it running
+        rules: []
       }
       containers: [
         {
@@ -192,7 +193,7 @@ resource redis 'Microsoft.App/containerApps@2024-03-01' = {
               tcpSocket: {
                 port: 6379
               }
-              initialDelaySeconds: 10
+              initialDelaySeconds: 1 // Start in few secs, delay is not needed
             }
           ]
         }
@@ -798,7 +799,13 @@ resource embedding 'Microsoft.CognitiveServices/accounts/deployments@2024-06-01-
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: prefix
   location: location
-  tags: tags
+  tags: shallowMerge([
+    tags
+    // Ignoring "Secure PaaS Resources" (see: https://eng.ms/docs/cloud-ai-platform/azure-core/azure-networking/sdn-dbansal/azure-virtual-network-manager/nsp-dataplane-library/articles/ns22tsg/ns22tsgoverview)
+    {
+      SecurityControl: 'Ignore'
+    }
+  ])
   kind: 'GlobalDocumentDB'
   properties: {
     consistencyPolicy: {
