@@ -9,7 +9,7 @@ param instance string
 param llmFastContext int = 128000
 param llmFastDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
 param llmFastModel string = 'gpt-4o-mini'
-param llmFastQuota int = 50
+param llmFastQuota int = 150
 param llmFastVersion string = '2024-07-18'
 param llmSlowContext int = 128000
 param llmSlowDeploymentType string = 'GlobalStandard' // Pay-as-you-go in all regions
