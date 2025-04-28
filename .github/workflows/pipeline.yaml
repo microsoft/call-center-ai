@@ -217,7 +217,7 @@ jobs:
 
       - name: Build/push container
         id: build
-        uses: docker/build-push-action@v5.3.0
+        uses: docker/build-push-action@v6.16.0
         with:
           build-args: |
             VERSION=${{ needs.init.outputs.VERSION_FULL }}
