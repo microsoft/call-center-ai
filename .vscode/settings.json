@@ -1,4 +1,6 @@
 {
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.inlayHints.variableTypes": true,
   "python.defaultInterpreterPath": ".venv/bin/python",
   "python.languageServer": "Pylance",
   "ruff.nativeServer": "on",
