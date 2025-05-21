@@ -129,13 +129,13 @@ jobs:
       #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
 
       - name: Cache pytest
-        uses: actions/cache@v4.0.2
+        uses: actions/cache@v4.2.3
         with:
           key: pytest-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
           path: .pytest_cache
 
       - name: Cache Ruff
-        uses: actions/cache@v4.0.2
+        uses: actions/cache@v4.2.3
         with:
           key: ruff-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
           path: .ruff_cache
