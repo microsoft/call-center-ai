@@ -1,22 +1,22 @@
 from abc import ABC, abstractmethod
 
-from app.helpers.monitoring import tracer
+from app.helpers.monitoring import start_as_current_span
 from app.models.readiness import ReadinessEnum
 
 
 class ICache(ABC):
     @abstractmethod
-    @tracer.start_as_current_span("cache_readiness")
+    @start_as_current_span("cache_readiness")
     async def readiness(self) -> ReadinessEnum:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("cache_get")
+    @start_as_current_span("cache_get")
     async def get(self, key: str) -> bytes | None:
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("cache_set")
+    @start_as_current_span("cache_set")
     async def set(
         self,
         key: str,
@@ -26,6 +26,6 @@ class ICache(ABC):
         pass
 
     @abstractmethod
-    @tracer.start_as_current_span("cache_delete")
+    @start_as_current_span("cache_delete")
     async def delete(self, key: str) -> bool:
         pass

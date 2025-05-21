@@ -35,7 +35,7 @@ from app.helpers.config import CONFIG
 from app.helpers.features import recognition_retry_max, recording_enabled
 from app.helpers.llm_worker import completion_sync
 from app.helpers.logging import logger
-from app.helpers.monitoring import SpanAttributeEnum, tracer
+from app.helpers.monitoring import SpanAttributeEnum, start_as_current_span
 from app.models.call import CallStateModel
 from app.models.message import (
     ActionEnum as MessageActionEnum,
@@ -50,7 +50,7 @@ _sms = CONFIG.sms.instance
 _db = CONFIG.database.instance
 
 
-@tracer.start_as_current_span("on_new_call")
+@start_as_current_span("on_new_call")
 async def on_new_call(
     callback_url: str,
     client: CallAutomationClient,
@@ -101,7 +101,7 @@ async def on_new_call(
     return False
 
 
-@tracer.start_as_current_span("on_call_connected")
+@start_as_current_span("on_call_connected")
 async def on_call_connected(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -145,7 +145,7 @@ async def on_call_connected(
         )
 
 
-@tracer.start_as_current_span("on_call_disconnected")
+@start_as_current_span("on_call_disconnected")
 async def on_call_disconnected(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -166,7 +166,7 @@ async def on_call_disconnected(
     )
 
 
-@tracer.start_as_current_span("on_audio_connected")
+@start_as_current_span("on_audio_connected")
 async def on_audio_connected(  # noqa: PLR0913
     audio_in: asyncio.Queue[bytes],
     audio_out: asyncio.Queue[bytes | bool],
@@ -194,7 +194,7 @@ async def on_audio_connected(  # noqa: PLR0913
     )
 
 
-@tracer.start_as_current_span("on_automation_recognize_error")
+@start_as_current_span("on_automation_recognize_error")
 async def on_automation_recognize_error(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -243,7 +243,7 @@ async def on_automation_recognize_error(
     )
 
 
-@tracer.start_as_current_span("on_realtime_recognize_error")
+@start_as_current_span("on_realtime_recognize_error")
 async def on_realtime_recognize_error(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -334,7 +334,7 @@ async def _pre_recognize_error(
     return True
 
 
-@tracer.start_as_current_span("on_play_started")
+@start_as_current_span("on_play_started")
 async def on_play_started(
     call: CallStateModel,
     scheduler: Scheduler,
@@ -357,7 +357,7 @@ async def on_play_started(
         call.last_interaction_at = datetime.now(UTC)
 
 
-@tracer.start_as_current_span("on_play_completed")
+@start_as_current_span("on_play_completed")
 async def on_automation_play_completed(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -403,7 +403,7 @@ async def on_automation_play_completed(
     logger.warning("Unknown context %s", contexts)
 
 
-@tracer.start_as_current_span("on_play_error")
+@start_as_current_span("on_play_error")
 async def on_play_error(error_code: int) -> None:
     """
     Callback for when a media play action fails.
@@ -436,7 +436,7 @@ async def on_play_error(error_code: int) -> None:
             logger.warning("Error during media play, unknown error code %s", error_code)
 
 
-@tracer.start_as_current_span("on_ivr_recognized")
+@start_as_current_span("on_ivr_recognized")
 async def on_ivr_recognized(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -478,7 +478,7 @@ async def on_ivr_recognized(
     )
 
 
-@tracer.start_as_current_span("on_transfer_error")
+@start_as_current_span("on_transfer_error")
 async def on_transfer_error(
     call: CallStateModel,
     client: CallAutomationClient,
@@ -502,7 +502,7 @@ async def on_transfer_error(
     )
 
 
-@tracer.start_as_current_span("on_sms_received")
+@start_as_current_span("on_sms_received")
 async def on_sms_received(
     call: CallStateModel,
     message: str,

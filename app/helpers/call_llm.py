@@ -37,7 +37,7 @@ from app.helpers.monitoring import (
     SpanAttributeEnum,
     call_cutoff_latency,
     gauge_set,
-    tracer,
+    start_as_current_span,
 )
 from app.models.call import CallStateModel
 from app.models.message import (
@@ -53,7 +53,7 @@ _db = CONFIG.database.instance
 
 
 # TODO: Refacto, this function is too long
-@tracer.start_as_current_span("call_load_llm_chat")
+@start_as_current_span("call_load_llm_chat")
 async def load_llm_chat(  # noqa: PLR0913
     audio_in: asyncio.Queue[bytes],
     audio_out: asyncio.Queue[bytes | bool],
@@ -233,7 +233,7 @@ async def load_llm_chat(  # noqa: PLR0913
 
 
 # TODO: Refacto, this function is too long (and remove PLR0912/PLR0915 ignore)
-@tracer.start_as_current_span("call_continue_chat")
+@start_as_current_span("call_continue_chat")
 async def _continue_chat(  # noqa: PLR0915, PLR0913
     call: CallStateModel,
     client: CallAutomationClient,
@@ -426,7 +426,7 @@ async def _continue_chat(  # noqa: PLR0915, PLR0913
 
 
 # TODO: Refacto, this function is too long
-@tracer.start_as_current_span("call_generate_chat_completion")
+@start_as_current_span("call_generate_chat_completion")
 async def _generate_chat_completion(  # noqa: PLR0913, PLR0912, PLR0915
     call: CallStateModel,
     client: CallAutomationClient,
