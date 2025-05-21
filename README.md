@@ -50,7 +50,7 @@ curl \
 
 - **Enhanced communication and user experience**: Integrates inbound and outbound calls with a dedicated phone number, supports multiple languages and voice tones, and allows users to provide or receive information via SMS. Conversations are **streamed in real-time** to avoid delays, can be **resumed after disconnections**, and are **stored for future reference**. This ensures an **improved customer experience**, enabling 24/7 communication and handling of low to medium complexity calls, all in a more accessible and user-friendly manner.
 
-- **Advanced intelligence and data management**: Leverages **GPT-4o** and **GPT-4o Realtime** (known for higher performance and a 10–15x cost premium) to achieve nuanced comprehension. It can discuss **private and sensitive data**, including customer-specific information, while following **retrieval-augmented generation (RAG)** best practices to ensure secure and compliant handling of internal documents. The system understands domain-specific terms, follows a structured claim schema, generates automated to-do lists, filters inappropriate content, and detects jailbreak attempts. Historical conversations and past interactions can also be used to **fine-tune the LLM**, improving accuracy and personalization over time. Redis caching further enhances efficiency.
+- **Advanced intelligence and data management**: Leverages **gpt-4.1** and **gpt-4.1-nano** (known for higher performance and a 10–15x cost premium) to achieve nuanced comprehension. It can discuss **private and sensitive data**, including customer-specific information, while following **retrieval-augmented generation (RAG)** best practices to ensure secure and compliant handling of internal documents. The system understands domain-specific terms, follows a structured claim schema, generates automated to-do lists, filters inappropriate content, and detects jailbreak attempts. Historical conversations and past interactions can also be used to **fine-tune the LLM**, improving accuracy and personalization over time. Redis caching further enhances efficiency.
 
 - **Customization, oversight, and scalability**: Offers **customizable prompts**, feature flags for controlled experimentation, human agent fallback, and call recording for quality assurance. Integrates Application Insights for monitoring and tracing, provides publicly accessible claim data, and plans future enhancements such as automated callbacks and IVR-like workflows. It also enables the creation of a **brand-specific custom voice**, allowing the assistant’s voice to reflect the company’s identity and improve brand consistency.
 
@@ -160,7 +160,7 @@ graph LR
     communication_services["Call & SMS gateway<br>(Communication Services)"]
     db[("Conversations and claims<br>(Cosmos DB)")]
     eventgrid["Broker<br>(Event Grid)"]
-    gpt["LLM<br>(GPT-4o)"]
+    gpt["LLM<br>(gpt-4.1, gpt-4.1-nano)"]
     queues[("Queues<br>(Azure Storage)")]
     redis[("Cache<br>(Redis)")]
     search[("RAG<br>(AI Search)")]
@@ -571,7 +571,7 @@ The delay mainly come from two things:
 - Voice in and voice out are processed by Azure AI Speech, both are implemented in streaming mode but voice is not directly streamed to the LLM
 - The LLM, more specifically the delay between API call and first sentence infered, can be long (as the sentences are sent one by one once they are made avalable), even longer if it hallucinate and returns empty answers (it happens regularly, and the applicatoipn retries the call)
 
-From now, the only impactful thing you can do is the LLM part. This can be acheieve by a PTU on Azure or using a less smart model like `gpt-4o-mini` (selected by default on the latest versions). With a PTU on Azure OpenAI, you can divide by 2 the latency in some case.
+From now, the only impactful thing you can do is the LLM part. This can be acheieve by a PTU on Azure or using a less smart model like `gpt-4.1-nano` (selected by default on the latest versions). With a PTU on Azure OpenAI, you can divide by 2 the latency in some case.
 
 The application is natively connected to Azure Application Insights, so you can monitor the response time and see where the time is spent. This is a great start to identify the bottlenecks.
 
@@ -620,10 +620,10 @@ This totalizes $720.07 /month, $0.12 /hour, with the following breakdown:
 
 | Region | Metric | Cost | Total (monthly $) | Note |
 |-|-|-|-|-|
-| Sweden Central | GPT-4o mini global | $0.15 /1M input tokens | $35.25 | 8k tokens for conversation history, 3750 tokens for RAG, each participant talk every 15s |
-| Sweden Central | GPT-4o mini global | $0.60 /1M output tokens | $1.4 | 400 tokens for each response incl tools, each participant talk every 15s |
-| Sweden Central | GPT-4o global | $2.50 /1M input tokens | $10 | 4k tokens for each conversation, to get insights |
-| Sweden Central | GPT-4o global | $10 /1M output tokens | $10 | 1k tokens for each conversation, to get insights |
+| Sweden Central | gpt-4.1-nano global | $0.15 /1M input tokens | $35.25 | 8k tokens for conversation history, 3750 tokens for RAG, each participant talk every 15s |
+| Sweden Central | gpt-4.1-nano global | $0.60 /1M output tokens | $1.4 | 400 tokens for each response incl tools, each participant talk every 15s |
+| Sweden Central | gpt-4.1 global | $2.50 /1M input tokens | $10 | 4k tokens for each conversation, to get insights |
+| Sweden Central | gpt-4.1 global | $10 /1M output tokens | $10 | 1k tokens for each conversation, to get insights |
 | Sweden Central | text-embedding-3-large | $0.00013 /1k tokens | $2.08 | 1 search or 400 tokens for each message, each participant talk every 15s |
 
 [Azure Container Apps](https://azure.microsoft.com/en-us/pricing/details/container-apps/):
