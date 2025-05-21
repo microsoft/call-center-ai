@@ -23,7 +23,7 @@ env:
   # See: https://github.com/azure/azure-cli/releases
   AZURE_CLI_VERSION: 2.68.0
   # https://github.com/docker/buildx/releases
-  BUILDX_VERSION: 0.17.1
+  BUILDX_VERSION: 0.23.0
 
 jobs:
   init:
