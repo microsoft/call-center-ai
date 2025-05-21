@@ -33,7 +33,7 @@ from app.helpers.config import CONFIG
 from app.helpers.config_models.llm import DeploymentModel as LlmDeploymentModel
 from app.helpers.features import slow_llm_for_chat
 from app.helpers.logging import logger
-from app.helpers.monitoring import tracer
+from app.helpers.monitoring import start_as_current_span
 from app.helpers.resources import resources_dir
 from app.models.message import MessageModel
 
@@ -62,7 +62,7 @@ _retried_exceptions = [
 ]
 
 
-@tracer.start_as_current_span("llm_completion_stream")
+@start_as_current_span("llm_completion_stream")
 async def completion_stream(
     max_tokens: int,
     messages: list[MessageModel],
@@ -176,7 +176,7 @@ async def _completion_stream_worker(
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(multiplier=0.8, max=8),
 )
-@tracer.start_as_current_span("llm_completion_sync")
+@start_as_current_span("llm_completion_sync")
 async def completion_sync(
     res_type: type[T],
     system: list[SystemMessage],

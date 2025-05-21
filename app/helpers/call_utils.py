@@ -3,7 +3,7 @@ import json
 import re
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
-from contextlib import asynccontextmanager, contextmanager, suppress
+from contextlib import asynccontextmanager, contextmanager
 from enum import Enum
 from typing import Any
 
@@ -55,6 +55,7 @@ from app.helpers.monitoring import (
     call_stt_complete_latency,
     counter_add,
     gauge_set,
+    suppress,
 )
 from app.models.call import CallStateModel
 from app.models.message import (
@@ -113,9 +114,7 @@ class ContextEnum(str, Enum):
     """Transfer failed"""
 
 
-def tts_sentence_split(
-    text: str, include_last: bool
-) -> Generator[tuple[str, int]]:
+def tts_sentence_split(text: str, include_last: bool) -> Generator[tuple[str, int]]:
     """
     Split a text into sentences.
 

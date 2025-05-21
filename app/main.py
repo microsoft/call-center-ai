@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from base64 import b64decode, b64encode
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
@@ -65,7 +65,8 @@ from app.helpers.monitoring import (
     call_frames_in_latency,
     call_frames_out_latency,
     gauge_set,
-    tracer,
+    start_as_current_span,
+    suppress,
 )
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
 from app.helpers.resources import resources_dir
@@ -180,7 +181,7 @@ api = FastAPI(
 
 
 @api.get("/health/liveness")
-@tracer.start_as_current_span("health_liveness_get")
+@start_as_current_span("health_liveness_get")
 async def health_liveness_get() -> None:
     """
     Check if the service is running.
@@ -196,7 +197,7 @@ async def health_liveness_get() -> None:
     "/health/readiness",
     status_code=HTTPStatus.OK,
 )
-@tracer.start_as_current_span("health_readiness_get")
+@start_as_current_span("health_readiness_get")
 async def health_readiness_get() -> JSONResponse:
     """
     Check if the service is ready to serve requests.
@@ -244,7 +245,7 @@ async def health_readiness_get() -> JSONResponse:
     "/report",
     response_class=HTMLResponse,
 )
-@tracer.start_as_current_span("report_get")
+@start_as_current_span("report_get")
 async def report_get(phone_number: str | None = None) -> HTMLResponse:
     """
     List all calls with a web interface.
@@ -283,7 +284,7 @@ async def report_get(phone_number: str | None = None) -> HTMLResponse:
     "/report/{call_id}",
     response_class=HTMLResponse,
 )
-@tracer.start_as_current_span("report_single_get")
+@start_as_current_span("report_single_get")
 async def report_single_get(call_id: UUID) -> HTMLResponse:
     """
     Show a single call with a web interface.
@@ -316,7 +317,7 @@ async def report_single_get(call_id: UUID) -> HTMLResponse:
 
 
 @api.get("/call")
-@tracer.start_as_current_span("call_list_get")
+@start_as_current_span("call_list_get")
 async def call_list_get(
     phone_number: str | None = None,
 ) -> list[CallGetModel]:
@@ -342,7 +343,7 @@ async def call_list_get(
 
 
 @api.get("/call/{call_id_or_phone_number}")
-@tracer.start_as_current_span("call_get")
+@start_as_current_span("call_get")
 async def call_get(call_id_or_phone_number: str) -> CallGetModel:
     """
     REST API to search for calls by call ID or phone number.
@@ -378,7 +379,7 @@ async def call_get(call_id_or_phone_number: str) -> CallGetModel:
     "/call",
     status_code=HTTPStatus.CREATED,
 )
-@tracer.start_as_current_span("call_post")
+@start_as_current_span("call_post")
 async def call_post(request: Request) -> CallGetModel:
     """
     REST API to initiate a call.
@@ -427,7 +428,7 @@ async def call_post(request: Request) -> CallGetModel:
     return TypeAdapter(CallGetModel).dump_python(call)
 
 
-@tracer.start_as_current_span("call_event")
+@start_as_current_span("call_event")
 async def call_event(
     call: AzureQueueStorageMessage,
 ) -> None:
@@ -467,7 +468,7 @@ async def call_event(
     )
 
 
-@tracer.start_as_current_span("sms_event")
+@start_as_current_span("sms_event")
 async def sms_event(
     sms: AzureQueueStorageMessage,
 ) -> None:
@@ -577,7 +578,7 @@ async def _communicationservices_validate_call_id(
 
 
 @api.websocket("/communicationservices/wss/{call_id}/{secret}")
-@tracer.start_as_current_span("communicationservices_event_post")
+@start_as_current_span("communicationservices_event_post")
 async def communicationservices_wss_post(
     call_id: UUID,
     secret: Annotated[str, Field(min_length=16, max_length=16)],
@@ -701,7 +702,7 @@ async def communicationservices_wss_post(
 
 
 @api.post("/communicationservices/callback/{call_id}/{secret}")
-@tracer.start_as_current_span("communicationservices_callback_post")
+@start_as_current_span("communicationservices_callback_post")
 async def communicationservices_callback_post(
     call_id: UUID,
     request: Request,
@@ -878,7 +879,7 @@ async def _communicationservices_event_worker(
                 # logger.debug("Event data %s", event.data)
 
 
-@tracer.start_as_current_span("training_event")
+@start_as_current_span("training_event")
 async def training_event(
     training: AzureQueueStorageMessage,
 ) -> None:
@@ -902,7 +903,7 @@ async def training_event(
     await call.trainings(cache_only=False)  # Get trainings by advance to populate cache
 
 
-@tracer.start_as_current_span("post_event")
+@start_as_current_span("post_event")
 async def post_event(
     post: AzureQueueStorageMessage,
 ) -> None:
@@ -987,7 +988,7 @@ async def _communicationservices_urls(
     "/twilio/sms",
     status_code=HTTPStatus.OK,
 )
-@tracer.start_as_current_span("twilio_sms_post")
+@start_as_current_span("twilio_sms_post")
 async def twilio_sms_post(
     Body: Annotated[str, Form()],
     From: Annotated[PhoneNumber, Form()],

@@ -1,4 +1,7 @@
+from asyncio import iscoroutinefunction
+from contextlib import contextmanager
 from enum import Enum
+from functools import wraps
 from os import environ
 
 from azure.monitor.opentelemetry import configure_azure_monitor
@@ -6,8 +9,9 @@ from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.metrics._internal.instrument import Counter, Gauge
 from opentelemetry.semconv.attributes import service_attributes
+from opentelemetry.trace import Status, StatusCode
 from opentelemetry.trace.span import INVALID_SPAN
-from opentelemetry.util.types import AttributeValue
+from opentelemetry.util.types import Attributes, AttributeValue
 from structlog.contextvars import bind_contextvars, get_contextvars
 
 MODULE_NAME = "com.github.clemlesne.call-center-ai"
@@ -169,3 +173,54 @@ def counter_add(
             **get_contextvars(),
         },
     )
+
+
+def start_as_current_span(
+    name: str,
+    attributes: Attributes = None,
+):
+    """
+    Decorator to start an OTEL span for the function and set it as the current.
+    """
+
+    def _wrapper(func):
+        @wraps(func)
+        def _inner(*args, **kwargs):
+            # Start a span
+            with tracer.start_as_current_span(
+                attributes=attributes,
+                name=name,
+            ):
+                # Call the function
+                return func(*args, **kwargs)
+
+        @wraps(func)
+        async def _async_inner(*args, **kwargs):
+            # Start a span
+            with tracer.start_as_current_span(
+                attributes=attributes,
+                name=name,
+            ):
+                # Call the function
+                return await func(*args, **kwargs)
+
+        return _async_inner if iscoroutinefunction(func) else _inner
+
+    return _wrapper
+
+
+@contextmanager
+def suppress(*exceptions):
+    """
+    Context manager to suppress exceptions, while also logging them properly in OTEL.
+
+    OTEL span will always be set to OK status, even if an exception occurs. But exception will still be recorded.
+    """
+    try:
+        # Try executing the block
+        yield
+    # If an exception occurs, set the span status to OK and record the exception
+    except exceptions as e:
+        span = trace.get_current_span()
+        span.set_status(Status(StatusCode.OK))
+        span.record_exception(e)

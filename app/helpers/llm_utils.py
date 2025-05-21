@@ -27,7 +27,7 @@ from pydantic.json_schema import JsonSchemaValue
 
 from app.helpers.cache import lru_acache, lru_cache
 from app.helpers.logging import logger
-from app.helpers.monitoring import SpanAttributeEnum, tracer
+from app.helpers.monitoring import SpanAttributeEnum, start_as_current_span
 from app.models.call import CallStateModel
 from app.models.message import ToolModel
 
@@ -85,7 +85,7 @@ class AbstractPlugin:
             *[_function_schema(func, call=self.call) for func in functions]
         )
 
-    @tracer.start_as_current_span("plugin_execute")
+    @start_as_current_span("plugin_execute")
     async def execute(
         self,
         tool: ToolModel,

@@ -11,6 +11,7 @@ from app.helpers.config_models.conversation import (
     LanguageEntryModel,
     WorkflowInitiateModel,
 )
+from app.helpers.monitoring import tracer
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
 from app.models.message import (
     ActionEnum as MessageActionEnum,
@@ -127,7 +128,6 @@ class CallStateModel(CallGetModel, extra="ignore"):
         Is using query expansion from last messages. Then, data is sorted by score.
         """
         from app.helpers.config import CONFIG
-        from app.helpers.monitoring import tracer
 
         with tracer.start_as_current_span("call_trainings"):
             search = CONFIG.ai_search.instance
