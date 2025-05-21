@@ -722,3 +722,8 @@ Responsible AI:
 ### Why no LLM framework is used?
 
 At the time of development, no LLM framework was available to handle all of these features: streaming capability with multi-tools, backup models on availability issue, callbacks mechanisms in the triggered tools. So, OpenAI SDK is used directly and some algorithms are implemented to handle reliability.
+
+## Related content
+
+- For a simple sample with Azure OpenAI `gpt-4o-realtime`, local deployment only, [see VoiceRAG](https://github.com/Azure-Samples/aisearch-openai-rag-audio)
+- For an easier-to-use sample with Azure OpenAI `gpt-4o-realtime`, deployed on Azure, [see Realtime Call Center Solution Accelerator](https://github.com/Azure-Samples/realtime-call-center-accelerator)
