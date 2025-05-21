@@ -5,12 +5,17 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
-  - package-ecosystem: "devcontainers"
+  - package-ecosystem: devcontainers
     directory: ""
     target-branch: develop
     schedule:
       interval: weekly
   - package-ecosystem: docker
+    directory: ""
+    target-branch: develop
+    schedule:
+      interval: weekly
+  - package-ecosystem: uv
     directory: ""
     target-branch: develop
     schedule:
