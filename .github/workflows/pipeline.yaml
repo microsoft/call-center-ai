@@ -19,11 +19,8 @@ env:
   CONTAINER_NAME: ${{ github.repository }}
   CONTAINER_REGISTRY_GHCR: ghcr.io
   CONTAINER_PLATFORMS: linux/amd64,linux/arm64/v8
-  # Tool versions
-  # See: https://github.com/azure/azure-cli/releases
-  AZURE_CLI_VERSION: 2.68.0
   # https://github.com/docker/buildx/releases
-  BUILDX_VERSION: 0.17.1
+  BUILDX_VERSION: 0.23.0
 
 jobs:
   init:
@@ -107,7 +104,7 @@ jobs:
           # - unit
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5.2.2
@@ -115,11 +112,6 @@ jobs:
           enable-cache: true
           python-version: "3.13"
           version: "0.5.x"
-
-      - name: Set up Azure CLI
-        run: |
-          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-          sudo apt-get install azure-cli=${{ env.AZURE_CLI_VERSION }}-1~$(lsb_release -cs)
 
       # - name: Login to Azure
       #   uses: Azure/login@v2.2.0
@@ -129,13 +121,13 @@ jobs:
       #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
 
       - name: Cache pytest
-        uses: actions/cache@v4.0.2
+        uses: actions/cache@v4.2.3
         with:
           key: pytest-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
           path: .pytest_cache
 
       - name: Cache Ruff
-        uses: actions/cache@v4.0.2
+        uses: actions/cache@v4.2.3
         with:
           key: ruff-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
           path: .ruff_cache
@@ -182,7 +174,7 @@ jobs:
 
       - name: Setup QEMU
         id: setup-qemu
-        uses: docker/setup-qemu-action@v3.0.0
+        uses: docker/setup-qemu-action@v3.6.0
         with:
           platforms: ${{ env.CONTAINER_PLATFORMS }}
 
@@ -200,7 +192,7 @@ jobs:
 
       - name: Container meta
         id: meta
-        uses: docker/metadata-action@v5.5.1
+        uses: docker/metadata-action@v5.7.0
         with:
           images: ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
           tags: |
@@ -217,7 +209,7 @@ jobs:
 
       - name: Build/push container
         id: build
-        uses: docker/build-push-action@v5.3.0
+        uses: docker/build-push-action@v6.17.0
         with:
           build-args: |
             VERSION=${{ needs.init.outputs.VERSION_FULL }}
