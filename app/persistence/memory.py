@@ -1,9 +1,9 @@
 import hashlib
 from collections import OrderedDict
-from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 from app.helpers.config_models.cache import MemoryModel
+from app.helpers.monitoring import suppress
 from app.models.readiness import ReadinessEnum
 from app.persistence.icache import ICache
 

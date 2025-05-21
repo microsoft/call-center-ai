@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from base64 import b64decode, b64encode
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from http import HTTPStatus
 from os import getenv
@@ -65,6 +65,7 @@ from app.helpers.monitoring import (
     call_frames_in_latency,
     call_frames_out_latency,
     gauge_set,
+    suppress,
     tracer,
 )
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber

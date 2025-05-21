@@ -1,5 +1,3 @@
-from contextlib import suppress
-
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceExistsError,
@@ -50,6 +48,7 @@ from app.helpers.config_models.ai_search import AiSearchModel
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 from app.helpers.logging import logger
+from app.helpers.monitoring import suppress
 from app.models.readiness import ReadinessEnum
 from app.models.training import TrainingModel
 from app.persistence.icache import ICache

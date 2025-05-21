@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -16,6 +16,7 @@ from app.helpers.features import callback_timeout_hour
 from app.helpers.http import azure_transport
 from app.helpers.identity import credential
 from app.helpers.logging import logger
+from app.helpers.monitoring import suppress
 from app.models.call import CallStateModel
 from app.models.readiness import ReadinessEnum
 from app.persistence.icache import ICache

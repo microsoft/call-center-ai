@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from enum import Enum
 from os import environ
 
@@ -6,6 +7,7 @@ from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.metrics._internal.instrument import Counter, Gauge
 from opentelemetry.semconv.attributes import service_attributes
+from opentelemetry.trace import Status, StatusCode
 from opentelemetry.trace.span import INVALID_SPAN
 from opentelemetry.util.types import AttributeValue
 from structlog.contextvars import bind_contextvars, get_contextvars
@@ -169,3 +171,20 @@ def counter_add(
             **get_contextvars(),
         },
     )
+
+
+@contextmanager
+def suppress(*exceptions):
+    """
+    Context manager to suppress exceptions, while also logging them properly in OTEL.
+
+    OTEL span will always be set to OK status, even if an exception occurs. But exception will still be recorded.
+    """
+    try:
+        # Try executing the block
+        yield
+    # If an exception occurs, set the span status to OK and record the exception
+    except exceptions as e:
+        span = trace.get_current_span()
+        span.set_status(Status(StatusCode.OK))
+        span.record_exception(e)
