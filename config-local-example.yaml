@@ -24,11 +24,11 @@ cognitive_service:
 
 llm:
   fast:
-    context: 16385
+    context: 1047576
     endpoint: https://xxx.openai.azure.com/openai/deployments/gpt-4.1-nano-2025-04-14
     model: gpt-4.1-nano
   slow:
-    context: 128000
+    context: 1047576
     endpoint: https://xxx.openai.azure.com/openai/deployments/gpt-4.1-2025-04-14
     model: gpt-4.1
 
