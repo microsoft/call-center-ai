@@ -20,7 +20,7 @@ async def answer_hard_timeout_sec() -> int:
     Time waiting the LLM before aborting the answer with an error message.
     """
     return await _default(
-        default=40,
+        default=15,
         key="answer_hard_timeout_sec",
         type_res=int,
     )
@@ -31,7 +31,7 @@ async def answer_soft_timeout_sec() -> int:
     Time waiting the LLM before sending a waiting message.
     """
     return await _default(
-        default=15,
+        default=3,
         key="answer_soft_timeout_sec",
         type_res=int,
     )

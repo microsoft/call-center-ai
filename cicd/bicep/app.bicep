@@ -996,8 +996,8 @@ resource assignmentAppConfigurationDataReader 'Microsoft.Authorization/roleAssig
 
 resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@2023-03-01' = [
   for item in items({
-    answer_hard_timeout_sec: 40
-    answer_soft_timeout_sec: 15
+    answer_hard_timeout_sec: 15
+    answer_soft_timeout_sec: 4
     callback_timeout_hour: 3
     phone_silence_timeout_sec: 20
     recognition_retry_max: 2
