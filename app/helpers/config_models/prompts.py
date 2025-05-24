@@ -475,49 +475,73 @@ class LlmModel(BaseModel):
 class TtsModel(BaseModel):
     tts_lang: str = "en-US"
     calltransfer_failure_tpl: list[str] = [
-        "It seems I can't connect you with an agent at the moment, but the next available agent will call you back as soon as possible.",
-        "I'm unable to connect you with an agent right now, but someone will get back to you shortly.",
-        "Sorry, no agents are available. We'll call you back soon.",
+        "All lines are busy. We'll call you back in a moment.",
+        "All our agents are busy. Expect a callback soon.",
+        "I can't reach an agent right now. We'll ring you back shortly.",
+        "I'm unable to connect you. We'll return your call as soon as possible.",
+        "No agents available at the moment. You'll hear from us shortly.",
     ]
     connect_agent_tpl: list[str] = [
-        "I'm sorry, I wasn't able to respond to your request. Please allow me to transfer you to an agent who can assist you further. Please stay on the line and I will get back to you shortly.",
-        "I apologize for not being able to assist you. Let me connect you to an agent who can help. Please hold on.",
-        "Sorry for the inconvenience. I'll transfer you to an agent now. Please hold.",
+        "Connecting you to a specialist now. One moment, please.",
+        "Hold on; I'm putting you through to an agent.",
+        "I'm routing your call to the next available agent; thank you for holding.",
+        "Please stay on the line while I transfer you to an agent.",
+        "Transferring now. An agent will assist you shortly.",
     ]
     end_call_to_connect_agent_tpl: list[str] = [
-        "Of course, stay on the line. I will transfer you to an agent.",
-        "Sure, please hold on. I'll connect you to an agent.",
-        "Hold on, I'll transfer you now.",
+        "As requested, I'll connect you to an agent. Please stay on the line.",
+        "Ending my session here. An agent will join you shortly.",
+        "I'll disconnect now, and an agent will assist you shortly.",
+        "I'll end my call now. An agent will take over from here.",
+        "Understood. Transferring you now, please hold.",
     ]
     error_tpl: list[str] = [
-        "I'm sorry, I didn't understand. Can you rephrase?",
-        "I didn't catch that. Could you say it differently?",
-        "Please repeat that.",
+        "Can you clarify what you need?",
+        "Could you say that again more slowly?",
+        "I didn't catch that; could you repeat?",
+        "I'm not sure I understood; please try again.",
+        "Please restate your request.",
     ]
     goodbye_tpl: list[str] = [
-        "Thank you for calling, I hope I've been able to help. You can call back, I've got it all memorized. {bot_company} wishes you a wonderful day!",
-        "It was a pleasure assisting you today. Remember, {bot_company} is always here to help. Have a fantastic day!",
-        "Thanks for reaching out! {bot_company} appreciates you. Have a great day!",
+        "It was a pleasure assisting you today. {bot_company} thanks you, and have a great day!",
+        "Thank you for calling. If you need anything else, {bot_company} is here for you, goodbye!",
+        "Thank you, {bot_company} hopes you have a wonderful day. Farewell!",
+        "Thanks for reaching out to {bot_company}. Take care and goodbye!",
+        "We appreciate your call. Goodbye from all of us at {bot_company}!",
     ]
     hello_tpl: list[str] = [
-        "Hello, I'm {bot_name}, the virtual assistant from {bot_company}! Here's how I work: while I'm processing your information, you will hear music. Feel free to speak to me in a natural way - I'm designed to understand your requests. During the conversation, you can also send me text messages.",
-        "Hi there! I'm {bot_name} from {bot_company}. While I process your info, you'll hear some music. Just talk to me naturally, and you can also send text messages.",
-        "Hello! I'm {bot_name} from {bot_company}. Speak naturally, and you can also text me.",
+        "Good day! {bot_name} here from {bot_company}. What can I do for you?",
+        "Hello, I'm {bot_name}. How can I assist you today?",
+        "Hello, this is {bot_name} from {bot_company}. How can I assist you?",
+        "Hi there! {bot_name} at {bot_company}, what can I help you with?",
+        "Welcome to {bot_company}! I'm {bot_name}, your virtual assistant. How may I help?",
     ]
     timeout_silence_tpl: list[str] = [
-        "I'm sorry, I didn't hear anything. If you need help, let me know how I can help you.",
-        "It seems quiet on your end. How can I assist you?",
-        "I didn't catch that. How can I help?",
+        "Are you still there? How can I help?",
+        "I'm here if you need anything.",
+        "Let me know if you need more time or assistance.",
+        "No response detected, what can I help with?",
+        "Still here, just tell me how I can assist.",
     ]
     timeout_loading_tpl: list[str] = [
-        "It's taking me longer than expected to reply. Thank you for your patience…",
-        "I'm working on your request. Thanks for waiting!",
-        "Please hold on, I'm almost done.",
+        "...",
+        "Almost there...",
+        "Appreciate your patience...",
+        "Fetching your data...",
+        "Just a second...",
+        "Loading information...",
+        "One moment, please...",
+        "Processing your request...",
+        "Retrieving details...",
+        "Thank you for waiting...",
+        "Working on that...",
     ]
     ivr_language_tpl: list[str] = [
-        "To continue in {label}, press {index}.",
-        "Press {index} for {label}.",
         "For {label}, press {index}.",
+        "Hit {index} to choose {label}.",
+        "If you'd like {label}, press {index}.",
+        "Press {index} for {label}.",
+        "To select {label}, press {index}.",
     ]
 
     async def calltransfer_failure(self, call: CallStateModel) -> str:
