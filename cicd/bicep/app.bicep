@@ -1011,7 +1011,7 @@ resource configValues 'Microsoft.AppConfiguration/configurationStores/keyValues@
     parent: configStore
     name: item.key
     properties: {
-      value: string(item.value)
+      value: toLower(string(item.value)) // Force lower for consistency
     }
   }
 ]

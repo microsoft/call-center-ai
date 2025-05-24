@@ -470,6 +470,8 @@ Task can be customized for each call, by adding the `task` field in the `POST /c
 
 Conversation options are represented as features. They can be configured from App Configuration, without the need to redeploy or restart the application. Once a feature is updated, a delay of 60 secs is needed to make the change effective.
 
+By default, values are refreshed every 60 seconds. Refresh is not sync across all instances, so it can take up to 60 seconds to see the change on all users. Update this in the `app_configuration.ttl_sec` field.
+
 | Name | Description | Type | Default |
 |-|-|-|-|
 | `answer_hard_timeout_sec` | Time waiting the LLM before aborting the answer with an error message. | `int` | 15 |
