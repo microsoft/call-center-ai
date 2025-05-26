@@ -38,7 +38,7 @@ dependencies = [
   "pyjwt~=2.9",                                          # Secure inbound calls from Communication Services
   "python-dotenv~=1.0",                                  # Load environment variables from .env file
   "python-multipart==0.*",                               # Form parsing
-  "pytz~=2024.0",                                        # Time zone handling
+  "pytz~=2025.2",                                        # Time zone handling
   "pyyaml~=6.0",                                         # YAML parser
   "redis~=5.2",                                          # Redis client
   "structlog~=24.4",                                     # Pretty logging
