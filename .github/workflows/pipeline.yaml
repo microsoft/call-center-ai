@@ -145,7 +145,7 @@ jobs:
         run: make test-${{ matrix.step }} version_full=${{ needs.init.outputs.VERSION_FULL }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4.6.0
+        uses: actions/upload-artifact@v4.6.2
         if: always()
         with:
           compression-level: 9
