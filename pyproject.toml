@@ -23,7 +23,7 @@ dependencies = [
   "azure-storage-queue~=12.12",                          # Azure Storage Queue
   "django-htmlmin~=0.11",                                # Minify HTML
   "fastapi~=0.115",                                      # Web framework
-  "gunicorn~=23.0",                                      # Application server
+  "granian~=2.3",                                        # Application server
   "jinja2~=3.1",                                         # Template engine, used for prompts and web views
   "json-repair~=0.30",                                   # Repair JSON files from LLM
   "mistune~=3.0",                                        # Markdown parser for web views
@@ -46,13 +46,13 @@ dependencies = [
   "tiktoken~=0.8",                                       # Tokenization library for OpenAI models
   "twilio~=9.3",                                         # Twilio SDK, used for SMS
   "typing-extensions~=4.12",                             # Typing extensions for Python 3.6+
-  "uvicorn[standard]~=0.32",                             # Application middleware
 ]
 
 [project.optional-dependencies]
 dev = [
   "deepeval~=0.21",            # LLM model evaluation
   "deptry~=0.20",              # Dependency tree testing
+  "granian[reload]",           # Granian with reload support for development
   "pyright~=1.1",              # Static type checker
   "pytest-assume~=2.4",        # Pytest plugin for conditional tests
   "pytest-asyncio~=0.24",      # Pytest plugin for async tests

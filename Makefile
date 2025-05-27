@@ -107,17 +107,15 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) uv run gunicorn app.main:api \
-		--access-logfile - \
-		--bind 0.0.0.0:8080 \
-		--graceful-timeout 60 \
-		--proxy-protocol \
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) uv run granian \
+		--host 0.0.0.0 \
+		--interface asgi \
+		--log-level info \
+		--port 8080 \
 		--reload \
-		--reload-extra-file .env \
-		--reload-extra-file config.yaml \
-		--timeout 60 \
-		--worker-class uvicorn.workers.UvicornWorker \
-		--workers 2
+		--workers 2 \
+		--workers-kill-timeout 60 \
+		app.main:api
 
 build:
 	DOCKER_BUILDKIT=1 docker build \
