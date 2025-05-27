@@ -6,7 +6,6 @@ tunnel_name := call-center-ai-$(shell hostname | sed 's/[^a-zA-Z0-9]//g' | tr '[
 tunnel_url ?= $(shell res=$$(devtunnel show $(tunnel_name) | grep -o 'http[s]*://[^ ]*' | xargs) && echo $${res%/})
 # Container configuration
 container_name := ghcr.io/clemlesne/call-center-ai
-docker := docker
 image_version := main
 # App location
 # Warning: Some regions may not support all services (e.g. OpenAI models, AI Search) or capabilities (e.g. Cognitive Services TTS voices). Those regions have been tested and are known to work. If you encounter issues, please refer to the Azure documentation for the latest information, or try deploying with default locations.
@@ -108,20 +107,18 @@ tunnel:
 	devtunnel host $(tunnel_name)
 
 dev:
-	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) uv run gunicorn app.main:api \
-		--access-logfile - \
-		--bind 0.0.0.0:8080 \
-		--graceful-timeout 60 \
-		--proxy-protocol \
+	VERSION=$(version_full) PUBLIC_DOMAIN=$(tunnel_url) uv run granian \
+		--host 0.0.0.0 \
+		--interface asgi \
+		--log-level info \
+		--port 8080 \
 		--reload \
-		--reload-extra-file .env \
-		--reload-extra-file config.yaml \
-		--timeout 60 \
-		--worker-class uvicorn.workers.UvicornWorker \
-		--workers 2
+		--workers 2 \
+		--workers-kill-timeout 60 \
+		app.main:api
 
 build:
-	DOCKER_BUILDKIT=1 $(docker) build \
+	DOCKER_BUILDKIT=1 docker build \
 		--build-arg VERSION=$(version_full) \
 		--file cicd/Dockerfile \
 		--platform linux/amd64,linux/arm64 \

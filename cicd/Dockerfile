@@ -33,4 +33,4 @@ ARG VERSION
 ENV VERSION=${VERSION}
 
 # Starting the backend
-CMD gunicorn app.main:api --bind 0.0.0.0:8080 --graceful-timeout 60 --proxy-protocol --timeout 60 --worker-class uvicorn.workers.UvicornWorker --workers 4
+CMD ["granian", "--interface", "asgi", "--host", "0.0.0.0", "--port", "8080", "--log-level", "critical", "--workers-kill-timeout", "60", "--workers", "4", "app.main:api"]
