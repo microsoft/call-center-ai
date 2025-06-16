@@ -228,7 +228,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
 
       - name: Generate attestations
-        uses: actions/attest-build-provenance@v1.4.4
+        uses: actions/attest-build-provenance@v2.4.0
         with:
           push-to-registry: true
           subject-digest: ${{ steps.build.outputs.digest }}
