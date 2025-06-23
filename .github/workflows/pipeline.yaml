@@ -179,7 +179,7 @@ jobs:
           platforms: ${{ env.CONTAINER_PLATFORMS }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3.3.0
+        uses: docker/setup-buildx-action@v3.11.1
         with:
           version: v${{ env.BUILDX_VERSION }}
 
