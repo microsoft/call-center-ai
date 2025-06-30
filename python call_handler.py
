@@ -1,0 +1,25 @@
+from flask import Flask, request, jsonify
+import requests
+
+app = Flask(__name__)
+
+OPENAI_API_KEY = "your-openai-api-key"
+
+@app.route('/call', methods=['POST'])
+def handle_call():
+    data = request.json
+    user_input = data.get('speech')
+    # Call OpenAI API
+    response = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+        json={
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": user_input}]
+        }
+    )
+    ai_reply = response.json()["choices"][0]["message"]["content"]
+    return jsonify({"reply": ai_reply})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000)
