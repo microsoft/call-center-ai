@@ -1,45 +1,81 @@
-resources:
-  public_url: https://xxx.blob.core.windows.net/public
+# Example Local Development Configuration
+# This configuration uses SQLite and local queues instead of Azure services
 
+# Required: Public domain for WebSocket callbacks
+public_domain: https://your-domain.ngrok.io  # Use ngrok for local development
+
+# Storage: Use SQLite instead of Cosmos DB
+database:
+  mode: sqlite
+  sqlite:
+    database_path: ./data/calls.db
+
+# Queues: Use local in-memory queues instead of Azure Storage Queues
+queue:
+  mode: local
+
+# Cache: Use in-memory cache (no Redis needed)
+cache:
+  mode: memory
+
+# Telephony: Still uses Azure Communication Services for now
+# (SIP integration coming in future updates)
+telephony:
+  mode: azure_communication_services
+  # Uses communication_services config below
+
+# Communication Services (still required for telephony and SMS)
+communication_services:
+  access_key: your_access_key_here
+  endpoint: https://your-resource.communication.azure.com
+  phone_number: "+15551234567"
+  recording_container_url: https://your-storage.blob.core.windows.net/recordings
+  resource_id: your-resource-id
+
+# SMS: Choose between Azure Communication Services or Twilio
+sms:
+  mode: twilio  # or 'communication_services'
+  twilio:
+    account_sid: your_twilio_account_sid
+    auth_token: your_twilio_auth_token
+    phone_number: "+15551234567"
+
+# Azure Cognitive Services (still required for STT/TTS)
+cognitive_service:
+  endpoint: https://your-region.api.cognitive.microsoft.com/
+
+# LLM Configuration
+llm:
+  endpoint: https://your-openai-endpoint.openai.azure.com
+  model: gpt-4
+
+# AI Search (for RAG)
+ai_search:
+  endpoint: https://your-search.search.windows.net
+  index: your-index-name
+
+# AI Translation
+ai_translation:
+  endpoint: https://api.cognitive.microsofttranslator.com
+
+# Resources
+resources:
+  public_url: https://your-storage.blob.core.windows.net/public
+
+# App Configuration (optional - can be disabled for local dev)
+app_configuration:
+  endpoint: https://your-appconfig.azconfig.io
+
+# Conversation configuration
 conversation:
   initiate:
-    agent_phone_number: "+33612345678" # Phone number the bot will transfer the call to if customer asks for a human agent
-    bot_company: Contoso
-    bot_name: Robert
+    lang:
+      short_code: en-US
+    tts_voice: en-US-JennyNeural
 
-communication_services:
-  access_key: xxx
-  call_queue_name: call-33612345678
-  endpoint: https://xxx.france.communication.azure.com
-  phone_number: "+33612345678" # Phone number purshased from Communication Services
-  post_queue_name: post-33612345678
-  recording_container_url: https://xxx.blob.core.windows.net/recordings
-  resource_id: xxx
-  sms_queue_name: sms-33612345678
+# Monitoring (optional)
+monitoring:
+  mode: none  # Set to 'azure_application_insights' for production
 
-cognitive_service:
-  endpoint: https://xxx.cognitiveservices.azure.com # Must be of type "AI services multi-service account"
-  region: swedencentral
-  resource_id: xxx
-
-llm:
-  fast:
-    context: 1047576
-    endpoint: https://xxx.openai.azure.com/openai/deployments/gpt-4.1-nano-2025-04-14
-    model: gpt-4.1-nano
-  slow:
-    context: 1047576
-    endpoint: https://xxx.openai.azure.com/openai/deployments/gpt-4.1-2025-04-14
-    model: gpt-4.1
-
-ai_search:
-  embedding_deployment: text-embedding-3-large-1
-  embedding_dimensions: 3072
-  embedding_endpoint: https://xxx.openai.azure.com
-  embedding_model: text-embedding-3-large
-  endpoint: https://xxx.search.windows.net
-  index: trainings
-
-ai_translation:
-  access_key: xxx
-  endpoint: https://xxx.cognitiveservices.azure.com
+# Prompts (uses defaults)
+prompts: {}

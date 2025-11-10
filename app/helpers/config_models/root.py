@@ -19,6 +19,7 @@ from app.helpers.config_models.prompts import PromptsModel
 from app.helpers.config_models.queue import QueueModel
 from app.helpers.config_models.resources import ResourcesModel
 from app.helpers.config_models.sms import SmsModel
+from app.helpers.config_models.telephony import TelephonyModel
 
 
 class RootModel(BaseSettings):
@@ -48,6 +49,7 @@ class RootModel(BaseSettings):
     prompts: PromptsModel = PromptsModel()  # Object is fully defined by default
     resources: ResourcesModel
     sms: SmsModel = SmsModel()  # Object is fully defined by default
+    telephony: TelephonyModel = TelephonyModel()  # Object is fully defined by default
     conversation: ConversationModel = Field(
         serialization_alias="workflow"
     )  # Compatibility with v7
