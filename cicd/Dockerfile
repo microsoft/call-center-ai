@@ -9,6 +9,10 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,id=apt-lists-${TARGETPLATFORM},
 
 # Copy project definitions
 WORKDIR /app
+# Create a non-root user and switch to it for security
+RUN useradd -m -s /bin/bash appuser && \
+    chown -R appuser:appuser /app
+USER appuser
 COPY pyproject.toml uv.lock ./
 
 # Install Python dependencies
