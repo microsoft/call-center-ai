@@ -164,7 +164,7 @@ async def _completion_stream_worker(
         if choice.finish_reason == "content_filter":
             raise SafetyCheckError(f"Issue detected in text: {delta.content}")
         if choice.finish_reason == "length":
-            logger.warning("Maximum tokens reached %s, should be fixed", max_tokens)
+            logger.warning("Maximum tokens reached, should be fixed")
             raise MaximumTokensReachedError(f"Maximum tokens reached {max_tokens}")
         if delta:
             yield delta
