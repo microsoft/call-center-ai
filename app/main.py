@@ -68,6 +68,11 @@ from app.helpers.monitoring import (
     start_as_current_span,
     suppress,
 )
+from app.helpers.security_middleware import (
+    RateLimitMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.helpers.pydantic_types.phone_numbers import PhoneNumber
 from app.helpers.resources import resources_dir
 from app.models.call import CallGetModel, CallInitiateModel, CallStateModel
@@ -178,6 +183,18 @@ api = FastAPI(
     title="call-center-ai",
     version=CONFIG.version,
 )
+
+# Add security middleware for production
+# Order matters: apply from innermost to outermost
+api.add_middleware(SecurityHeadersMiddleware)  # Applied last (outermost)
+api.add_middleware(RequestSizeLimitMiddleware, max_size=10 * 1024 * 1024)  # 10 MB limit
+api.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=60,  # Adjust based on expected traffic
+    burst_size=100,  # Allow short bursts
+)
+
+logger.info("Security middleware enabled: rate limiting, headers, request size limits")
 
 
 @api.get("/health/liveness")

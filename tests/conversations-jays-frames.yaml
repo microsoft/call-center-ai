@@ -1,0 +1,222 @@
+# Test conversations for Jay's Frames custom framing business
+# These scenarios test common customer interactions
+
+conversations:
+  # Scenario 1: Simple framing inquiry
+  - id: "simple_painting_frame"
+    lang: "en-US"
+    speeches:
+      - "Hi, I have a painting I need framed"
+      - "It's an oil painting, about 24 by 36 inches"
+      - "I like modern frames, something sleek"
+      - "Yes, UV protection would be good"
+      - "My name is Sarah Johnson"
+      - "My email is sarah.j@email.com"
+      - "I need it in about two weeks"
+    expected_fields:
+      - artwork_type: "oil painting"
+      - artwork_dimensions: "24 by 36 inches"
+      - frame_style_preference: "modern, sleek"
+      - glass_type: "UV-protective"
+      - customer_name: "Sarah Johnson"
+      - contact_email: "sarah.j@email.com"
+    description: "Customer wants to frame an oil painting with modern style"
+
+  # Scenario 2: Multiple pieces with budget concern
+  - id: "family_photos_budget"
+    lang: "en-US"
+    speeches:
+      - "I have several family photos I want framed"
+      - "About five photos, all 8 by 10 inches"
+      - "They're black and white vintage photos from the 1950s"
+      - "I want them to look nice but I'm on a budget"
+      - "Maybe $100 to $150 per frame"
+      - "Traditional style would be best"
+      - "Yes, I'd like acid-free materials since they're old"
+      - "My name is Michael Chen"
+      - "I can pick them up at the store"
+    expected_fields:
+      - artwork_type: "family photos, black and white vintage"
+      - artwork_dimensions: "8 by 10 inches"
+      - frame_style_preference: "traditional"
+      - budget_range: "$100 to $150 per frame"
+      - special_requirements: "acid-free materials for conservation"
+      - customer_name: "Michael Chen"
+      - pickup_or_delivery: "pickup"
+    description: "Customer needs conservation framing for vintage photos with budget constraints"
+
+  # Scenario 3: Diploma framing quick quote
+  - id: "diploma_quick_quote"
+    lang: "en-US"
+    speeches:
+      - "How much does it cost to frame a diploma?"
+      - "It's a standard college diploma, I think 11 by 14"
+      - "Something professional looking"
+      - "No rush, maybe in the next month"
+      - "Can you email me a quote? I'm at jennifer.williams@email.com"
+      - "Jennifer Williams"
+    expected_fields:
+      - artwork_type: "diploma"
+      - artwork_dimensions: "11 by 14 inches"
+      - frame_style_preference: "professional"
+      - customer_name: "Jennifer Williams"
+      - contact_email: "jennifer.williams@email.com"
+      - project_deadline: "next month"
+    description: "Quick quote request for diploma framing"
+
+  # Scenario 4: Custom artwork with special requirements
+  - id: "canvas_shadow_box"
+    lang: "en-US"
+    speeches:
+      - "I have a canvas painting that I painted myself"
+      - "It's 30 by 40 inches and about 2 inches thick"
+      - "I want a floating frame or maybe a shadow box"
+      - "The painting has lots of blues and greens, ocean theme"
+      - "I'd like a natural wood frame, maybe driftwood gray"
+      - "No glass needed since it's canvas"
+      - "This is for my living room, so I want high quality"
+      - "My name is David Martinez"
+      - "Can I get delivery? I live at 456 Oak Street"
+      - "I'd like it done in three weeks if possible"
+    expected_fields:
+      - artwork_type: "canvas painting"
+      - artwork_dimensions: "30 by 40 inches, 2 inches thick"
+      - artwork_description: "ocean theme, blues and greens"
+      - frame_style_preference: "floating frame or shadow box"
+      - frame_material_preference: "natural wood, driftwood gray"
+      - glass_type: "no glass"
+      - budget_range: "high quality"
+      - customer_name: "David Martinez"
+      - pickup_or_delivery: "delivery, 456 Oak Street"
+      - project_deadline: "three weeks"
+    description: "Custom canvas with special mounting requirements"
+
+  # Scenario 5: Multiple items, wants consultation
+  - id: "multiple_pieces_consultation"
+    lang: "en-US"
+    speeches:
+      - "I have several things I need framed"
+      - "A poster, some prints, and a jersey"
+      - "They're all different sizes"
+      - "I'd rather come in and show you in person"
+      - "When are you open?"
+      - "Great, I'll come by this Saturday"
+      - "My name is Lisa Anderson"
+      - "My number is 555-0123"
+    expected_fields:
+      - artwork_type: "poster, prints, jersey"
+      - artwork_dimensions: "various sizes"
+      - special_requirements: "wants in-person consultation"
+      - customer_name: "Lisa Anderson"
+    description: "Customer prefers in-person consultation for multiple items"
+
+  # Scenario 6: Matting preferences discussion
+  - id: "watercolor_matting"
+    lang: "en-US"
+    speeches:
+      - "I have a watercolor I'd like framed"
+      - "It's 16 by 20 inches"
+      - "I want matting, but I'm not sure what color"
+      - "The painting has warm tones, lots of reds and oranges"
+      - "Maybe a cream or off-white mat?"
+      - "Double mat would be nice"
+      - "Yes, UV glass for sure"
+      - "Something in the $250 to $350 range"
+      - "My name is Robert Taylor"
+      - "Email is rtaylor@email.com"
+      - "No specific deadline, just whenever it's ready"
+    expected_fields:
+      - artwork_type: "watercolor"
+      - artwork_dimensions: "16 by 20 inches"
+      - artwork_description: "warm tones, reds and oranges"
+      - mat_preferences: "cream or off-white, double mat"
+      - glass_type: "UV glass"
+      - budget_range: "$250 to $350"
+      - customer_name: "Robert Taylor"
+      - contact_email: "rtaylor@email.com"
+    description: "Customer needs help with matting color selection"
+
+  # Scenario 7: Spanish language customer
+  - id: "spanish_customer_photo"
+    lang: "es-ES"
+    speeches:
+      - "Hola, necesito enmarcar una foto"
+      - "Es una foto de boda, 20 por 24 pulgadas"
+      - "Quiero algo elegante"
+      - "Sí, vidrio anti-reflejo sería bueno"
+      - "Mi nombre es María García"
+      - "Puedo recogerlo en la tienda"
+    expected_fields:
+      - artwork_type: "wedding photo"
+      - artwork_dimensions: "20 by 24 inches"
+      - frame_style_preference: "elegant"
+      - glass_type: "non-glare"
+      - customer_name: "María García"
+      - pickup_or_delivery: "pickup"
+    description: "Spanish-speaking customer needs wedding photo framed"
+
+  # Scenario 8: Memorabilia framing
+  - id: "military_medals"
+    lang: "en-US"
+    speeches:
+      - "I want to frame my grandfather's military medals"
+      - "There are three medals and some patches"
+      - "I want a shadow box frame"
+      - "Something patriotic and dignified"
+      - "This is really important to me, it needs to be perfect"
+      - "I'm willing to spend whatever it takes"
+      - "Dark wood frame would be appropriate"
+      - "My name is James Wilson"
+      - "Email is jwilson@email.com"
+      - "I'd like to see some options in person"
+    expected_fields:
+      - artwork_type: "military medals and patches"
+      - frame_style_preference: "shadow box, patriotic, dignified"
+      - frame_material_preference: "dark wood"
+      - budget_range: "premium, no budget limit"
+      - customer_name: "James Wilson"
+      - contact_email: "jwilson@email.com"
+      - special_requirements: "wants in-person consultation"
+    description: "Sentimental memorabilia requiring special care"
+
+  # Scenario 9: Customer unsure of size
+  - id: "artwork_unknown_size"
+    lang: "en-US"
+    speeches:
+      - "I have a print I want framed but I'm not sure of the exact size"
+      - "It's a movie poster, standard size I think"
+      - "Can I bring it in for you to measure?"
+      - "It's a vintage Star Wars poster"
+      - "I want a frame that protects it well"
+      - "My name is Tom Brooks"
+      - "I'll come by tomorrow"
+    expected_fields:
+      - artwork_type: "movie poster, vintage Star Wars"
+      - artwork_dimensions: "to be measured"
+      - special_requirements: "wants in-person consultation for measuring"
+      - customer_name: "Tom Brooks"
+    description: "Customer needs help measuring artwork"
+
+  # Scenario 10: Rush order
+  - id: "rush_order_gift"
+    lang: "en-US"
+    speeches:
+      - "I need something framed quickly, it's a gift"
+      - "I have a print, 18 by 24 inches"
+      - "I need it by next Friday"
+      - "Is that possible?"
+      - "Simple black frame would be fine"
+      - "Regular glass is okay"
+      - "My name is Amanda White"
+      - "I can pick it up whenever it's ready"
+      - "My phone is 555-0199"
+    expected_fields:
+      - artwork_type: "print"
+      - artwork_dimensions: "18 by 24 inches"
+      - frame_style_preference: "simple black"
+      - glass_type: "regular"
+      - project_deadline: "next Friday"
+      - customer_name: "Amanda White"
+      - pickup_or_delivery: "pickup"
+      - special_requirements: "rush order"
+    description: "Rush order for gift framing"
