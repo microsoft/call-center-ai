@@ -19,7 +19,8 @@ from azure.cognitiveservices.speech import (
     SpeechSynthesizer,
 )
 from azure.communication.callautomation.aio import CallAutomationClient
-from jinja2 import Environment
+import html
+import string
 from json_repair import repair_json
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import eval_type_lenient
@@ -32,10 +33,30 @@ from app.models.call import CallStateModel
 from app.models.message import ToolModel
 
 T = TypeVar("T")
-_jinja = Environment(
-    autoescape=True,
-    enable_async=True,
-)
+
+
+def _safe_format_string(template: str, **kwargs: Any) -> str:
+    """
+    Safely format a string template with kwargs, escaping HTML entities to prevent XSS.
+    
+    This replaces jinja2 template rendering with a safer approach using Python's
+    string.Template and HTML escaping.
+    """
+    # Escape all string values to prevent XSS
+    escaped_kwargs = {}
+    for key, value in kwargs.items():
+        if isinstance(value, str):
+            escaped_kwargs[key] = html.escape(value)
+        else:
+            escaped_kwargs[key] = value
+    
+    try:
+        # Use string.Template for safe substitution
+        template_obj = string.Template(template)
+        return template_obj.safe_substitute(**escaped_kwargs)
+    except (KeyError, ValueError):
+        # If template substitution fails, return the original template
+        return template
 
 
 class Parameters(BaseModel):
@@ -290,7 +311,7 @@ async def _function_schema(
         )
 
     description = _remove_newlines(
-        await _jinja.from_string(dedent(f.__doc__ or "")).render_async(**kwargs)
+        _safe_format_string(dedent(f.__doc__ or ""), **kwargs)
     )  # Remove possible indentation, render the description, then remove newlines to avoid hallucinations
     name = f.__name__
     parameters: dict[str, object] = (
@@ -382,9 +403,7 @@ async def _parameter_json_schema(
         schema["default"] = dv
 
     schema["description"] = _remove_newlines(
-        await _jinja.from_string(dedent(_description(name, value))).render_async(
-            **kwargs
-        )
+        _safe_format_string(dedent(_description(name, value)), **kwargs)
     )  # Remove possible indentation, render the description, then remove newlines to avoid hallucinations
 
     return schema
