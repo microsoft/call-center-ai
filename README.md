@@ -171,7 +171,7 @@ graph LR
   end
 
   app -- Translate static TTS --> translation
-  app -- Sezarch RAG data --> search
+  app -- Search RAG data --> search
   app -- Generate completion --> gpt
   gpt -. Answer with completion .-> app
   app -- Generate voice --> tts
