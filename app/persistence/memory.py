@@ -68,8 +68,8 @@ class MemoryCache(ICache):
 
         # Delete the last if full
         if len(self._cache) >= self._config.max_size:
-            self._ttl.popitem()
-            self._cache.popitem()
+            self._ttl.popitem(last=False)
+            self._cache.popitem(last=False)
 
         # Set TTL as first element
         self._ttl[sha_key] = datetime.now(UTC) + timedelta(seconds=ttl_sec)
