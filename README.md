@@ -199,7 +199,7 @@ graph LR
 ## Deployment
 
 > [!NOTE]
-> This project is a proof of concept. It is not intended to be used in production. This demonstrates how can be combined Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
+> This project is a proof of concept. It is not intended to be used in production. This demonstrates how (missing word) can be combined with Azure Communication Services, Azure Cognitive Services and Azure OpenAI to build an automated call center solution.
 
 ### Prerequisites
 
