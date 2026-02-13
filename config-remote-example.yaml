@@ -8,7 +8,11 @@ conversation:
 communication_services:
   phone_number: "+33612345678" # Phone number purshased from Communication Services
 
-sms: {}
+sms:
+  mode: telnyx
+  telnyx:
+    api_key: your_telnyx_api_key_v2
+    phone_number: "+1234567890"
 
 prompts:
   llm: {}
