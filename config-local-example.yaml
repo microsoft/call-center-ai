@@ -7,6 +7,12 @@ conversation:
     bot_company: Contoso
     bot_name: Robert
 
+sms:
+  mode: telnyx
+  telnyx:
+    api_key: xxx
+    phone_number: "+33612345678"
+
 communication_services:
   access_key: xxx
   call_queue_name: call-33612345678
