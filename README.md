@@ -13,7 +13,7 @@ AI-powered call center solution with Azure and OpenAI GPT.
 
 Send a phone call from AI agent, in an API call. Or, directly call the bot from the configured phone number!
 
-Insurance, IT support, customer service, and more. The bot can be customized in few hours (really) to fit your needs.
+Insurance, IT support, customer service, and more. The bot can be customized in a few hours (really) to fit your needs.
 
 ```bash
 # Ask the bot to call a phone number
@@ -58,7 +58,7 @@ curl \
 
 ### Demo
 
-A French demo is avaialble on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project. Voice is hesitant on purpose to show the bot can handle it. All the infrastructure is deployed on Azure, mostly in serverless mode. Provisionning of the LLM resources can be done to reduce the latency.
+A French demo is available on YouTube. Do not hesitate to watch the demo in x1.5 speed to get a quick overview of the project. Voice is hesitant on purpose to show the bot can handle it. All the infrastructure is deployed on Azure, mostly in serverless mode. Provisioning of the LLM resources can be done to reduce the latency.
 
 [![French demo](https://img.youtube.com/vi/i_qhNdUUxSI/maxresdefault.jpg)](https://youtube.com/watch?v=i_qhNdUUxSI)
 
@@ -171,7 +171,7 @@ graph LR
   end
 
   app -- Translate static TTS --> translation
-  app -- Sezarch RAG data --> search
+  app -- Search RAG data --> search
   app -- Generate completion --> gpt
   gpt -. Answer with completion .-> app
   app -- Generate voice --> tts
@@ -272,7 +272,7 @@ make logs name=my-rg-name
 
 #### 1. Prerequisites
 
-If you skiped the `make brew` command from the first install section, make sure you have the following installed:
+If you skipped the `make brew` command from the first install section, make sure you have the following installed:
 
 - [Rust](https://rust-lang.org)
 - [uv](https://docs.astral.sh/uv)
@@ -413,7 +413,7 @@ Levels are defined for each category of Content Safety. The higher the score, th
 
 Customization of the data schema is fully supported. You can add or remove fields as needed, depending on the requirements.
 
-By default, the schema of composed of:
+By default, the schema is composed of:
 
 - `caller_email` (`email`)
 - `caller_name` (`text`)
@@ -478,7 +478,7 @@ By default, values are refreshed every 60 seconds. Refresh is not sync across al
 | `answer_soft_timeout_sec` | Time waiting the LLM before sending a waiting message. | `int` | 4 |
 | `callback_timeout_hour` | The timeout for a callback in hours. Set 0 to disable. | `int` | 3 |
 | `phone_silence_timeout_sec` | Amount of silence in secs to trigger a warning message from the assistant. | `int` | 20 |
-| `recognition_retry_max` | TThe maximum number of retries for voice recognition. Minimum of 1. | `int` | 3 |
+| `recognition_retry_max` | The maximum number of retries for voice recognition. Minimum of 1. | `int` | 3 |
 | `recognition_stt_complete_timeout_ms` | The timeout for STT completion in milliseconds. | `int` | 100 |
 | `recording_enabled` | Whether call recording is enabled. | `bool` | false |
 | `slow_llm_for_chat` | Whether to use the slow LLM for chat. | `bool` | false |
@@ -568,12 +568,12 @@ prompts:
 
 ### Optimize response delay
 
-The delay mainly come from two things:
+The delay mainly comes from two things:
 
 - Voice in and voice out are processed by Azure AI Speech, both are implemented in streaming mode but voice is not directly streamed to the LLM
-- The LLM, more specifically the delay between API call and first sentence infered, can be long (as the sentences are sent one by one once they are made avalable), even longer if it hallucinate and returns empty answers (it happens regularly, and the applicatoipn retries the call)
+- The LLM, more specifically the delay between API call and first sentence inferred, can be long (as the sentences are sent one by one once they are made available), even longer if it hallucinates and returns empty answers (it happens regularly, and the application retries the call)
 
-From now, the only impactful thing you can do is the LLM part. This can be acheieve by a PTU on Azure or using a less smart model like `gpt-4.1-nano` (selected by default on the latest versions). With a PTU on Azure OpenAI, you can divide by 2 the latency in some case.
+From now, the only impactful thing you can do is the LLM part. This can be achieve by a PTU on Azure or using a less smart model like `gpt-4.1-nano` (selected by default on the latest versions). With a PTU on Azure OpenAI, you can divide by 2 the latency in some case.
 
 The application is natively connected to Azure Application Insights, so you can monitor the response time and see where the time is spent. This is a great start to identify the bottlenecks.
 
@@ -591,13 +591,13 @@ Enhance the LLM’s accuracy and domain adaptation by integrating historical dat
 
 ### Monitoring the application
 
-Application send traces and metrics to Azure Application Insights. You can monitor the application from the Azure portal, or by using the API.
+Application sends traces and metrics to Azure Application Insights. You can monitor the application from the Azure portal, or by using the API.
 
-This includes application behavior, database queries, and external service calls. Plus, LLM metrics (latency, token usage, prompts content, raw response) from [OpenLLMetry](https://github.com/traceloop/openllmetry), following the [semantic sonventions for OpenAI operations](https://opentelemetry.io/docs/specs/semconv/gen-ai/openai/#openai-spans).
+This includes application behavior, database queries, and external service calls. Plus, LLM metrics (latency, token usage, prompts content, raw response) from [OpenLLMetry](https://github.com/traceloop/openllmetry), following the [semantic conventions for OpenAI operations](https://opentelemetry.io/docs/specs/semconv/gen-ai/openai/#openai-spans).
 
 Additionally custom metrics (viewable in Application Insights > Metrics) are published, notably:
 
-- `call.aec.droped`, number of times the echo cancellation dropped the voice completely.
+- `call.aec.dropped`, number of times the echo cancellation dropped the voice completely.
 - `call.aec.missed`, number of times the echo cancellation failed to remove the echo in time.
 - `call.answer.latency`, time between the end of the user voice and the start of the bot voice.
 
@@ -689,7 +689,7 @@ Quality:
 
 Reliability:
 
-- [x] Reproductible builds
+- [x] Reproducible builds
 - [x] Traces and telemetry
 - [ ] Operation runbooks for common issues
 - [ ] Proper dashboarding in Azure Application Insights (deployed with the IaC)
@@ -704,7 +704,7 @@ Resiliency:
 
 - [x] Infrastructure as Code (IaC)
 - [ ] Multi-region deployment
-- [ ] Reproductible performance tests
+- [ ] Reproducible performance tests
 
 Security:
 
