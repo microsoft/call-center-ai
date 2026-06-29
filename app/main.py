@@ -34,13 +34,13 @@ from fastapi import (
 )
 from fastapi.exceptions import RequestValidationError, ValidationException
 from fastapi.responses import HTMLResponse, JSONResponse
-from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from htmlmin.minify import html_minify
 from jinja2 import Environment, FileSystemLoader
 from pydantic import Field, TypeAdapter, ValidationError
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from twilio.twiml.messaging_response import MessagingResponse
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
 from app.helpers.cache import get_scheduler, lru_acache
 from app.helpers.call_events import (
@@ -446,7 +446,6 @@ async def call_event(
     event_type = event.event_type
     if not event_type == SystemEventNames.AcsIncomingCallEventName:
         logger.warning("Event %s not supported", event_type)
-        # logger.debug("Event data %s", event.data)
         return
 
     # Parse phone number
@@ -608,95 +607,85 @@ async def communicationservices_wss_post(
         """
         logger.debug("Audio data consumer started")
 
-        # Loop until the WebSocket is disconnected
-        with suppress(
-            WebSocketDisconnect,
-            ConnectionClosedError,
-            ConnectionClosedOK,
-            BrokenPipeError,
-            ConnectionResetError,
-        ):
+        try:
             start: float | None = None
-            try:
-                async for event in websocket.iter_json():
-                    # TODO: Handle configuration event (audio format, sample rate, etc.)
-                    # Skip non-audio events
-                    if "kind" not in event or event["kind"] != "AudioData":
-                        continue
+            async for event in websocket.iter_json():
+                # TODO: Handle configuration event (audio format, sample rate, etc.)
+                # Skip non-audio events
+                if "kind" not in event or event["kind"] != "AudioData":
+                    continue
 
-                    # Filter out silent audio
-                    audio_data: dict[str, Any] = event.get("audioData", {})
-                    audio_base64: str | None = audio_data.get("data", None)
-                    audio_silent: bool | None = audio_data.get("silent", True)
-                    if audio_silent or not audio_base64:
-                        continue
+                # Filter out silent audio
+                audio_data: dict[str, Any] = event.get("audioData", {})
+                audio_base64: str | None = audio_data.get("data", None)
+                audio_silent: bool | None = audio_data.get("silent", True)
+                if audio_silent or not audio_base64:
+                    continue
 
-                    # Queue audio
-                    await audio_in.put(b64decode(audio_base64))
+                # Queue audio
+                await audio_in.put(b64decode(audio_base64))
 
-                    # Report the frames in latency and reset the timer
-                    if start:
-                        gauge_set(
-                            metric=call_frames_in_latency,
-                            value=time.monotonic() - start,
-                        )
-                    start = time.monotonic()
-            except (ConnectionClosedError, ConnectionClosedOK) as e:
-                logger.warning("WebSocket audio consumer connection closed: %s", e)
+                # Report the frames in latency and reset the timer
+                if start:
+                    gauge_set(
+                        metric=call_frames_in_latency,
+                        value=time.monotonic() - start,
+                    )
+                start = time.monotonic()
+
+        except (WebSocketDisconnect, ConnectionClosedOK) as e:
+            logger.info("Audio consumer disconnected cleanly: %s", e)
+        except (ConnectionClosedError, BrokenPipeError, ConnectionResetError) as e:
+            logger.warning("Audio consumer lost connection unexpectedly: %s", e)
 
         logger.debug("Audio data consumer stopped")
 
     async def _send_audio() -> None:
         """
-        Send audio data to the WebSocket
+        Send audio data to the WebSocket.
         """
         logger.debug("Audio data sender started")
 
-        # Loop until the WebSocket is disconnected
-        with suppress(
-            WebSocketDisconnect,
-            ConnectionClosedError,
-            ConnectionClosedOK,
-            BrokenPipeError,
-            ConnectionResetError,
-        ):
+        try:
             start: float | None = None
-            try:
-                while True:
-                    # Get audio
-                    audio_data = await audio_out.get()
-                    audio_out.task_done()
+            while True:
+                # Get audio
+                audio_data = await audio_out.get()
+                audio_out.task_done()
 
-                    # Send audio
-                    if isinstance(audio_data, bytes):
-                        await websocket.send_json(
-                            {
-                                "kind": "AudioData",
-                                "audioData": {
-                                    "data": b64encode(audio_data).decode("utf-8"),
-                                },
-                            }
-                        )
+                # Send audio
+                if isinstance(audio_data, bytes):
+                    await websocket.send_json(
+                        {
+                            "kind": "AudioData",
+                            "audioData": {
+                                "data": b64encode(audio_data).decode("utf-8"),
+                            },
+                        }
+                    )
 
-                    # Stop audio
-                    elif audio_data is False:
-                        logger.debug("Stop audio event received, stopping audio")
-                        await websocket.send_json(
-                            {
-                                "kind": "StopAudio",
-                                "stopAudio": {},
-                            }
-                        )
+                # Stop audio
+                elif audio_data is False:
+                    logger.debug("Stop audio event received, stopping audio")
+                    await websocket.send_json(
+                        {
+                            "kind": "StopAudio",
+                            "stopAudio": {},
+                        }
+                    )
 
-                    # Report the frames out latency and reset the timer
-                    if start:
-                        gauge_set(
-                            metric=call_frames_out_latency,
-                            value=time.monotonic() - start,
-                        )
-                    start = time.monotonic()
-            except (ConnectionClosedError, ConnectionClosedOK) as e:
-                logger.warning("WebSocket audio sender connection closed: %s", e)
+                # Report the frames out latency and reset the timer
+                if start:
+                    gauge_set(
+                        metric=call_frames_out_latency,
+                        value=time.monotonic() - start,
+                    )
+                start = time.monotonic()
+
+        except (WebSocketDisconnect, ConnectionClosedOK) as e:
+            logger.info("Audio sender disconnected cleanly: %s", e)
+        except (ConnectionClosedError, BrokenPipeError, ConnectionResetError) as e:
+            logger.warning("Audio sender lost connection unexpectedly: %s", e)
 
         logger.debug("Audio data sender stopped")
 
@@ -905,7 +894,6 @@ async def _communicationservices_event_worker(
 
             case _:
                 logger.warning("Event %s not supported", event_type)
-                # logger.debug("Event data %s", event.data)
 
 
 @start_as_current_span("training_event")
@@ -1180,4 +1168,3 @@ async def _use_automation_client() -> CallAutomationClient:
             CONFIG.communication_services.access_key.get_secret_value()
         ),  # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
     )
-
