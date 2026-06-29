@@ -34,6 +34,7 @@ from fastapi import (
 )
 from fastapi.exceptions import RequestValidationError, ValidationException
 from fastapi.responses import HTMLResponse, JSONResponse
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from htmlmin.minify import html_minify
 from jinja2 import Environment, FileSystemLoader
 from pydantic import Field, TypeAdapter, ValidationError
@@ -57,6 +58,7 @@ from app.helpers.call_events import (
     on_transfer_error,
 )
 from app.helpers.call_utils import ContextEnum as CallContextEnum
+from app.helpers.call_utils import stop_audio_streaming
 from app.helpers.config import CONFIG
 from app.helpers.http import aiohttp_session, azure_transport
 from app.helpers.logging import logger
@@ -607,31 +609,40 @@ async def communicationservices_wss_post(
         logger.debug("Audio data consumer started")
 
         # Loop until the WebSocket is disconnected
-        with suppress(WebSocketDisconnect):
+        with suppress(
+            WebSocketDisconnect,
+            ConnectionClosedError,
+            ConnectionClosedOK,
+            BrokenPipeError,
+            ConnectionResetError,
+        ):
             start: float | None = None
-            async for event in websocket.iter_json():
-                # TODO: Handle configuration event (audio format, sample rate, etc.)
-                # Skip non-audio events
-                if "kind" not in event or event["kind"] != "AudioData":
-                    continue
+            try:
+                async for event in websocket.iter_json():
+                    # TODO: Handle configuration event (audio format, sample rate, etc.)
+                    # Skip non-audio events
+                    if "kind" not in event or event["kind"] != "AudioData":
+                        continue
 
-                # Filter out silent audio
-                audio_data: dict[str, Any] = event.get("audioData", {})
-                audio_base64: str | None = audio_data.get("data", None)
-                audio_silent: bool | None = audio_data.get("silent", True)
-                if audio_silent or not audio_base64:
-                    continue
+                    # Filter out silent audio
+                    audio_data: dict[str, Any] = event.get("audioData", {})
+                    audio_base64: str | None = audio_data.get("data", None)
+                    audio_silent: bool | None = audio_data.get("silent", True)
+                    if audio_silent or not audio_base64:
+                        continue
 
-                # Queue audio
-                await audio_in.put(b64decode(audio_base64))
+                    # Queue audio
+                    await audio_in.put(b64decode(audio_base64))
 
-                # Report the frames in latency and reset the timer
-                if start:
-                    gauge_set(
-                        metric=call_frames_in_latency,
-                        value=time.monotonic() - start,
-                    )
-                start = time.monotonic()
+                    # Report the frames in latency and reset the timer
+                    if start:
+                        gauge_set(
+                            metric=call_frames_in_latency,
+                            value=time.monotonic() - start,
+                        )
+                    start = time.monotonic()
+            except (ConnectionClosedError, ConnectionClosedOK) as e:
+                logger.warning("WebSocket audio consumer connection closed: %s", e)
 
         logger.debug("Audio data consumer stopped")
 
@@ -642,63 +653,81 @@ async def communicationservices_wss_post(
         logger.debug("Audio data sender started")
 
         # Loop until the WebSocket is disconnected
-        with suppress(WebSocketDisconnect):
+        with suppress(
+            WebSocketDisconnect,
+            ConnectionClosedError,
+            ConnectionClosedOK,
+            BrokenPipeError,
+            ConnectionResetError,
+        ):
             start: float | None = None
-            while True:
-                # Get audio
-                audio_data = await audio_out.get()
-                audio_out.task_done()
+            try:
+                while True:
+                    # Get audio
+                    audio_data = await audio_out.get()
+                    audio_out.task_done()
 
-                # Send audio
-                if isinstance(audio_data, bytes):
-                    await websocket.send_json(
-                        {
-                            "kind": "AudioData",
-                            "audioData": {
-                                "data": b64encode(audio_data).decode("utf-8"),
-                            },
-                        }
-                    )
+                    # Send audio
+                    if isinstance(audio_data, bytes):
+                        await websocket.send_json(
+                            {
+                                "kind": "AudioData",
+                                "audioData": {
+                                    "data": b64encode(audio_data).decode("utf-8"),
+                                },
+                            }
+                        )
 
-                # Stop audio
-                elif audio_data is False:
-                    logger.debug("Stop audio event received, stopping audio")
-                    await websocket.send_json(
-                        {
-                            "kind": "StopAudio",
-                            "stopAudio": {},
-                        }
-                    )
+                    # Stop audio
+                    elif audio_data is False:
+                        logger.debug("Stop audio event received, stopping audio")
+                        await websocket.send_json(
+                            {
+                                "kind": "StopAudio",
+                                "stopAudio": {},
+                            }
+                        )
 
-                # Report the frames out latency and reset the timer
-                if start:
-                    gauge_set(
-                        metric=call_frames_out_latency,
-                        value=time.monotonic() - start,
-                    )
-                start = time.monotonic()
+                    # Report the frames out latency and reset the timer
+                    if start:
+                        gauge_set(
+                            metric=call_frames_out_latency,
+                            value=time.monotonic() - start,
+                        )
+                    start = time.monotonic()
+            except (ConnectionClosedError, ConnectionClosedOK) as e:
+                logger.warning("WebSocket audio sender connection closed: %s", e)
 
         logger.debug("Audio data sender stopped")
 
     async with get_scheduler() as scheduler:
-        await asyncio.gather(
-            # Consume audio from the WebSocket
-            _consume_audio(),
-            # Send audio to the WebSocket
-            _send_audio(),
-            # Process audio
-            # TODO: Dynamically set the audio format
-            on_audio_connected(
-                audio_in=audio_in,
-                audio_out=audio_out,
-                audio_sample_rate=16000,
-                call=call,
-                client=automation_client,
-                post_callback=_trigger_post_event,
-                scheduler=scheduler,
-                training_callback=_trigger_training_event,
-            ),
-        )
+        try:
+            await asyncio.gather(
+                # Consume audio from the WebSocket
+                _consume_audio(),
+                # Send audio to the WebSocket
+                _send_audio(),
+                # Process audio
+                # TODO: Dynamically set the audio format
+                on_audio_connected(
+                    audio_in=audio_in,
+                    audio_out=audio_out,
+                    audio_sample_rate=16000,
+                    call=call,
+                    client=automation_client,
+                    post_callback=_trigger_post_event,
+                    scheduler=scheduler,
+                    training_callback=_trigger_training_event,
+                ),
+            )
+        except (ConnectionClosedError, ConnectionClosedOK, BrokenPipeError, ConnectionResetError) as e:
+            logger.warning("WebSocket connection lost during call %s: %s", call_id, e)
+        except Exception:
+            logger.exception("Unexpected error in WebSocket handler for call %s", call_id)
+        finally:
+            # Best-effort cleanup: stop audio streaming if the call is still active
+            with suppress(Exception):
+                await stop_audio_streaming(automation_client, call)
 
 
 @api.post("/communicationservices/callback/{call_id}/{secret}")
@@ -1151,3 +1180,4 @@ async def _use_automation_client() -> CallAutomationClient:
             CONFIG.communication_services.access_key.get_secret_value()
         ),  # Cannot place calls with RBAC, need to use access key (see: https://learn.microsoft.com/en-us/azure/communication-services/concepts/authentication#authentication-options)
     )
+
