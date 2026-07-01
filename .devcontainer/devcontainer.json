@@ -11,7 +11,7 @@
       "configureZshAsDefaultShell": true
     },
     "ghcr.io/meaningful-ooo/devcontainer-features/homebrew:2": {},
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {}
   },
   "updateContentCommand": "cd /workspaces/call-center-ai && make brew upgrade install",
   "customizations": {
