@@ -31,7 +31,7 @@ jobs:
       VERSION_FULL: ${{ steps.version.outputs.version_full }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # We need all Git history for "version.sh"
           fetch-depth: 0
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # We need all Git history for testing credentials
           fetch-depth: 0
@@ -57,7 +57,7 @@ jobs:
           submodules: recursive
 
       - name: Run tests
-        uses: trufflesecurity/trufflehog@v3.88.4
+        uses: trufflesecurity/trufflehog@853e1e8d249fd1e29d0fcc7280d29b03df3d643d # v3.88.4
         with:
           base: ${{ github.event.repository.default_branch }}
           extra_args: --only-verified
@@ -73,7 +73,7 @@ jobs:
       image: returntocorp/semgrep
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run tests
         # Semgrep can be used to break the build when it detects security issues. In this case we want to upload the issues to GitHub Security
@@ -83,7 +83,7 @@ jobs:
         run: semgrep ci --sarif --output=semgrep.sarif
 
       - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3.28.8
+        uses: github/codeql-action/upload-sarif@dd746615b3b9d728a6a37ca2045b68ca76d4841a # v3.28.8
         with:
           sarif_file: semgrep.sarif
 
@@ -104,10 +104,10 @@ jobs:
           # - unit
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5.2.2
+        uses: astral-sh/setup-uv@4db96194c378173c656ce18a155ffc14a9fc4355 # v5.2.2
         with:
           enable-cache: true
           python-version: "3.13"
@@ -121,13 +121,13 @@ jobs:
       #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
 
       - name: Cache pytest
-        uses: actions/cache@v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: pytest-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
           path: .pytest_cache
 
       - name: Cache Ruff
-        uses: actions/cache@v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: ruff-${{ github.head_ref || github.ref_name }}-${{ hashFiles('requirements-dev.txt') }}
           path: .ruff_cache
@@ -145,7 +145,7 @@ jobs:
         run: make test-${{ matrix.step }} version_full=${{ needs.init.outputs.VERSION_FULL }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4.6.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         if: always()
         with:
           compression-level: 9
@@ -165,7 +165,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Configure Git
         run: |
@@ -174,17 +174,17 @@ jobs:
 
       - name: Setup QEMU
         id: setup-qemu
-        uses: docker/setup-qemu-action@v3.6.0
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
         with:
           platforms: ${{ env.CONTAINER_PLATFORMS }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3.3.0
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb # v3.3.0
         with:
           version: v${{ env.BUILDX_VERSION }}
 
       - name: Login to registry
-        uses: docker/login-action@v3.1.0
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3.1.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
           username: ${{ github.actor }}
@@ -192,7 +192,7 @@ jobs:
 
       - name: Container meta
         id: meta
-        uses: docker/metadata-action@v5.7.0
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
           images: ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
           tags: |
@@ -209,7 +209,7 @@ jobs:
 
       - name: Build/push container
         id: build
-        uses: docker/build-push-action@v6.17.0
+        uses: docker/build-push-action@1dc73863535b631f98b2378be8619f83b136f4a0 # v6.17.0
         with:
           build-args: |
             VERSION=${{ needs.init.outputs.VERSION_FULL }}
@@ -228,7 +228,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
 
       - name: Generate attestations
-        uses: actions/attest-build-provenance@v1.4.4
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
         with:
           push-to-registry: true
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -250,11 +250,11 @@ jobs:
     if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Create release
         id: create-release
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const isMain = context.ref == `refs/heads/main`;
@@ -287,7 +287,7 @@ jobs:
     steps:
       - name: publish release
         id: publish-release
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             github.rest.repos.updateRelease({
